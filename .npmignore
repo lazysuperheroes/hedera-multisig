@@ -1,0 +1,49 @@
+# .npmignore - files to exclude from npm package
+
+# Test files
+test/
+*.test.js
+coverage/
+.nyc_output/
+
+# Documentation (keep user-facing docs only)
+docs/MULTISIG_SECURITY_AUDIT_REVIEW.md
+docs/MULTISIG_EDGE_CASES.md
+docs/MULTISIG_PRODUCTION_READINESS.md
+
+# Development files
+.git/
+.github/
+.vscode/
+.idea/
+node_modules/
+
+# Examples and temp files
+examples/
+*.log
+.env
+.env.*
+*.enc
+multisig-transactions/
+logs/
+
+# Build artifacts
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# npm debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*

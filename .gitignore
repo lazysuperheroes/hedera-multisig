@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Testing
+coverage/
+.nyc_output/
+*.log
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Encrypted key files
+*.enc
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Transaction exports
+multisig-transactions/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.settings/
+
+# Build artifacts
+dist/
+build/
+*.tgz
+
+# Temporary files
+tmp/
+temp/

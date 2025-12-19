@@ -1,0 +1,63 @@
+{
+	"name": "@lazysuperheroes/hedera-multisig",
+	"version": "1.0.0",
+	"description": "Production-grade multi-signature transaction management library for Hedera blockchain with M-of-N threshold support, encrypted key storage, and comprehensive audit logging",
+	"main": "index.js",
+	"type": "commonjs",
+	"keywords": [
+		"hedera",
+		"multisig",
+		"multi-signature",
+		"m-of-n",
+		"threshold-signatures",
+		"blockchain",
+		"cryptocurrency",
+		"security",
+		"hedera-hashgraph",
+		"transaction-signing",
+		"air-gapped",
+		"offline-signing",
+		"encrypted-keys"
+	],
+	"author": "Lazy Superheroes <contact@lazysuperheroes.com>",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/lazysuperheroes/hedera-multisig.git"
+	},
+	"bugs": {
+		"url": "https://github.com/lazysuperheroes/hedera-multisig/issues"
+	},
+	"homepage": "https://github.com/lazysuperheroes/hedera-multisig#readme",
+	"dependencies": {
+		"@hashgraph/sdk": "^2.49.0",
+		"readline-sync": "^1.4.10"
+	},
+	"devDependencies": {
+		"mocha": "^10.0.0",
+		"chai": "^4.3.0"
+	},
+	"scripts": {
+		"test": "mocha test/*.test.js --timeout 120000",
+		"test:unit": "mocha test/keyProviders.test.js test/multiKeyType.test.js --timeout 120000",
+		"test:workflows": "mocha test/workflows.test.js --timeout 120000",
+		"sign": "node cli/sign.js",
+		"create-key-file": "node cli/createKeyFile.js",
+		"test-key-file": "node cli/testKeyFile.js",
+		"security-audit": "node cli/securityAudit.js"
+	},
+	"engines": {
+		"node": ">=16.0.0"
+	},
+	"files": [
+		"index.js",
+		"core/",
+		"keyManagement/",
+		"workflows/",
+		"ui/",
+		"cli/",
+		"README.md",
+		"LICENSE",
+		"CHANGELOG.md"
+	]
+}
