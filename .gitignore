@@ -48,3 +48,6 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# Claude Code frameworks (exclude all)
+.claude/

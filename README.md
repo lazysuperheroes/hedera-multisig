@@ -11,6 +11,7 @@
 - ✅ Mixed key type support (Ed25519 + ECDSA secp256k1)
 - ✅ Interactive workflow (<110s real-time coordination)
 - ✅ Offline workflow (air-gapped signing)
+- ✅ **NEW: Web-based signing with WalletConnect** (hardware wallet support)
 - ✅ Three security tiers (prompt, encrypted files, env vars)
 - ✅ Comprehensive audit logging
 - ✅ 236 tests, 0 vulnerabilities
@@ -102,6 +103,91 @@ const result = await orchestrator.collectAndExecute(
 );
 
 console.log('Transaction executed:', result.transactionId);
+```
+
+---
+
+## 🌐 Web-Based Signing (WalletConnect)
+
+**NEW!** Sign multi-signature transactions directly in your browser using WalletConnect-compatible wallets.
+
+### Features
+
+- 🔐 **Hardware Wallet Support** - Sign with Ledger through HashPack or Blade wallet
+- 🌐 **Browser-Based** - No software installation required
+- 📱 **Mobile-Friendly** - Works on desktop and mobile devices
+- 🔑 **Private Keys Stay in Wallet** - Keys never leave your wallet app
+- ✅ **Mixed Sessions** - CLI and Web participants can sign together
+- 🎯 **Same Security Model** - VERIFIED vs UNVERIFIED transaction review
+
+### Quick Start (Web Participant)
+
+1. **Get Session Info** from coordinator:
+   - Server URL (e.g., `wss://example.ngrok.io`)
+   - Session ID
+   - 6-digit PIN
+
+2. **Open the dApp**: Navigate to deployed dApp URL
+
+3. **Join Session**:
+   ```
+   1. Click "Join Signing Session"
+   2. Enter Server URL, Session ID, PIN
+   3. Connect your wallet (HashPack or Blade)
+   4. Review transaction details
+   5. Sign in your wallet app
+   ```
+
+4. **Complete**: Transaction executes when threshold met
+
+### Setup for Web Signing
+
+**For Participants**:
+- Install HashPack or Blade wallet
+- Fund your account (testnet faucet for testing)
+- Share your public key with coordinator
+
+**For Coordinators**:
+- Deploy the dApp (see `dapp/README.md`)
+- Or use locally with `cd dapp && npm run dev`
+- Create session with web participant public keys
+- Share session credentials
+
+### Documentation
+
+- **User Guide**: [docs/WALLETCONNECT.md](docs/WALLETCONNECT.md) - Complete WalletConnect guide
+- **dApp Setup**: [dapp/README.md](dapp/README.md) - Developer setup and deployment
+- **Testing**: [dapp/INTEGRATION_TESTING.md](dapp/INTEGRATION_TESTING.md) - End-to-end testing guide
+- **Quick Test**: [dapp/QUICKSTART.md](dapp/QUICKSTART.md) - 5-minute local test
+- **Deployment**: [dapp/DEPLOYMENT.md](dapp/DEPLOYMENT.md) - Vercel deployment guide
+
+### Supported Wallets
+
+| Wallet | Browser Ext | Mobile | Ledger | Status |
+|--------|-------------|--------|--------|--------|
+| **HashPack** | ✅ | ✅ | ✅ | Recommended |
+| **Blade** | ✅ | ✅ | ⚠️ | Supported |
+
+### Example: Mixed CLI + Web Session
+
+```javascript
+// Coordinator creates session with mixed keys
+const eligiblePublicKeys = [
+  'CLI_PARTICIPANT_KEY_1',      // CLI with file-based key
+  'CLI_PARTICIPANT_KEY_2',      // CLI with file-based key
+  'WEB_PARTICIPANT_KEY_1',      // Web with HashPack wallet
+  'WEB_PARTICIPANT_KEY_2',      // Web with Ledger via HashPack
+];
+
+const session = await sessionManager.createSession(null, {
+  threshold: 3,                 // Need 3 out of 4 signatures
+  eligiblePublicKeys,
+  expectedParticipants: 4
+});
+
+// CLI participants join via terminal
+// Web participants join via browser dApp
+// Both signature types work seamlessly together!
 ```
 
 ---

@@ -1,0 +1,35 @@
+{
+  "name": "@lazysuperheroes/hedera-multisig-dapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WalletConnect browser dApp for Hedera MultiSig - enables hardware wallet and browser-based signing",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@hashgraph/hedera-wallet-connect": "^1.5.1",
+    "@hashgraph/proto": "^2.25.0",
+    "@hashgraph/sdk": "^2.78.0",
+    "@walletconnect/modal": "^2.7.0",
+    "buffer": "^6.0.3",
+    "ethers": "^6.16.0",
+    "next": "16.1.1",
+    "qrcode.react": "^4.1.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zustand": "^4.5.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
