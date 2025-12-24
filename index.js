@@ -32,6 +32,12 @@ const ErrorFormatter = require('./ui/ErrorFormatter');
 const HelpText = require('./ui/HelpText');
 const TransactionDisplay = require('./ui/TransactionDisplay');
 
+// Server Components (Network-based Multi-Sig)
+const { SessionStore, SigningSessionManager, WebSocketServer } = require('./server');
+
+// Client Components (Network-based Multi-Sig)
+const { SigningClient, TransactionReviewer } = require('./client');
+
 // Main exports
 module.exports = {
   // Core
@@ -58,6 +64,15 @@ module.exports = {
   ErrorFormatter,
   HelpText,
   TransactionDisplay,
+
+  // Server Components
+  SessionStore,
+  SigningSessionManager,
+  WebSocketServer,
+
+  // Client Components
+  SigningClient,
+  TransactionReviewer,
 
   // Version
   version: '1.0.0'

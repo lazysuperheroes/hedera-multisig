@@ -1,0 +1,20 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "env": {
+    "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID": {
+      "description": "WalletConnect Project ID from https://cloud.walletconnect.com/",
+      "required": true
+    },
+    "NEXT_PUBLIC_DEFAULT_NETWORK": {
+      "description": "Hedera network (testnet or mainnet)",
+      "value": "testnet"
+    }
+  },
+  "regions": ["iad1"],
+  "git": {
+    "deploymentEnabled": true
+  }
+}
