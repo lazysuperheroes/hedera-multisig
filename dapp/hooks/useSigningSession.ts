@@ -187,7 +187,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
 
   // Connect to session
   const connect = useCallback(
-    async (serverUrl: string, sessionId: string, pin: string) => {
+    async (serverUrl: string, sessionId: string, pin: string, publicKey?: string) => {
       if (!clientRef.current) {
         throw new Error('Client not initialized');
       }
@@ -195,7 +195,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
       setState((prev) => ({ ...prev, status: 'disconnected', error: null }));
 
       try {
-        const result = await clientRef.current.connect(serverUrl, sessionId, pin);
+        const result = await clientRef.current.connect(serverUrl, sessionId, pin, publicKey);
         return result;
       } catch (error) {
         setState((prev) => ({
