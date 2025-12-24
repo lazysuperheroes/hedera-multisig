@@ -27,7 +27,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/lazysuperheroes/hedera-multisig.git"
+		"url": "git+https://github.com/lazysuperheroes/hedera-multisig.git"
 	},
 	"bugs": {
 		"url": "https://github.com/lazysuperheroes/hedera-multisig/issues"
