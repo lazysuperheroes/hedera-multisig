@@ -19,6 +19,7 @@ require('dotenv').config();
 
 const { Client } = require('@hashgraph/sdk');
 const { SigningSessionManager, WebSocketServer } = require('../server');
+const { createSessionStore } = require('../server/stores');
 const { generateConnectionString } = require('../shared/connection-string');
 const {
   ExitCodes,
@@ -123,7 +124,12 @@ function parseArgs() {
     tlsCert: null,
     tlsKey: null,
     tlsCa: null,
-    tlsPassphrase: null
+    tlsPassphrase: null,
+    // Redis options
+    redis: false,
+    redisHost: process.env.REDIS_HOST || 'localhost',
+    redisPort: parseInt(process.env.REDIS_PORT) || 6379,
+    redisPassword: process.env.REDIS_PASSWORD || null
   };
 
   // Parse remaining args (after common flags are removed)
@@ -189,6 +195,22 @@ function parseArgs() {
       case '--tls-passphrase':
         options.tlsPassphrase = remainingArgs[++i];
         break;
+
+      case '--redis':
+        options.redis = true;
+        break;
+
+      case '--redis-host':
+        options.redisHost = remainingArgs[++i];
+        break;
+
+      case '--redis-port':
+        options.redisPort = parseInt(remainingArgs[++i]);
+        break;
+
+      case '--redis-password':
+        options.redisPassword = remainingArgs[++i];
+        break;
     }
   }
 
@@ -214,6 +236,12 @@ function printHelp() {
   console.log('  --tls-key <path>           Path to TLS private key file');
   console.log('  --tls-ca <path>            Path to CA certificate file (optional)');
   console.log('  --tls-passphrase <pass>    Passphrase for private key (optional)');
+  console.log('');
+  console.log('Persistence Options:');
+  console.log('  --redis                    Enable Redis session persistence');
+  console.log('  --redis-host <host>        Redis host (default: localhost, env: REDIS_HOST)');
+  console.log('  --redis-port <port>        Redis port (default: 6379, env: REDIS_PORT)');
+  console.log('  --redis-password <pass>    Redis password (env: REDIS_PASSWORD)');
   console.log(getCommonFlagsHelp());
   console.log('\nExamples:');
   console.log('  # Start server for 2-of-3 multisig');
@@ -222,6 +250,8 @@ function printHelp() {
   console.log('  node cli/server.js -t 2 -k "key1,key2,key3" --port 8080 --no-tunnel\n');
   console.log('  # Start server with TLS (secure WebSocket)');
   console.log('  node cli/server.js -t 2 -k "key1,key2" --tls-cert ./cert.pem --tls-key ./key.pem\n');
+  console.log('  # Start server with Redis persistence');
+  console.log('  node cli/server.js -t 2 -k "key1,key2" --redis --redis-host redis.example.com\n');
   console.log('  # Get session info as JSON (for scripting)');
   console.log('  node cli/server.js -t 2 -k "key1,key2" --json\n');
 }
@@ -274,12 +304,37 @@ async function main() {
     console.log(chalk.white('Threshold: ') + chalk.yellow(`${options.threshold} of ${options.eligibleKeys.length}`));
     console.log(chalk.white('Expected Participants: ') + chalk.yellow(options.participants));
     console.log(chalk.white('Session Timeout: ') + chalk.yellow(`${options.timeout / 60000} minutes`));
+
+    // Create session store (Redis or in-memory)
+    const store = createSessionStore({
+      type: options.redis ? 'redis' : 'memory',
+      defaultTimeout: options.timeout,
+      redis: options.redis ? {
+        host: options.redisHost,
+        port: options.redisPort,
+        password: options.redisPassword
+      } : undefined
+    });
+
+    // Connect to Redis if enabled
+    if (options.redis) {
+      const connected = await store.connect();
+      if (connected) {
+        console.log(chalk.white('Session Store: ') + chalk.green('Redis') + chalk.gray(` (${options.redisHost}:${options.redisPort})`));
+      } else {
+        console.log(chalk.white('Session Store: ') + chalk.yellow('In-Memory (Redis unavailable)'));
+      }
+    } else {
+      console.log(chalk.white('Session Store: ') + chalk.yellow('In-Memory'));
+    }
+
     console.log(chalk.cyan('═'.repeat(60)) + '\n');
 
-    // Create session manager
+    // Create session manager with store
     const sessionManager = new SigningSessionManager(client, {
       defaultTimeout: options.timeout,
-      verbose: true
+      verbose: true,
+      store: store
     });
 
     // Build TLS configuration if certificates provided

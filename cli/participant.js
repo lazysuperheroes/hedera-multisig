@@ -186,6 +186,14 @@ async function main() {
       console.log(chalk.yellow('⚠️  Using plaintext hex key (not recommended for production)\n'));
       privateKey = options.privateKey;
 
+    } else if (options.yes) {
+      // Non-interactive mode requires key to be provided
+      exitWithError(
+        'Non-interactive mode (--yes) requires --keyfile or --key to be provided',
+        ExitCodes.VALIDATION_ERROR,
+        jsonOutput
+      );
+
     } else {
       // Option 3: Interactive prompt with options
       console.log(chalk.bold.white('🔐 How would you like to load your private key?\n'));

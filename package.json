@@ -3,6 +3,7 @@
 	"version": "1.1.0",
 	"description": "Production-grade multi-signature transaction management library for Hedera blockchain with M-of-N threshold support, WalletConnect browser dApp, encrypted key storage, and comprehensive audit logging",
 	"main": "index.js",
+	"types": "types/index.d.ts",
 	"type": "commonjs",
 	"keywords": [
 		"hedera",
@@ -45,6 +46,9 @@
 		"readline-sync": "^1.4.10",
 		"ws": "^8.14.2"
 	},
+	"optionalDependencies": {
+		"ioredis": "^5.3.2"
+	},
 	"devDependencies": {
 		"chai": "^4.3.0",
 		"mocha": "^10.0.0"
@@ -78,6 +82,7 @@
 	},
 	"files": [
 		"index.js",
+		"types/",
 		"core/",
 		"keyManagement/",
 		"workflows/",

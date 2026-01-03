@@ -27,7 +27,8 @@ class SigningSessionManager {
     // Create logger instance
     this.log = createLogger('SessionManager');
 
-    this.store = new SessionStore({
+    // Use provided store or create default in-memory store
+    this.store = options.store || new SessionStore({
       defaultTimeout: this.options.defaultTimeout
     });
 
