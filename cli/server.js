@@ -19,20 +19,11 @@ require('dotenv').config();
 
 const { Client } = require('@hashgraph/sdk');
 const { SigningSessionManager, WebSocketServer } = require('../server');
+const { generateConnectionString } = require('../shared/connection-string');
 const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
 const qrcode = require('qrcode-terminal');
-
-/**
- * Generate a connection string for easy sharing
- * Format: hmsc:base64(JSON) where JSON = {s: serverUrl, i: sessionId, p: pin}
- */
-function generateConnectionString(serverUrl, sessionId, pin) {
-  const data = { s: serverUrl, i: sessionId, p: pin };
-  const base64 = Buffer.from(JSON.stringify(data)).toString('base64');
-  return `hmsc:${base64}`;
-}
 
 /**
  * Display QR code in terminal

@@ -9,25 +9,8 @@ const crypto = require('crypto');
 const SessionStore = require('./SessionStore');
 const TransactionDecoder = require('../core/TransactionDecoder');
 const SignatureVerifier = require('../core/SignatureVerifier');
+const { normalizePublicKey, isKeyEligible } = require('./utils/keyUtils');
 const { PublicKey, Transaction } = require('@hashgraph/sdk');
-
-/**
- * Normalize a public key to ensure consistent 0x prefix
- */
-function normalizePublicKey(key) {
-  if (!key) return key;
-  const trimmed = key.trim();
-  return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
-}
-
-/**
- * Check if a public key is in the eligible list (handles 0x prefix variations)
- */
-function isKeyEligible(key, eligibleKeys) {
-  if (!key || !eligibleKeys || eligibleKeys.length === 0) return false;
-  const normalizedKey = normalizePublicKey(key);
-  return eligibleKeys.some(eligible => normalizePublicKey(eligible) === normalizedKey);
-}
 
 class SigningSessionManager {
   constructor(client, options = {}) {

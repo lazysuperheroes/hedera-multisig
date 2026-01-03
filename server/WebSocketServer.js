@@ -10,24 +10,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const chalk = require('chalk');
-
-/**
- * Normalize a public key to ensure consistent 0x prefix
- */
-function normalizePublicKey(key) {
-  if (!key) return key;
-  const trimmed = key.trim();
-  return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
-}
-
-/**
- * Check if a public key is in the eligible list (handles 0x prefix variations)
- */
-function isKeyEligible(key, eligibleKeys) {
-  if (!key || !eligibleKeys || eligibleKeys.length === 0) return false;
-  const normalizedKey = normalizePublicKey(key);
-  return eligibleKeys.some(eligible => normalizePublicKey(eligible) === normalizedKey);
-}
+const { normalizePublicKey, isKeyEligible } = require('./utils/keyUtils');
 
 class MultiSigWebSocketServer {
   constructor(sessionManager, options = {}) {

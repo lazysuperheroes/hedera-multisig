@@ -7,34 +7,9 @@ import Link from 'next/link';
 // Lazy load QR scanner to avoid SSR issues
 const QRScanner = lazy(() => import('../../components/QRScanner'));
 
-/**
- * Parse a connection string (hmsc:base64) into components
- * Format: hmsc:base64(JSON) where JSON = {s: serverUrl, i: sessionId, p?: pin}
- */
-function parseConnectionString(connStr: string): { serverUrl: string; sessionId: string; pin?: string } | null {
-  try {
-    // Check for hmsc: prefix
-    if (!connStr.startsWith('hmsc:')) {
-      return null;
-    }
-
-    const base64 = connStr.slice(5); // Remove 'hmsc:' prefix
-    const json = Buffer.from(base64, 'base64').toString('utf8');
-    const data = JSON.parse(json);
-
-    if (!data.s || !data.i) {
-      return null;
-    }
-
-    return {
-      serverUrl: data.s,
-      sessionId: data.i,
-      pin: data.p || undefined,
-    };
-  } catch {
-    return null;
-  }
-}
+// Shared connection string utilities
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { parseConnectionString } = require('../../../shared/connection-string');
 
 function JoinPageContent() {
   const router = useRouter();

@@ -194,9 +194,9 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed instructions.
 
 ### Phase 3: WalletConnect Integration ✅ **Complete**
 - [x] WalletConnect configuration (lib/walletconnect-config.ts)
-- [x] WalletConnect client with signing (lib/walletconnect-client.ts)
+- [x] WalletConnect SDK wrapper with signing (lib/walletconnect.ts)
 - [x] Signature extraction from signed transactions
-- [x] React hook wrapper (hooks/useWalletConnect.ts)
+- [x] React hook wrapper (hooks/useWallet.ts)
 - [x] Hardware wallet support via WalletConnect
 
 ### Phase 4: Transaction Review ✅ **Complete**
@@ -211,7 +211,7 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed instructions.
 ### Phase 5: Session Page Integration ✅ **Complete**
 - [x] SignatureProgress component with threshold tracking
 - [x] Complete session page with state machine (10 states)
-- [x] Integrated all hooks (useSigningSession, useWalletConnect)
+- [x] Integrated all hooks (useSigningSession, useWallet)
 - [x] Automatic flow: wallet → session → review → sign → complete
 - [x] Step indicator with visual progress
 - [x] Error handling and display

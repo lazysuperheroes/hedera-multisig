@@ -10,6 +10,8 @@
 import { useMemo, useState } from 'react';
 import { QRCodeDisplay } from './QRCodeDisplay';
 import { CopyButton, CopyableText } from './CopyButton';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { generateConnectionString } = require('../../shared/connection-string');
 
 interface ShareSessionDialogProps {
   open: boolean;
@@ -17,16 +19,6 @@ interface ShareSessionDialogProps {
   serverUrl: string;
   sessionId: string;
   pin: string;
-}
-
-/**
- * Generate a connection string for easy sharing
- * Format: hmsc:base64(JSON) where JSON = {s: serverUrl, i: sessionId, p: pin}
- */
-function generateConnectionString(serverUrl: string, sessionId: string, pin: string): string {
-  const data = { s: serverUrl, i: sessionId, p: pin };
-  const base64 = Buffer.from(JSON.stringify(data)).toString('base64');
-  return `hmsc:${base64}`;
 }
 
 /**
