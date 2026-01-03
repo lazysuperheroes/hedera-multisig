@@ -39,6 +39,9 @@ const { SessionStore, SigningSessionManager, WebSocketServer } = require('./serv
 // Client Components (Network-based Multi-Sig)
 const { SigningClient, TransactionReviewer } = require('./client');
 
+// Shared Components
+const SharedTransactionDecoder = require('./shared/transaction-decoder');
+
 // Main exports
 module.exports = {
   // Core
@@ -74,6 +77,9 @@ module.exports = {
   // Client Components
   SigningClient,
   TransactionReviewer,
+
+  // Shared Components
+  SharedTransactionDecoder,
 
   // Version
   version: packageJson.version
