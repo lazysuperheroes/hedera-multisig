@@ -719,6 +719,59 @@ class SigningSessionManager {
   }
 
   /**
+   * Normalize frozen transaction to standard format at ingestion
+   * Ensures consistent format: { bytes: Buffer, base64: string, transaction?: Transaction }
+   * @private
+   * @param {string|Object} frozenTransaction - Frozen transaction in various formats
+   * @returns {Object} Normalized format with bytes, base64, and optionally transaction
+   */
+  _normalizeFrozenTransaction(frozenTransaction) {
+    if (!frozenTransaction) {
+      return null;
+    }
+
+    let bytes;
+    let base64;
+    let transaction = null;
+
+    // Format 1: Plain base64 string
+    if (typeof frozenTransaction === 'string') {
+      base64 = frozenTransaction;
+      bytes = Buffer.from(base64, 'base64');
+    }
+    // Format 2: Object with base64 property
+    else if (frozenTransaction.base64) {
+      base64 = frozenTransaction.base64;
+      bytes = frozenTransaction.bytes
+        ? Buffer.from(frozenTransaction.bytes)
+        : Buffer.from(base64, 'base64');
+      transaction = frozenTransaction.transaction || null;
+    }
+    // Format 3: Object with bytes property only
+    else if (frozenTransaction.bytes) {
+      bytes = Buffer.from(frozenTransaction.bytes);
+      base64 = bytes.toString('base64');
+      transaction = frozenTransaction.transaction || null;
+    }
+    // Format 4: Object with transaction property containing bytes
+    else if (frozenTransaction.transaction) {
+      if (frozenTransaction.transaction.bytes) {
+        bytes = Buffer.from(frozenTransaction.transaction.bytes);
+        base64 = bytes.toString('base64');
+      } else if (frozenTransaction.transaction.toBytes) {
+        bytes = frozenTransaction.transaction.toBytes();
+        base64 = Buffer.from(bytes).toString('base64');
+      }
+      transaction = frozenTransaction.transaction;
+    }
+    else {
+      return null;
+    }
+
+    return { bytes, base64, transaction };
+  }
+
+  /**
    * Extract transaction bytes from frozen transaction (handles multiple formats)
    * @private
    * @param {string|Object} frozenTransaction - Frozen transaction in various formats
@@ -726,35 +779,8 @@ class SigningSessionManager {
    */
   _getFrozenTransactionBytes(frozenTransaction) {
     try {
-      // Handle different frozen transaction formats
-      if (!frozenTransaction) {
-        return null;
-      }
-
-      let base64Data;
-
-      // Format 1: Plain base64 string
-      if (typeof frozenTransaction === 'string') {
-        base64Data = frozenTransaction;
-      }
-      // Format 2: Object with base64 property
-      else if (frozenTransaction.base64) {
-        base64Data = frozenTransaction.base64;
-      }
-      // Format 3: Object with bytes property (already Buffer/Uint8Array)
-      else if (frozenTransaction.bytes) {
-        return Buffer.from(frozenTransaction.bytes);
-      }
-      // Format 4: Object with transaction property containing bytes
-      else if (frozenTransaction.transaction && frozenTransaction.transaction.bytes) {
-        return Buffer.from(frozenTransaction.transaction.bytes);
-      }
-      else {
-        return null;
-      }
-
-      // Decode base64 to bytes
-      return Buffer.from(base64Data, 'base64');
+      const normalized = this._normalizeFrozenTransaction(frozenTransaction);
+      return normalized ? normalized.bytes : null;
     } catch (error) {
       console.error('Error extracting frozen transaction bytes:', error.message);
       return null;

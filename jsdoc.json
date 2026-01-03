@@ -1,0 +1,29 @@
+{
+  "source": {
+    "include": ["index.js", "core/", "server/", "shared/", "client/", "keyManagement/", "workflows/"],
+    "includePattern": ".+\\.js(doc|x)?$",
+    "excludePattern": "(^|\\/|\\\\)_"
+  },
+  "opts": {
+    "destination": "./docs/api",
+    "recurse": true,
+    "readme": "./README.md",
+    "template": "node_modules/clean-jsdoc-theme"
+  },
+  "plugins": ["plugins/markdown"],
+  "templates": {
+    "cleverLinks": true,
+    "monospaceLinks": true,
+    "default": {
+      "outputSourceFiles": true,
+      "includeDate": false
+    },
+    "theme_opts": {
+      "title": "Hedera MultiSig API",
+      "theme": "dark"
+    }
+  },
+  "markdown": {
+    "idInHeadings": true
+  }
+}

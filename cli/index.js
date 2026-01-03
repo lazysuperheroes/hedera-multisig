@@ -48,6 +48,20 @@ require('./commands/keys')(program);
 require('./commands/audit')(program);
 require('./commands/completions')(program);
 
+// Add init command (project setup wizard)
+program
+  .command('init')
+  .description('Initialize a new multi-sig project')
+  .action(() => {
+    // Spawn the init wizard
+    const { spawn } = require('child_process');
+    const path = require('path');
+    const initWizard = spawn('node', [path.join(__dirname, 'init.js')], {
+      stdio: 'inherit'
+    });
+    initWizard.on('close', (code) => process.exit(code));
+  });
+
 // Add account command (links to account-manager)
 program
   .command('account')

@@ -12,6 +12,7 @@ const fs = require('fs');
 const chalk = require('chalk');
 const { normalizePublicKey, isKeyEligible } = require('./utils/keyUtils');
 const { createLogger } = require('../shared/logger');
+const { timerController } = require('../shared/TimerController');
 
 class MultiSigWebSocketServer {
   constructor(sessionManager, options = {}) {
@@ -51,15 +52,22 @@ class MultiSigWebSocketServer {
       blockDurationMs: 300000  // 5 minute block after too many failures
     };
 
-    // Cleanup expired rate limit entries every 10 minutes
-    this.rateLimitCleanupInterval = setInterval(() => {
+    // Heartbeat configuration for detecting dead connections
+    this.heartbeatConfig = {
+      interval: options.heartbeatInterval || 30000,  // Ping every 30 seconds
+      timeout: options.heartbeatTimeout || 10000     // Wait 10 seconds for pong
+    };
+    this.heartbeatTimerId = null;
+
+    // Cleanup expired rate limit entries every 10 minutes (using TimerController)
+    this.rateLimitCleanupTimerId = timerController.setInterval(() => {
       const now = Date.now();
       for (const [ip, data] of this.authAttempts.entries()) {
         if (data.resetTime < now) {
           this.authAttempts.delete(ip);
         }
       }
-    }, 600000);
+    }, 600000, 'rate-limit-cleanup');
   }
 
   /**
@@ -135,6 +143,9 @@ class MultiSigWebSocketServer {
             isSecure: this.isSecure
           };
 
+          // Start heartbeat for connection health monitoring
+          this._startHeartbeat();
+
           // Start tunnel if enabled
           if (this.options.tunnel && this.options.tunnel.enabled) {
             try {
@@ -176,9 +187,13 @@ class MultiSigWebSocketServer {
     // Stop tunnel first
     await this._stopTunnel();
 
-    // Clear rate limit cleanup interval
-    if (this.rateLimitCleanupInterval) {
-      clearInterval(this.rateLimitCleanupInterval);
+    // Stop heartbeat
+    this._stopHeartbeat();
+
+    // Clear rate limit cleanup interval via TimerController
+    if (this.rateLimitCleanupTimerId) {
+      timerController.clear(this.rateLimitCleanupTimerId);
+      this.rateLimitCleanupTimerId = null;
     }
 
     return new Promise((resolve) => {
@@ -275,6 +290,12 @@ class MultiSigWebSocketServer {
     let sessionId = null;
     let isCoordinator = false;
 
+    // Initialize heartbeat tracking
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
     if (this.options.verbose) {
       // Format IP address for display (convert IPv6 localhost to friendly format)
       let displayAddress = req.socket.remoteAddress;
@@ -290,6 +311,16 @@ class MultiSigWebSocketServer {
     // Handle messages from client
     ws.on('message', async (data) => {
       try {
+        // PERF-04: Validate message before parsing
+        const validationError = this._validateRawMessage(data);
+        if (validationError) {
+          ws.send(JSON.stringify({
+            type: 'ERROR',
+            payload: { message: validationError }
+          }));
+          return;
+        }
+
         const message = JSON.parse(data.toString());
 
         if (this.options.verbose) {
@@ -706,19 +737,21 @@ class MultiSigWebSocketServer {
     try {
       const { frozenTransaction, txDetails, metadata, contractInterface } = message.payload;
 
-      // Transaction should be passed as bytes from coordinator
-      // Reconstruct from bytes (coordinator already has Transaction object)
-      // For now, we expect the coordinator to serialize and send txDetails
+      // Normalize frozen transaction format at ingestion (PERF-03)
+      const normalizedTx = this._normalizeFrozenTransaction(frozenTransaction);
+      if (!normalizedTx) {
+        throw new Error('Invalid frozen transaction format');
+      }
 
       // Store in session via SessionStore
       const session = this.sessionManager.store.getSession(sessionId);
       if (session) {
-        // Clear any existing expiration timeout
-        if (session.expirationTimeout) {
-          clearTimeout(session.expirationTimeout);
+        // Clear any existing expiration timeout via TimerController
+        if (session.expirationTimerId) {
+          timerController.clear(session.expirationTimerId);
         }
 
-        session.frozenTransaction = frozenTransaction;
+        session.frozenTransaction = normalizedTx;
         session.txDetails = txDetails;
         session.status = 'transaction-received';
         session.transactionReceivedAt = Date.now();
@@ -736,9 +769,9 @@ class MultiSigWebSocketServer {
           const timeUntilExpiry = (txExpiresAt - now) * 1000;
 
           if (timeUntilExpiry > 0) {
-            session.expirationTimeout = setTimeout(() => {
+            session.expirationTimerId = timerController.setTimeout(() => {
               this._handleTransactionExpired(sessionId);
-            }, timeUntilExpiry);
+            }, timeUntilExpiry, `tx-expiry-${sessionId}`);
 
             if (this.options.verbose) {
               console.log(chalk.yellow(`⏱️  Transaction expires in ${Math.round(timeUntilExpiry / 1000)}s`));
@@ -872,6 +905,135 @@ class MultiSigWebSocketServer {
         payload: { message: error.message }
       });
     }
+  }
+
+  /**
+   * Validate raw WebSocket message before JSON parsing (PERF-04)
+   * @private
+   * @param {Buffer} data - Raw message data
+   * @returns {string|null} Error message or null if valid
+   */
+  _validateRawMessage(data) {
+    // Check size limits
+    const MAX_MESSAGE_SIZE = 5 * 1024 * 1024; // 5MB max (transactions can be large)
+    const size = data.length;
+
+    if (size > MAX_MESSAGE_SIZE) {
+      this.log.warn('Message rejected: too large', { size, max: MAX_MESSAGE_SIZE });
+      return `Message too large: ${size} bytes (max: ${MAX_MESSAGE_SIZE})`;
+    }
+
+    if (size === 0) {
+      return 'Empty message received';
+    }
+
+    // Quick structure validation (avoid full parse for malformed data)
+    const str = data.toString('utf8', 0, Math.min(100, size));
+    const trimmed = str.trim();
+
+    if (!trimmed.startsWith('{')) {
+      return 'Invalid message format: expected JSON object';
+    }
+
+    // Check for type field presence (quick heuristic check)
+    if (!str.includes('"type"')) {
+      return 'Invalid message format: missing "type" field';
+    }
+
+    return null; // Valid
+  }
+
+  /**
+   * Normalize frozen transaction to standard format (PERF-03)
+   * Ensures consistent format: { bytes: Buffer, base64: string }
+   * @private
+   */
+  _normalizeFrozenTransaction(frozenTransaction) {
+    if (!frozenTransaction) {
+      return null;
+    }
+
+    let bytes;
+    let base64;
+
+    // Format 1: Plain base64 string
+    if (typeof frozenTransaction === 'string') {
+      base64 = frozenTransaction;
+      bytes = Buffer.from(base64, 'base64');
+    }
+    // Format 2: Object with base64 property
+    else if (frozenTransaction.base64) {
+      base64 = frozenTransaction.base64;
+      bytes = frozenTransaction.bytes
+        ? Buffer.from(frozenTransaction.bytes)
+        : Buffer.from(base64, 'base64');
+    }
+    // Format 3: Object with bytes property only
+    else if (frozenTransaction.bytes) {
+      bytes = Buffer.from(frozenTransaction.bytes);
+      base64 = bytes.toString('base64');
+    }
+    else {
+      return null;
+    }
+
+    return { bytes, base64 };
+  }
+
+  /**
+   * Start heartbeat ping/pong cycle for connection health monitoring
+   * @private
+   */
+  _startHeartbeat() {
+    if (this.heartbeatTimerId) {
+      return; // Already running
+    }
+
+    this.heartbeatTimerId = timerController.setInterval(() => {
+      this._sendHeartbeats();
+    }, this.heartbeatConfig.interval, 'ws-heartbeat');
+
+    this.log.debug('Heartbeat started', {
+      interval: this.heartbeatConfig.interval,
+      timeout: this.heartbeatConfig.timeout
+    });
+  }
+
+  /**
+   * Stop heartbeat cycle
+   * @private
+   */
+  _stopHeartbeat() {
+    if (this.heartbeatTimerId) {
+      timerController.clear(this.heartbeatTimerId);
+      this.heartbeatTimerId = null;
+    }
+  }
+
+  /**
+   * Send ping to all connected clients and check for dead connections
+   * @private
+   */
+  _sendHeartbeats() {
+    if (!this.wss) {
+      return;
+    }
+
+    const now = Date.now();
+
+    this.wss.clients.forEach((ws) => {
+      // Check if client missed last heartbeat (didn't respond to ping)
+      if (ws.isAlive === false) {
+        this.log.warn('Client failed heartbeat, terminating', {
+          readyState: ws.readyState
+        });
+        return ws.terminate();
+      }
+
+      // Mark as pending response and send ping
+      ws.isAlive = false;
+      ws.ping();
+    });
   }
 
   /**

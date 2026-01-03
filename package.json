@@ -56,11 +56,14 @@
 	},
 	"devDependencies": {
 		"chai": "^4.3.0",
+		"clean-jsdoc-theme": "^4.3.0",
+		"jsdoc": "^4.0.4",
 		"mocha": "^10.0.0"
 	},
 	"scripts": {
+		"docs": "jsdoc -c jsdoc.json",
 		"test": "mocha test/*.test.js --timeout 120000",
-		"test:unit": "mocha test/keyProviders.test.js test/multiKeyType.test.js --timeout 120000",
+		"test:unit": "mocha test/keyProviders.test.js test/multiKeyType.test.js test/websocket.test.js test/sessionStore.test.js --timeout 120000",
 		"test:workflows": "mocha test/workflows.test.js --timeout 120000",
 		"test:networked": "mocha test/networked-workflow.test.js --timeout 120000",
 		"sign": "node cli/sign.js",

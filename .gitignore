@@ -48,6 +48,9 @@ dist/
 build/
 *.tgz
 
+# Generated documentation
+docs/api/
+
 # Temporary files
 tmp/
 temp/

@@ -6,12 +6,14 @@
  */
 
 const crypto = require('crypto');
+const { timerController } = require('../shared/TimerController');
 
 class SessionStore {
   constructor(options = {}) {
     this.sessions = new Map();
     this.defaultTimeout = options.defaultTimeout || 1800000; // 30 minutes
     this.cleanupInterval = options.cleanupInterval || 60000; // 1 minute
+    this.cleanupTimerId = null;
 
     // Start automatic cleanup
     this._startCleanup();
@@ -417,9 +419,9 @@ class SessionStore {
    * @private
    */
   _startCleanup() {
-    this.cleanupTimer = setInterval(() => {
+    this.cleanupTimerId = timerController.setInterval(() => {
       this._cleanupExpiredSessions();
-    }, this.cleanupInterval);
+    }, this.cleanupInterval, 'session-cleanup');
   }
 
   /**
@@ -457,9 +459,9 @@ class SessionStore {
    * Stop cleanup timer
    */
   shutdown() {
-    if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = null;
+    if (this.cleanupTimerId) {
+      timerController.clear(this.cleanupTimerId);
+      this.cleanupTimerId = null;
     }
   }
 }
