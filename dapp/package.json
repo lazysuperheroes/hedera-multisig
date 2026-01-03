@@ -10,10 +10,13 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@hashgraph/hedera-wallet-connect": "^1.5.1",
+    "@hashgraph/hedera-wallet-connect": "^2.0.4",
     "@hashgraph/proto": "^2.25.0",
     "@hashgraph/sdk": "^2.78.0",
-    "@walletconnect/modal": "^2.7.0",
+    "@reown/appkit": "1.8.10",
+    "@reown/appkit-controllers": "1.8.10",
+    "@reown/walletkit": "^1.2.8",
+    "@yudiel/react-qr-scanner": "^2.5.0",
     "buffer": "^6.0.3",
     "ethers": "^6.16.0",
     "next": "16.1.1",

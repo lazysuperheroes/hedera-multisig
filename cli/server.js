@@ -5,14 +5,73 @@
  *
  * Start a multi-signature session server from the command line.
  *
+ * Configuration:
+ *   Create a .env file in the project root with:
+ *     ENVIRONMENT=TEST     # Network: TEST or MAIN
+ *
  * Usage:
  *   node cli/server.js --threshold 2 --keys "key1,key2,key3" --participants 3
  *   npm run multisig-server -- --threshold 2 --keys "key1,key2,key3"
  */
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 const { Client } = require('@hashgraph/sdk');
 const { SigningSessionManager, WebSocketServer } = require('../server');
 const chalk = require('chalk');
+const fs = require('fs');
+const path = require('path');
+const qrcode = require('qrcode-terminal');
+
+/**
+ * Generate a connection string for easy sharing
+ * Format: hmsc:base64(JSON) where JSON = {s: serverUrl, i: sessionId, p: pin}
+ */
+function generateConnectionString(serverUrl, sessionId, pin) {
+  const data = { s: serverUrl, i: sessionId, p: pin };
+  const base64 = Buffer.from(JSON.stringify(data)).toString('base64');
+  return `hmsc:${base64}`;
+}
+
+/**
+ * Display QR code in terminal
+ */
+function displayQRCode(connectionString) {
+  console.log(chalk.bold.white('\n📱 SCAN QR CODE TO JOIN:\n'));
+  qrcode.generate(connectionString, { small: true }, (qr) => {
+    console.log(qr);
+  });
+}
+
+// Session file for auto-discovery by other scripts
+const SESSION_FILE = path.join(process.cwd(), '.multisig-session.json');
+
+/**
+ * Write session details to file for auto-discovery
+ */
+function writeSessionFile(sessionData) {
+  try {
+    fs.writeFileSync(SESSION_FILE, JSON.stringify(sessionData, null, 2), 'utf8');
+    return true;
+  } catch (error) {
+    console.log(chalk.yellow(`⚠️  Could not write session file: ${error.message}`));
+    return false;
+  }
+}
+
+/**
+ * Clean up session file on shutdown
+ */
+function cleanupSessionFile() {
+  try {
+    if (fs.existsSync(SESSION_FILE)) {
+      fs.unlinkSync(SESSION_FILE);
+    }
+  } catch (error) {
+    // Ignore cleanup errors
+  }
+}
 
 // Parse command line arguments
 function parseArgs() {
@@ -26,7 +85,15 @@ function parseArgs() {
     timeout: 1800000, // 30 minutes
     tunnel: true,
     pin: null,
-    network: 'testnet'
+    network: (() => {
+      const env = (process.env.ENVIRONMENT || 'TEST').toUpperCase();
+      switch (env) {
+        case 'MAIN': case 'MAINNET': return 'mainnet';
+        case 'PREVIEW': case 'PREVIEWNET': return 'previewnet';
+        case 'LOCAL': case 'LOCALHOST': return 'local';
+        default: return 'testnet';
+      }
+    })()
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -38,7 +105,11 @@ function parseArgs() {
 
       case '--keys':
       case '-k':
-        options.eligibleKeys = args[++i].split(',').map(k => k.trim());
+        options.eligibleKeys = args[++i].split(',').map(k => {
+          const key = k.trim();
+          // Normalize: ensure 0x prefix for consistency
+          return key.startsWith('0x') ? key : `0x${key}`;
+        });
         break;
 
       case '--participants':
@@ -133,10 +204,14 @@ async function main() {
     console.log(chalk.bold.cyan('\n🚀 Starting Hedera MultiSig Server\n'));
     console.log(chalk.cyan('═'.repeat(60)));
 
-    // Create Hedera client
-    const client = options.network === 'mainnet'
-      ? Client.forMainnet()
-      : Client.forTestnet();
+    // Create Hedera client (supports testnet, mainnet, previewnet, local)
+    let client;
+    switch (options.network) {
+      case 'mainnet': client = Client.forMainnet(); break;
+      case 'previewnet': client = Client.forPreviewnet(); break;
+      case 'local': client = Client.forLocalNode(); break;
+      default: client = Client.forTestnet();
+    }
 
     console.log(chalk.white('Network: ') + chalk.yellow(options.network));
     console.log(chalk.white('Threshold: ') + chalk.yellow(`${options.threshold} of ${options.eligibleKeys.length}`));
@@ -223,8 +298,37 @@ async function main() {
     console.log(chalk.yellow(`Session ID: ${session.sessionId}`));
     console.log(chalk.yellow(`PIN: ${session.pin}\n`));
 
-    console.log(chalk.white('Participants should run:'));
-    console.log(chalk.cyan(`  node cli/participant.js --url "${shareUrl}" --session "${session.sessionId}" --pin "${session.pin}"\n`));
+    // Generate and display connection string
+    const connectionString = generateConnectionString(shareUrl, session.sessionId, session.pin);
+    console.log(chalk.bold.white('🔗 CONNECTION STRING (paste in dApp):'));
+    console.log(chalk.cyan(`  ${connectionString}\n`));
+
+    // Display QR code
+    displayQRCode(connectionString);
+
+    console.log(chalk.white('\nParticipants can also run:'));
+    console.log(chalk.gray(`  node cli/participant.js --url "${shareUrl}" --session "${session.sessionId}" --pin "${session.pin}"\n`));
+
+    // Write session file for auto-discovery
+    const sessionFileData = {
+      sessionId: session.sessionId,
+      pin: session.pin,
+      serverUrl: shareUrl,
+      localUrl: serverInfo.url,
+      publicUrl: serverInfo.publicUrl || null,
+      connectionString: connectionString,
+      network: options.network,
+      threshold: options.threshold,
+      expectedParticipants: options.participants,
+      expiresAt: session.expiresAt,
+      createdAt: Date.now()
+    };
+
+    if (writeSessionFile(sessionFileData)) {
+      console.log(chalk.cyan('═'.repeat(60)));
+      console.log(chalk.green(`✅ Session file written: ${SESSION_FILE}`));
+      console.log(chalk.gray('   Other scripts will auto-detect this session.\n'));
+    }
 
     console.log(chalk.cyan('═'.repeat(60)));
     console.log(chalk.bold.white('\n⏳ Waiting for participants to connect and become ready...\n'));
@@ -232,9 +336,15 @@ async function main() {
     // Keep server running
     process.on('SIGINT', async () => {
       console.log(chalk.yellow('\n\n⚠️  Shutting down server...'));
+      cleanupSessionFile();
       await wsServer.stop();
       sessionManager.shutdown();
       process.exit(0);
+    });
+
+    // Also cleanup on other exit signals
+    process.on('SIGTERM', () => {
+      cleanupSessionFile();
     });
 
   } catch (error) {

@@ -35,18 +35,19 @@
 	"homepage": "https://github.com/lazysuperheroes/hedera-multisig#readme",
 	"dependencies": {
 		"@hashgraph/sdk": "^2.49.0",
-		"readline-sync": "^1.4.10",
-		"ws": "^8.14.2",
 		"chalk": "^4.1.2",
-		"ngrok": "^5.0.0-beta.2",
-		"localtunnel": "^2.0.2",
+		"dotenv": "^16.0.0",
 		"ethers": "^5.7.2",
+		"localtunnel": "^2.0.2",
+		"ngrok": "^5.0.0-beta.2",
 		"node-fetch": "^2.7.0",
-		"dotenv": "^16.0.0"
+		"qrcode-terminal": "^0.12.0",
+		"readline-sync": "^1.4.10",
+		"ws": "^8.14.2"
 	},
 	"devDependencies": {
-		"mocha": "^10.0.0",
-		"chai": "^4.3.0"
+		"chai": "^4.3.0",
+		"mocha": "^10.0.0"
 	},
 	"scripts": {
 		"test": "mocha test/*.test.js --timeout 120000",
@@ -91,5 +92,8 @@
 		"CHANGELOG.md",
 		"TESTING.md",
 		"SETUP_GUIDE.md"
-	]
+	],
+	"overrides": {
+		"axios": "^1.7.9"
+	}
 }

@@ -9,6 +9,24 @@ const WebSocket = require('ws');
 const http = require('http');
 const chalk = require('chalk');
 
+/**
+ * Normalize a public key to ensure consistent 0x prefix
+ */
+function normalizePublicKey(key) {
+  if (!key) return key;
+  const trimmed = key.trim();
+  return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
+}
+
+/**
+ * Check if a public key is in the eligible list (handles 0x prefix variations)
+ */
+function isKeyEligible(key, eligibleKeys) {
+  if (!key || !eligibleKeys || eligibleKeys.length === 0) return false;
+  const normalizedKey = normalizePublicKey(key);
+  return eligibleKeys.some(eligible => normalizePublicKey(eligible) === normalizedKey);
+}
+
 class MultiSigWebSocketServer {
   constructor(sessionManager, options = {}) {
     this.sessionManager = sessionManager;
@@ -70,19 +88,30 @@ class MultiSigWebSocketServer {
         // Start listening
         this.server.listen(this.options.port, this.options.host, async () => {
           const address = this.server.address();
-          const url = `ws://${address.address}:${address.port}`;
+
+          // Convert IPv6 addresses to user-friendly format
+          let displayHost = address.address;
+          if (displayHost === '::1' || displayHost === '::') {
+            // IPv6 localhost → use 'localhost' for clarity
+            displayHost = 'localhost';
+          } else if (displayHost === '0.0.0.0') {
+            // All interfaces → show as localhost for local connections
+            displayHost = 'localhost';
+          }
+
+          const url = `ws://${displayHost}:${address.port}`;
 
           if (this.options.verbose) {
             console.log(chalk.bold.green('\n✅ WebSocket Server Started'));
             console.log(chalk.cyan('─'.repeat(50)));
-            console.log(chalk.white('Host: ') + chalk.yellow(address.address));
+            console.log(chalk.white('Host: ') + chalk.yellow(displayHost));
             console.log(chalk.white('Port: ') + chalk.yellow(address.port));
             console.log(chalk.white('Local URL: ') + chalk.yellow(url));
             console.log(chalk.cyan('─'.repeat(50)) + '\n');
           }
 
           const result = {
-            host: address.address,
+            host: displayHost,
             port: address.port,
             url,
             publicUrl: null
@@ -229,7 +258,15 @@ class MultiSigWebSocketServer {
     let isCoordinator = false;
 
     if (this.options.verbose) {
-      console.log(chalk.cyan(`\n📡 New connection from ${req.socket.remoteAddress}`));
+      // Format IP address for display (convert IPv6 localhost to friendly format)
+      let displayAddress = req.socket.remoteAddress;
+      if (displayAddress === '::1' || displayAddress === '::ffff:127.0.0.1') {
+        displayAddress = 'localhost';
+      } else if (displayAddress?.startsWith('::ffff:')) {
+        // Strip IPv6-mapped IPv4 prefix
+        displayAddress = displayAddress.replace('::ffff:', '');
+      }
+      console.log(chalk.cyan(`\n📡 New connection from ${displayAddress}`));
     }
 
     // Handle messages from client
@@ -442,7 +479,7 @@ class MultiSigWebSocketServer {
       const sessionInfo = this.sessionManager.getSessionInfo(sessionId);
 
       if (sessionInfo && sessionInfo.eligiblePublicKeys) {
-        const isEligible = sessionInfo.eligiblePublicKeys.includes(publicKey);
+        const isEligible = isKeyEligible(publicKey, sessionInfo.eligiblePublicKeys);
 
         if (!isEligible) {
           this._recordFailedAuth(clientIp, rateLimitAttempts);
@@ -642,21 +679,45 @@ class MultiSigWebSocketServer {
       // Reconstruct from bytes (coordinator already has Transaction object)
       // For now, we expect the coordinator to serialize and send txDetails
 
-      // Update session with transaction
-      const result = {
-        sessionId,
-        status: 'transaction-received',
-        txDetails,
-        metadata
-      };
-
       // Store in session via SessionStore
       const session = this.sessionManager.store.getSession(sessionId);
       if (session) {
+        // Clear any existing expiration timeout
+        if (session.expirationTimeout) {
+          clearTimeout(session.expirationTimeout);
+        }
+
         session.frozenTransaction = frozenTransaction;
         session.txDetails = txDetails;
         session.status = 'transaction-received';
         session.transactionReceivedAt = Date.now();
+
+        // Calculate expiration time from txDetails
+        // txDetails should contain validStartTimestamp and transactionValidDuration
+        // IMPORTANT: Store transaction expiration separately from session expiration
+        if (txDetails && txDetails.validStartTimestamp) {
+          const validDuration = txDetails.transactionValidDuration || 120;
+          const txExpiresAt = txDetails.validStartTimestamp + validDuration;
+          session.transactionExpiresAt = txExpiresAt; // Separate from session.expiresAt
+
+          // Set up expiration timeout
+          const now = Math.floor(Date.now() / 1000);
+          const timeUntilExpiry = (txExpiresAt - now) * 1000;
+
+          if (timeUntilExpiry > 0) {
+            session.expirationTimeout = setTimeout(() => {
+              this._handleTransactionExpired(sessionId);
+            }, timeUntilExpiry);
+
+            if (this.options.verbose) {
+              console.log(chalk.yellow(`⏱️  Transaction expires in ${Math.round(timeUntilExpiry / 1000)}s`));
+            }
+          } else {
+            // Already expired
+            this._handleTransactionExpired(sessionId);
+            return;
+          }
+        }
       }
 
       // Broadcast to all participants
@@ -679,6 +740,59 @@ class MultiSigWebSocketServer {
         type: 'INJECTION_FAILED',
         payload: { message: error.message }
       });
+    }
+  }
+
+  /**
+   * Handle transaction expiration
+   * @private
+   */
+  _handleTransactionExpired(sessionId) {
+    const session = this.sessionManager.store.getSession(sessionId);
+
+    if (session && session.status !== 'completed') {
+      // Transaction expired, but session is still valid
+      // Reset to 'waiting' so a new transaction can be injected
+      const wasExpired = session.status === 'transaction-expired';
+
+      if (!wasExpired) {
+        session.status = 'transaction-expired';
+
+        if (this.options.verbose) {
+          console.log(chalk.red(`\n⏱️  Transaction expired for session ${sessionId}\n`));
+          console.log(chalk.yellow(`   Session remains active - can inject new transaction\n`));
+        }
+
+        // Broadcast to all participants
+        this.broadcastToSession(sessionId, {
+          type: 'TRANSACTION_EXPIRED',
+          payload: {
+            sessionId,
+            message: 'Transaction has expired and can no longer be signed'
+          }
+        });
+
+        // Notify coordinator
+        this.sendToCoordinator(sessionId, {
+          type: 'TRANSACTION_EXPIRED',
+          payload: {
+            sessionId,
+            message: 'Transaction has expired'
+          }
+        });
+
+        // Clear the transaction from session but keep session alive
+        session.frozenTransaction = null;
+        session.txDetails = null;
+        session.transactionExpiresAt = null;
+
+        // Clear any collected signatures (they're for the expired transaction)
+        session.signatures.clear();
+        session.stats.signaturesCollected = 0;
+
+        // Reset to waiting so a new transaction can be injected
+        session.status = 'waiting';
+      }
     }
   }
 

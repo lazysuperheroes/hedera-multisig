@@ -1,16 +1,23 @@
 /**
- * WalletConnect Client
+ * WalletConnect Client (v2.0.4)
  *
  * Handles WalletConnect connection and transaction signing using Hedera's
- * official @hashgraph/hedera-wallet-connect library.
+ * official @hashgraph/hedera-wallet-connect@2.0.4 library with Reown.
  *
  * Uses hedera_signTransaction to sign transactions WITHOUT executing them,
  * which is perfect for multi-sig signature collection.
  */
 
-import { DAppConnector, HederaSessionEvent } from '@hashgraph/hedera-wallet-connect';
-import { Transaction, AccountId, PublicKey, Key } from '@hashgraph/sdk';
-import { initWalletConnect, validateNetworkMatch } from './walletconnect-config';
+import { Transaction, PublicKey } from '@hashgraph/sdk';
+import {
+  initializeWalletConnect,
+  connectWallet,
+  disconnectWallet,
+  getAccountId,
+  getPublicKey,
+  getDAppConnector,
+  signTransaction as signTx,
+} from './walletconnect';
 
 export interface WalletInfo {
   accountId: string;
@@ -24,49 +31,46 @@ export interface SignatureResult {
 }
 
 export class WalletConnectClient {
-  private connector: DAppConnector | null = null;
-  private accountId: AccountId | null = null;
-  private publicKey: Key | null = null;
   private network: 'testnet' | 'mainnet' = 'testnet';
+  private eventHandlers: Map<string, Function[]> = new Map();
 
   /**
    * Connect to wallet via WalletConnect
    *
    * @param network - Hedera network (testnet or mainnet)
+   * @param extensionId - Optional extension ID for direct connection
    * @returns Wallet information
    */
-  async connect(network: 'testnet' | 'mainnet' = 'testnet'): Promise<WalletInfo> {
+  async connect(network: 'testnet' | 'mainnet' = 'testnet', extensionId?: string): Promise<WalletInfo> {
     try {
       this.network = network;
 
       // Initialize WalletConnect
-      this.connector = await initWalletConnect(network);
+      await initializeWalletConnect();
 
-      // Open WalletConnect modal for user to select wallet
-      console.log('🔗 Opening WalletConnect modal...');
-      await this.connector.openModal();
+      // Open WalletConnect modal or connect to extension
+      console.log('🔗 Opening wallet connection...');
+      await connectWallet(extensionId);
 
-      // Wait for connection
-      const signers = this.connector.signers;
+      // Wait a moment for connection to establish
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      if (!signers || signers.length === 0) {
+      const accountId = getAccountId();
+      const publicKey = getPublicKey();
+
+      if (!accountId || !publicKey) {
         throw new Error('No wallet connected. Please try again.');
       }
 
-      // Use first signer (account)
-      const signer = signers[0];
-      this.accountId = signer.getAccountId();
-      this.publicKey = signer.getAccountKey();
-
       console.log('✅ Wallet connected successfully');
-      console.log(`   Account: ${this.accountId.toString()}`);
-      console.log(`   Public Key: ${this.publicKey.toString()}`);
+      console.log(`   Account: ${accountId}`);
+      console.log(`   Public Key: ${publicKey}`);
       console.log(`   Network: ${network}`);
 
       return {
-        accountId: this.accountId.toString(),
-        publicKey: this.publicKey.toString(),
-        network: network,
+        accountId,
+        publicKey,
+        network,
       };
     } catch (error) {
       console.error('Failed to connect wallet:', error);
@@ -84,12 +88,11 @@ export class WalletConnectClient {
    * @returns Signature result with public key and signature
    */
   async signTransaction(frozenTransactionBase64: string): Promise<SignatureResult> {
-    if (!this.connector) {
-      throw new Error('Wallet not connected. Call connect() first.');
-    }
+    const accountId = getAccountId();
+    const publicKey = getPublicKey();
 
-    if (!this.accountId || !this.publicKey) {
-      throw new Error('Account or public key not available');
+    if (!accountId || !publicKey) {
+      throw new Error('Wallet not connected. Call connect() first.');
     }
 
     try {
@@ -102,27 +105,20 @@ export class WalletConnectClient {
       console.log('   Transaction decoded successfully');
       console.log(`   Type: ${transaction.constructor.name}`);
 
-      // Get signer for this account
-      const signers = this.connector.signers;
-      if (!signers || signers.length === 0) {
-        throw new Error('No signers available');
-      }
-
-      const signer = signers[0];
-
-      // Sign transaction using hedera_signTransaction
+      // Sign transaction using wallet
       // This will open the wallet app for user approval
       console.log('   Opening wallet for approval...');
 
-      const signedTx = await signer.signTransaction(transaction);
+      const signedTxResult = await signTx(txBytes);
+      const signedTx = signedTxResult.result;
 
       console.log('✅ Transaction signed by wallet');
 
       // Extract signature from signed transaction
-      const signature = this.extractSignature(signedTx);
+      const signature = this.extractSignature(signedTx, publicKey);
 
       return {
-        publicKey: this.publicKey.toString(),
+        publicKey: publicKey,
         signature: signature,
       };
     } catch (error) {
@@ -135,28 +131,25 @@ export class WalletConnectClient {
    * Extract signature from signed transaction
    *
    * @param signedTransaction - Transaction signed by wallet
+   * @param publicKeyString - Public key to extract signature for
    * @returns Signature as base64 string
    */
-  private extractSignature(signedTransaction: Transaction): string {
+  private extractSignature(signedTransaction: any, publicKeyString: string): string {
     try {
-      if (!this.publicKey) {
-        throw new Error('Public key not available');
-      }
+      // Parse the public key
+      const publicKey = PublicKey.fromString(publicKeyString);
+
+      // Convert signed transaction bytes to Transaction object
+      const signedTx = Transaction.fromBytes(signedTransaction);
 
       // Get signature map from signed transaction
-      const signatureMap = signedTransaction.getSignatures();
-
-      // The signature map is organized by node account ID, then by public key
-      // For a frozen transaction, there should be signatures for each node
-      // We need to extract OUR signature (from our public key)
+      const signatureMap = signedTx.getSignatures();
 
       let signature: any = null;
 
       // Iterate through all node signatures
       for (const [nodeAccountId, publicKeyToSignature] of signatureMap) {
         // Look for our public key in this node's signatures
-        const publicKeyString = this.publicKey.toString();
-
         for (const [pubKey, sig] of publicKeyToSignature) {
           if (pubKey.toString() === publicKeyString) {
             signature = sig;
@@ -172,8 +165,9 @@ export class WalletConnectClient {
         throw new Error('Could not find signature in signed transaction');
       }
 
-      // Convert signature to base64
-      const signatureBase64 = Buffer.from(signature).toString('base64');
+      // Convert signature to base64 (handle Uint8Array or other types)
+      const signatureBytes = signature instanceof Uint8Array ? signature : Uint8Array.from(signature);
+      const signatureBase64 = Buffer.from(signatureBytes).toString('base64');
 
       console.log('   Signature extracted successfully');
       console.log(`   Signature (first 32 chars): ${signatureBase64.substring(0, 32)}...`);
@@ -189,31 +183,28 @@ export class WalletConnectClient {
    * Disconnect wallet
    */
   async disconnect(): Promise<void> {
-    if (this.connector) {
-      try {
-        await this.connector.disconnectAll();
-        console.log('✅ Wallet disconnected');
-      } catch (error) {
-        console.error('Error disconnecting wallet:', error);
-      }
+    try {
+      await disconnectWallet();
+      console.log('✅ Wallet disconnected');
+    } catch (error) {
+      console.error('Error disconnecting wallet:', error);
     }
-
-    this.connector = null;
-    this.accountId = null;
-    this.publicKey = null;
   }
 
   /**
    * Get current wallet info
    */
   getWalletInfo(): WalletInfo | null {
-    if (!this.accountId || !this.publicKey) {
+    const accountId = getAccountId();
+    const publicKey = getPublicKey();
+
+    if (!accountId || !publicKey) {
       return null;
     }
 
     return {
-      accountId: this.accountId.toString(),
-      publicKey: this.publicKey.toString(),
+      accountId,
+      publicKey,
       network: this.network,
     };
   }
@@ -222,7 +213,7 @@ export class WalletConnectClient {
    * Check if wallet is connected
    */
   isConnected(): boolean {
-    return this.connector !== null && this.accountId !== null;
+    return getAccountId() !== null && getPublicKey() !== null;
   }
 
   /**
@@ -232,14 +223,17 @@ export class WalletConnectClient {
    * @returns Validation result
    */
   validateNetwork(sessionNetwork: string): { valid: boolean; message?: string } {
-    if (!this.network) {
+    const normalizedWalletNetwork = this.network.toLowerCase();
+    const normalizedSessionNetwork = sessionNetwork.toLowerCase();
+
+    if (normalizedWalletNetwork !== normalizedSessionNetwork) {
       return {
         valid: false,
-        message: 'Wallet network not available',
+        message: `Network mismatch: Wallet is on ${this.network}, but session requires ${sessionNetwork}`,
       };
     }
 
-    return validateNetworkMatch(this.network, sessionNetwork);
+    return { valid: true };
   }
 
   /**
@@ -249,14 +243,14 @@ export class WalletConnectClient {
    * @param handler - Event handler
    */
   on(event: 'disconnect' | 'accountsChanged' | 'chainChanged', handler: () => void): void {
-    if (!this.connector) return;
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, []);
+    }
 
-    // Event handling will be implemented based on DAppConnector API
-    // For now, just log the registration
+    this.eventHandlers.get(event)!.push(handler);
+
+    // TODO: Implement actual event listeners when DAppConnector API supports it
     console.log(`Event handler registered for ${event}`);
-
-    // TODO: Implement actual event listeners when WalletConnect session is active
-    // The DAppConnector may expose session.on() or similar methods
   }
 }
 

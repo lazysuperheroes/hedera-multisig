@@ -78,7 +78,35 @@ export function TransactionReview({
   const [error, setError] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
   const network = process.env.NEXT_PUBLIC_DEFAULT_NETWORK || 'testnet';
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (!decoded?.details.expiresAt) return;
+
+    const updateCountdown = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const remaining = decoded.details.expiresAt! - now;
+
+      if (remaining <= 0) {
+        setSecondsRemaining(0);
+        setIsExpired(true);
+      } else {
+        setSecondsRemaining(remaining);
+        setIsExpired(false);
+      }
+    };
+
+    // Update immediately
+    updateCountdown();
+
+    // Update every second
+    const interval = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(interval);
+  }, [decoded?.details.expiresAt]);
 
   useEffect(() => {
     async function decodeTransaction() {
@@ -152,142 +180,161 @@ export function TransactionReview({
     return null;
   }
 
+  // Format transfers for display (sender → receiver)
+  // Amount strings are like "-1 ℏ" or "100" - extract numeric part to determine sign
+  const formattedTransfers = amounts.reduce((acc, amount) => {
+    const numericStr = amount.amount.replace(/[^\d.-]/g, '');
+    const value = parseFloat(numericStr) || 0;
+    if (value < 0) {
+      acc.senders.push({ accountId: amount.accountId, amount: amount.amount, tokenId: amount.tokenId, type: amount.type });
+    } else {
+      acc.receivers.push({ accountId: amount.accountId, amount: amount.amount, tokenId: amount.tokenId, type: amount.type });
+    }
+    return acc;
+  }, { senders: [] as ExtractedAmount[], receivers: [] as ExtractedAmount[] });
+
+  // Format time remaining
+  const formatTimeRemaining = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Calculate progress percentage (how much time has passed)
+  const progressPercent = decoded?.details.transactionValidDuration && secondsRemaining !== null
+    ? Math.max(0, Math.min(100, ((decoded.details.transactionValidDuration - secondsRemaining) / decoded.details.transactionValidDuration) * 100))
+    : 0;
+
   return (
-    <div className="space-y-6">
-      {/* UNVERIFIED METADATA SECTION (if present) - YELLOW WARNING */}
-      {metadata && validation && (
-        <div className="bg-yellow-50 border-4 border-yellow-500 rounded-lg p-6">
-          <div className="flex items-start space-x-3 mb-4">
-            <div className="text-3xl">⚠️</div>
+    <div className="space-y-4">
+      {/* EXPIRED Banner */}
+      {isExpired && (
+        <div className="bg-red-100 border-2 border-red-600 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <div className="text-red-600">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
             <div>
-              <h2 className="text-xl font-bold text-yellow-800">UNVERIFIED METADATA</h2>
-              <p className="text-yellow-700 font-semibold">
-                NOT cryptographically verified - coordinator-provided information only
-              </p>
-              <p className="text-yellow-600 text-sm mt-1">
-                This information comes from the coordinator and could be fraudulent. Always verify against the
-                VERIFIED section below.
+              <h3 className="font-bold text-red-800">Transaction Expired</h3>
+              <p className="text-sm text-red-700">
+                This transaction has timed out and can no longer be signed. Please request a new transaction from the coordinator.
               </p>
             </div>
           </div>
-
-          {/* Metadata Warnings */}
-          {validation.warnings.length > 0 && (
-            <div className="bg-yellow-100 border-2 border-yellow-600 rounded p-4 mb-4">
-              <h3 className="font-bold text-yellow-800 mb-2">⚠️ Validation Warnings:</h3>
-              <ul className="space-y-1">
-                {validation.warnings.map((warning, index) => (
-                  <li key={index} className="text-yellow-700 text-sm">
-                    {warning}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Metadata Content */}
-          <div className="bg-white rounded border border-yellow-300 p-4">
-            <h3 className="font-semibold text-gray-700 mb-2">Coordinator Claims:</h3>
-            <pre className="text-sm text-gray-600 whitespace-pre-wrap overflow-x-auto">
-              {JSON.stringify(metadata, null, 2)}
-            </pre>
-          </div>
-
-          {/* Mismatches */}
-          {Object.keys(validation.mismatches).length > 0 && (
-            <div className="bg-red-100 border-2 border-red-600 rounded p-4 mt-4">
-              <h3 className="font-bold text-red-800 mb-2">❌ CRITICAL: Metadata Mismatches Detected</h3>
-              {Object.entries(validation.mismatches).map(([field, { metadata, actual }]) => (
-                <div key={field} className="mb-2">
-                  <p className="font-semibold text-red-700">{field}:</p>
-                  <p className="text-red-600 text-sm">
-                    Metadata: {JSON.stringify(metadata)} ≠ Actual: {JSON.stringify(actual)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
-      {/* VERIFIED TRANSACTION DATA SECTION - GREEN TRUST */}
-      <div className="bg-green-50 border-4 border-green-600 rounded-lg p-6">
-        <div className="flex items-start space-x-3 mb-4">
-          <div className="text-3xl">✅</div>
-          <div>
-            <h2 className="text-xl font-bold text-green-800">VERIFIED TRANSACTION DATA</h2>
-            <p className="text-green-700 font-semibold">Cryptographically verified from transaction bytes</p>
-            <p className="text-green-600 text-sm mt-1">
-              This data is extracted directly from the frozen transaction and cannot be forged.
-            </p>
+      {/* Countdown Timer */}
+      {secondsRemaining !== null && !isExpired && (
+        <div className={`border-2 rounded-lg p-3 ${
+          secondsRemaining <= 30 ? 'bg-red-50 border-red-400' :
+          secondsRemaining <= 60 ? 'bg-yellow-50 border-yellow-400' :
+          'bg-blue-50 border-blue-400'
+        }`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <svg className={`w-5 h-5 ${secondsRemaining <= 30 ? 'text-red-600' : secondsRemaining <= 60 ? 'text-yellow-600' : 'text-blue-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className={`font-semibold ${secondsRemaining <= 30 ? 'text-red-800' : secondsRemaining <= 60 ? 'text-yellow-800' : 'text-blue-800'}`}>
+                Time to Sign
+              </span>
+            </div>
+            <span className={`font-mono font-bold text-lg ${secondsRemaining <= 30 ? 'text-red-700' : secondsRemaining <= 60 ? 'text-yellow-700' : 'text-blue-700'}`}>
+              {formatTimeRemaining(secondsRemaining)}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className={`h-2 rounded-full transition-all duration-1000 ${
+                secondsRemaining <= 30 ? 'bg-red-500' :
+                secondsRemaining <= 60 ? 'bg-yellow-500' :
+                'bg-blue-500'
+              }`}
+              style={{ width: `${100 - progressPercent}%` }}
+            />
           </div>
         </div>
+      )}
 
-        {/* Transaction Checksum */}
-        <div className="bg-white rounded border border-green-300 p-4 mb-4">
-          <h3 className="font-semibold text-gray-700 mb-2">Transaction Checksum (SHA256):</h3>
-          <p className="font-mono text-xs text-gray-600 break-all">{decoded.checksum}</p>
-        </div>
-
-        {/* Transaction Type */}
-        <div className="bg-white rounded border border-green-300 p-4 mb-4">
-          <h3 className="font-semibold text-gray-700 mb-2">Transaction Type:</h3>
-          <p className="text-gray-800 font-mono">{decoded.type}</p>
-        </div>
-
-        {/* Transaction ID */}
-        {decoded.details.transactionId && (
-          <div className="bg-white rounded border border-green-300 p-4 mb-4">
-            <h3 className="font-semibold text-gray-700 mb-2">Transaction ID:</h3>
-            <p className="text-gray-800 font-mono text-sm">{decoded.details.transactionId}</p>
+      {/* Warnings Banner (if mismatches detected) */}
+      {validation && Object.keys(validation.mismatches).length > 0 && (
+        <div className="bg-red-50 border-2 border-red-500 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-red-800 font-semibold mb-2">
+            <span className="text-xl">⚠️</span>
+            <span>Metadata Mismatch Warning</span>
           </div>
-        )}
-
-        {/* Amounts (Transfers) */}
-        {amounts.length > 0 && (
-          <div className="bg-white rounded border border-green-300 p-4 mb-4">
-            <h3 className="font-semibold text-gray-700 mb-2">Transfers:</h3>
-            <div className="space-y-2">
-              {amounts.map((amount, index) => (
-                <div key={index} className="flex items-center justify-between text-sm">
-                  <EntityLink type="account" id={amount.accountId} network={network} />
-                  <span
-                    className={`font-mono font-semibold ${
-                      amount.amount.startsWith('+') ? 'text-green-700' : 'text-red-700'
-                    }`}
-                  >
-                    {TransactionDecoder.formatAmount(amount.amount, amount.type)}
-                  </span>
-                  {amount.tokenId && (
-                    <EntityLink type="token" id={amount.tokenId} network={network} />
-                  )}
+          <p className="text-sm text-red-700 mb-2">
+            Coordinator-provided metadata doesn&apos;t match the verified transaction data. Review carefully!
+          </p>
+          <details className="text-xs">
+            <summary className="cursor-pointer text-red-600 hover:text-red-800">Show details</summary>
+            <div className="mt-2 p-2 bg-red-100 rounded">
+              {Object.entries(validation.mismatches).map(([field, { metadata: meta, actual }]) => (
+                <div key={field} className="mb-1">
+                  <span className="font-semibold">{field}:</span> claimed &quot;{JSON.stringify(meta)}&quot; vs actual &quot;{JSON.stringify(actual)}&quot;
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          </details>
+        </div>
+      )}
 
-        {/* Accounts Involved */}
-        {accounts.length > 0 && (
-          <div className="bg-white rounded border border-green-300 p-4 mb-4">
-            <h3 className="font-semibold text-gray-700 mb-2">Accounts Involved:</h3>
-            <div className="flex flex-wrap gap-2">
-              {accounts.map((account, index) => (
-                <div key={index} className="px-2 py-1 bg-gray-100 rounded text-xs">
-                  <EntityLink type="account" id={account} network={network} />
-                </div>
-              ))}
+      {/* Main Transaction Card */}
+      <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
+        {/* Header */}
+        <div className="bg-green-600 text-white px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">✅</span>
+              <span className="font-semibold">Verified Transaction</span>
+            </div>
+            <span className="text-sm bg-green-700 px-2 py-1 rounded">{decoded.type}</span>
+          </div>
+        </div>
+
+        {/* Transfers Section (most important) */}
+        {amounts.length > 0 && (
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-600 mb-3">TRANSFERS</h3>
+            <div className="space-y-3">
+              {formattedTransfers.senders.map((sender, i) => {
+                const receiver = formattedTransfers.receivers[i];
+                return (
+                  <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    {/* From */}
+                    <div className="flex-1">
+                      <div className="text-xs text-gray-500 mb-1">From</div>
+                      <EntityLink type="account" id={sender.accountId} network={network} />
+                    </div>
+                    {/* Arrow + Amount */}
+                    <div className="flex flex-col items-center">
+                      <div className="text-lg font-bold text-gray-800">
+                        {TransactionDecoder.formatAmount(sender.amount.replace('-', ''), sender.type).replace('+', '').replace('-', '')}
+                      </div>
+                      <div className="text-gray-400">→</div>
+                    </div>
+                    {/* To */}
+                    <div className="flex-1 text-right">
+                      <div className="text-xs text-gray-500 mb-1">To</div>
+                      {receiver && <EntityLink type="account" id={receiver.accountId} network={network} />}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
         {/* Token Association */}
         {decoded.details.tokenIds && decoded.details.tokenIds.length > 0 && (
-          <div className="bg-white rounded border border-green-300 p-4 mb-4">
-            <h3 className="font-semibold text-gray-700 mb-2">Tokens to Associate:</h3>
-            <div className="space-y-1">
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-600 mb-2">TOKEN ASSOCIATION</h3>
+            <div className="flex flex-wrap gap-2">
               {decoded.details.tokenIds.map((tokenId, index) => (
-                <div key={index} className="text-sm">
+                <div key={index} className="px-3 py-1 bg-blue-50 border border-blue-200 rounded">
                   <EntityLink type="token" id={tokenId} network={network} />
                 </div>
               ))}
@@ -297,60 +344,107 @@ export function TransactionReview({
 
         {/* Contract Execution */}
         {decoded.details.contractId && (
-          <div className="bg-white rounded border border-green-300 p-4 mb-4">
-            <h3 className="font-semibold text-gray-700 mb-2">Smart Contract Execution:</h3>
-            <div className="space-y-2 text-sm">
-              <div>
-                <span className="font-semibold text-gray-600">Contract:</span>
-                <span className="ml-2">
-                  <EntityLink type="contract" id={decoded.details.contractId} network={network} />
-                </span>
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">CONTRACT CALL</h3>
+            <div className="space-y-2 text-sm text-gray-800">
+              <div className="flex gap-2">
+                <span className="text-gray-500">Contract:</span>
+                <EntityLink type="contract" id={decoded.details.contractId} network={network} />
               </div>
               {decoded.details.functionName && (
-                <div>
-                  <span className="font-semibold text-gray-600">Function:</span>
-                  <span className="ml-2 font-mono text-gray-800 font-bold">{decoded.details.functionName}()</span>
+                <div className="flex gap-2">
+                  <span className="text-gray-500">Function:</span>
+                  <span className="font-mono font-semibold text-gray-800">{decoded.details.functionName}()</span>
                 </div>
               )}
               {decoded.details.gas && (
-                <div>
-                  <span className="font-semibold text-gray-600">Gas Limit:</span>
-                  <span className="ml-2 font-mono text-gray-800">{decoded.details.gas.toLocaleString()}</span>
-                </div>
-              )}
-              {decoded.details.functionParams && (
-                <div>
-                  <span className="font-semibold text-gray-600 block mb-1">Function Parameters:</span>
-                  <div className="mt-1 p-3 bg-gray-50 rounded border border-gray-200">
-                    <pre className="text-xs overflow-x-auto font-mono">
-                      {JSON.stringify(decoded.details.functionParams, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              )}
-              {!decoded.details.functionName && (
-                <div className="mt-2 p-2 bg-yellow-50 border border-yellow-300 rounded">
-                  <p className="text-xs text-yellow-700">
-                    ⚠️ No ABI provided - function name and parameters cannot be decoded. Review raw function data carefully.
-                  </p>
+                <div className="flex gap-2">
+                  <span className="text-gray-500">Gas:</span>
+                  <span className="font-mono text-gray-800">{decoded.details.gas.toLocaleString()}</span>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Transaction Memo */}
-        {decoded.details.transactionMemo && (
-          <div className="bg-white rounded border border-green-300 p-4 mb-4">
-            <h3 className="font-semibold text-gray-700 mb-2">Transaction Memo:</h3>
-            <p className="text-sm text-gray-700">{decoded.details.transactionMemo}</p>
+        {/* Metadata from Coordinator (collapsed by default if no issues) */}
+        {metadata && (
+          <div className="p-4 border-b border-gray-200 bg-yellow-50">
+            <details className={validation && !validation.valid ? 'open' : ''}>
+              <summary className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-yellow-800">
+                <span>⚠️</span>
+                <span>Coordinator-Provided Info (Unverified)</span>
+              </summary>
+              <div className="mt-3 p-3 bg-white rounded border border-yellow-200 text-xs">
+                <pre className="text-gray-600 whitespace-pre-wrap overflow-x-auto">
+                  {JSON.stringify(metadata, null, 2)}
+                </pre>
+              </div>
+            </details>
           </div>
         )}
 
-        {/* Max Transaction Fee */}
-        <div className="bg-white rounded border border-green-300 p-4">
-          <h3 className="font-semibold text-gray-700 mb-2">Max Transaction Fee:</h3>
-          <p className="text-sm text-gray-700">{decoded.details.maxTransactionFee} tinybars</p>
+        {/* Technical Details (collapsed) */}
+        <div className="p-4 bg-gray-50">
+          <details>
+            <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+              Transaction Details
+            </summary>
+            <div className="mt-3 space-y-2 text-xs text-gray-800">
+              <div className="flex gap-2">
+                <span className="text-gray-500">Transaction ID:</span>
+                <span className="font-mono text-gray-800">{decoded.details.transactionId}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-gray-500">Max Fee:</span>
+                <span className="font-mono text-gray-800">{decoded.details.maxTransactionFee}</span>
+              </div>
+              {decoded.details.validStartTimestamp && (
+                <div className="flex gap-2">
+                  <span className="text-gray-500">Valid Start:</span>
+                  <span className="font-mono text-gray-800">{new Date(decoded.details.validStartTimestamp * 1000).toLocaleString()}</span>
+                </div>
+              )}
+              {decoded.details.transactionValidDuration && (
+                <div className="flex gap-2">
+                  <span className="text-gray-500">Valid Duration:</span>
+                  <span className="font-mono text-gray-800">{decoded.details.transactionValidDuration}s</span>
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                <span className="text-gray-500">Checksum (SHA256):</span>
+                <span className="font-mono text-[10px] break-all bg-gray-100 p-1 rounded text-gray-700">{decoded.checksum}</span>
+              </div>
+              {decoded.details.transactionMemo && (
+                <div className="flex gap-2">
+                  <span className="text-gray-500">Memo:</span>
+                  <span className="text-gray-800">{decoded.details.transactionMemo}</span>
+                </div>
+              )}
+
+              {/* Nested Raw Transaction Data */}
+              <details className="mt-4 pt-3 border-t border-gray-200">
+                <summary className="cursor-pointer text-sm font-semibold text-gray-600 hover:text-gray-800">
+                  Raw Transaction Data
+                </summary>
+                <div className="mt-3 p-3 bg-white rounded border border-gray-200 overflow-auto max-h-96">
+                  <pre className="text-[11px] font-mono text-gray-700 whitespace-pre-wrap">
+                    {JSON.stringify(decoded.details, (key, value) => {
+                      // Handle Uint8Array and other binary data
+                      if (value instanceof Uint8Array) {
+                        return `[Uint8Array(${value.length})]`;
+                      }
+                      // Handle BigInt
+                      if (typeof value === 'bigint') {
+                        return value.toString();
+                      }
+                      return value;
+                    }, 2)}
+                  </pre>
+                </div>
+              </details>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -362,10 +456,10 @@ export function TransactionReview({
             <div className="space-y-2">
               <input
                 type="text"
-                placeholder="Reason for rejection (optional)"
+                placeholder="Enter optional rejection reason..."
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-red-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-red-500 text-gray-800 placeholder:text-gray-400"
               />
               <div className="flex space-x-2">
                 <button
@@ -400,10 +494,14 @@ export function TransactionReview({
         {/* Approve */}
         <button
           onClick={onApprove}
-          disabled={disabled}
-          className="flex-1 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+          disabled={disabled || isExpired}
+          className={`flex-1 px-6 py-3 font-semibold rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+            isExpired
+              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+              : 'bg-green-600 text-white hover:bg-green-700'
+          }`}
         >
-          ✅ Approve & Sign
+          {isExpired ? '⏱️ Transaction Expired' : '✅ Approve & Sign'}
         </button>
       </div>
 

@@ -24,6 +24,9 @@ export interface BrowserSigningClientOptions {
   verbose?: boolean;
   autoReview?: boolean;
   label?: string | null;
+  autoReconnect?: boolean;
+  maxReconnectAttempts?: number;
+  reconnectInterval?: number; // milliseconds
 }
 
 export class BrowserSigningClient {
@@ -39,11 +42,26 @@ export class BrowserSigningClient {
   private connectResolve: ((value: any) => void) | null = null;
   private connectReject: ((error: Error) => void) | null = null;
 
+  // Auto-reconnect state
+  private connectionParams: {
+    serverUrl: string;
+    sessionId: string;
+    pin: string;
+    publicKey?: string;
+  } | null = null;
+  private reconnectAttempts = 0;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private isReconnecting = false;
+  private intentionalDisconnect = false;
+
   constructor(options: BrowserSigningClientOptions = {}) {
     this.options = {
       verbose: options.verbose !== false,
       autoReview: options.autoReview !== false,
       label: options.label || null,
+      autoReconnect: options.autoReconnect !== false, // default true
+      maxReconnectAttempts: options.maxReconnectAttempts || 5,
+      reconnectInterval: options.reconnectInterval || 3000, // 3 seconds
     };
   }
 
@@ -68,14 +86,26 @@ export class BrowserSigningClient {
   ): Promise<{ success: boolean; participantId: string; sessionInfo: SessionInfo }> {
     return new Promise((resolve, reject) => {
       try {
+        // Store connection params for potential reconnection
+        this.connectionParams = { serverUrl, sessionId, pin, publicKey };
         this.sessionId = sessionId;
         this.connectResolve = resolve;
         this.connectReject = reject;
+        this.intentionalDisconnect = false;
+
+        // Reset reconnection state on new connection
+        if (!this.isReconnecting) {
+          this.reconnectAttempts = 0;
+        }
 
         // Connect to WebSocket server
         this.ws = new WebSocket(serverUrl);
 
         this.ws.onopen = () => {
+          // Reset reconnection state on successful connection
+          this.reconnectAttempts = 0;
+          this.isReconnecting = false;
+
           // Authenticate (with optional public key for early eligibility validation)
           this.send({
             type: 'AUTH',
@@ -95,18 +125,88 @@ export class BrowserSigningClient {
 
         this.ws.onerror = (error) => {
           this.log(`WebSocket error: ${error}`, 'error');
-          reject(new Error('WebSocket connection failed'));
+          if (!this.isReconnecting) {
+            reject(new Error('WebSocket connection failed'));
+          }
         };
 
         this.ws.onclose = () => {
           this.status = 'disconnected';
           this.log('Disconnected from session', 'info');
           this.emit('disconnected');
+
+          // Attempt auto-reconnect if enabled and not intentionally disconnected
+          if (this.options.autoReconnect && !this.intentionalDisconnect && this.connectionParams) {
+            this.attemptReconnect();
+          }
         };
       } catch (error) {
         reject(error as Error);
       }
     });
+  }
+
+  /**
+   * Attempt to reconnect to the session
+   * @private
+   */
+  private attemptReconnect(): void {
+    if (this.reconnectAttempts >= this.options.maxReconnectAttempts) {
+      this.log(`Max reconnection attempts (${this.options.maxReconnectAttempts}) reached`, 'error');
+      this.emit('error', { message: 'Connection lost. Max reconnection attempts reached.' });
+      return;
+    }
+
+    this.reconnectAttempts++;
+    this.isReconnecting = true;
+
+    this.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.options.maxReconnectAttempts})...`, 'info');
+
+    // Emit reconnecting event for UI feedback
+    this.emit('error', {
+      message: `Reconnecting... (attempt ${this.reconnectAttempts}/${this.options.maxReconnectAttempts})`,
+      code: 'RECONNECTING',
+    });
+
+    // Clear any existing reconnect timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    this.reconnectTimeout = setTimeout(() => {
+      if (this.connectionParams) {
+        const { serverUrl, sessionId, pin, publicKey } = this.connectionParams;
+        this.connect(serverUrl, sessionId, pin, publicKey).catch((err) => {
+          this.log(`Reconnection failed: ${err.message}`, 'error');
+        });
+      }
+    }, this.options.reconnectInterval);
+  }
+
+  /**
+   * Cancel any pending reconnection
+   */
+  cancelReconnect(): void {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    this.isReconnecting = false;
+    this.reconnectAttempts = 0;
+  }
+
+  /**
+   * Check if client is currently reconnecting
+   */
+  isReconnectingNow(): boolean {
+    return this.isReconnecting;
+  }
+
+  /**
+   * Get current reconnection attempts count
+   */
+  getReconnectAttempts(): number {
+    return this.reconnectAttempts;
   }
 
   /**
@@ -132,9 +232,9 @@ export class BrowserSigningClient {
    * Note: This is called AFTER wallet has signed the transaction
    *
    * @param publicKey - Public key that signed
-   * @param signature - Signature bytes (base64 encoded)
+   * @param signature - Signature bytes (base64 encoded) - single string or array for multi-node transactions
    */
-  submitSignature(publicKey: string, signature: string): void {
+  submitSignature(publicKey: string, signature: string | string[]): void {
     this.send({
       type: 'SIGNATURE_SUBMIT',
       payload: {
@@ -144,7 +244,8 @@ export class BrowserSigningClient {
     });
 
     this.status = 'signed';
-    this.log('Signature submitted', 'success');
+    const sigCount = Array.isArray(signature) ? signature.length : 1;
+    this.log(`Signature submitted (${sigCount} node signatures)`, 'success');
     this.emit('signed', { publicKey });
   }
 
@@ -171,11 +272,16 @@ export class BrowserSigningClient {
    * Disconnect from session
    */
   disconnect(): void {
+    // Mark as intentional disconnect to prevent auto-reconnect
+    this.intentionalDisconnect = true;
+    this.cancelReconnect();
+
     if (this.ws) {
       this.ws.close();
     }
 
     this.status = 'disconnected';
+    this.connectionParams = null;
   }
 
   /**
@@ -280,6 +386,12 @@ export class BrowserSigningClient {
           this.status = 'completed';
           break;
 
+        case 'TRANSACTION_EXPIRED':
+          this.log(`⏱️  Transaction expired!`, 'warning');
+          this.emit('transactionExpired', message.payload);
+          this.status = 'ready'; // Reset to ready for new transaction
+          break;
+
         case 'PARTICIPANT_CONNECTED':
           this.log(`Participant connected: ${message.payload.participantId}`, 'info');
           this.emit('participantConnected', message.payload);
@@ -366,7 +478,7 @@ export class BrowserSigningClient {
    * @private
    */
   private onTransactionReceived(payload: {
-    frozenTransaction: { base64: string; bytes?: Uint8Array };
+    frozenTransaction: string | { base64: string; bytes?: Uint8Array };
     txDetails: TransactionDetails;
     metadata?: Record<string, any>;
     contractInterface?: any;
@@ -377,7 +489,16 @@ export class BrowserSigningClient {
     this.log(`   Type: ${payload.txDetails.type}`, 'info');
     this.log(`   Checksum: ${payload.txDetails.checksum}`, 'info');
 
-    this.emit('transactionReceived', payload);
+    // Normalize frozenTransaction to always be { base64: string } format
+    // Server may send either a plain base64 string or an object
+    const normalizedPayload = {
+      ...payload,
+      frozenTransaction: typeof payload.frozenTransaction === 'string'
+        ? { base64: payload.frozenTransaction }
+        : payload.frozenTransaction,
+    };
+
+    this.emit('transactionReceived', normalizedPayload);
   }
 
   /**

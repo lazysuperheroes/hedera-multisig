@@ -11,12 +11,21 @@
  * 4. Review and approve transaction when received
  * 5. Transaction automatically signed and submitted
  *
+ * Configuration:
+ *   Session details can be set in .env file:
+ *     SESSION_SERVER=ws://localhost:3000
+ *     SESSION_ID=abc123
+ *     SESSION_PIN=123456
+ *
  * Usage:
  *   node examples/networked-participant.js
  *
  * Or use the CLI tool:
  *   node cli/participant.js --url <url> --session <id> --pin <pin>
  */
+
+// Load environment variables from .env file
+require('dotenv').config();
 
 const { PrivateKey } = require('@hashgraph/sdk');
 const { SigningClient } = require('../index');
@@ -29,12 +38,21 @@ async function participantExample() {
   console.log(chalk.bold.cyan('╚═══════════════════════════════════════════════════════╝\n'));
 
   try {
-    // 1. Get session details from user (or pass as command-line arguments)
-    console.log(chalk.white('Enter session details (provided by coordinator):\n'));
+    // 1. Get session details from environment or user input
+    let serverUrl = process.env.SESSION_SERVER;
+    let sessionId = process.env.SESSION_ID;
+    let pin = process.env.SESSION_PIN;
 
-    const serverUrl = readlineSync.question(chalk.cyan('Server URL: '));
-    const sessionId = readlineSync.question(chalk.cyan('Session ID: '));
-    const pin = readlineSync.question(chalk.cyan('PIN: '));
+    if (!serverUrl || !sessionId || !pin) {
+      console.log(chalk.white('Enter session details (provided by coordinator):\n'));
+      console.log(chalk.gray('Tip: Set SESSION_SERVER, SESSION_ID, SESSION_PIN in .env to skip prompts\n'));
+
+      serverUrl = serverUrl || readlineSync.question(chalk.cyan('Server URL: '));
+      sessionId = sessionId || readlineSync.question(chalk.cyan('Session ID: '));
+      pin = pin || readlineSync.question(chalk.cyan('PIN: '));
+    } else {
+      console.log(chalk.gray('Using session details from .env file\n'));
+    }
 
     console.log('');
 

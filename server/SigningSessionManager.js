@@ -8,7 +8,25 @@
 const crypto = require('crypto');
 const SessionStore = require('./SessionStore');
 const TransactionDecoder = require('../core/TransactionDecoder');
-const { PublicKey } = require('@hashgraph/sdk');
+const { PublicKey, Transaction } = require('@hashgraph/sdk');
+
+/**
+ * Normalize a public key to ensure consistent 0x prefix
+ */
+function normalizePublicKey(key) {
+  if (!key) return key;
+  const trimmed = key.trim();
+  return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
+}
+
+/**
+ * Check if a public key is in the eligible list (handles 0x prefix variations)
+ */
+function isKeyEligible(key, eligibleKeys) {
+  if (!key || !eligibleKeys || eligibleKeys.length === 0) return false;
+  const normalizedKey = normalizePublicKey(key);
+  return eligibleKeys.some(eligible => normalizePublicKey(eligible) === normalizedKey);
+}
 
 class SigningSessionManager {
   constructor(client, options = {}) {
@@ -283,7 +301,7 @@ class SigningSessionManager {
       }
 
       // Check if public key is eligible
-      if (!session.eligiblePublicKeys.includes(signature.publicKey)) {
+      if (!isKeyEligible(signature.publicKey, session.eligiblePublicKeys)) {
         throw new Error('Public key is not eligible to sign this transaction');
       }
 
@@ -369,14 +387,46 @@ class SigningSessionManager {
       // Get signatures
       const signatures = this.store.getSignatures(sessionId);
 
-      // Apply signatures to transaction
-      let signedTx = session.frozenTransaction.transaction;
+      // Reconstruct transaction from stored data
+      // frozenTransaction may be:
+      // 1. An object with .transaction (original Transaction object)
+      // 2. An object with .bytes (Uint8Array)
+      // 3. An object with .base64 (base64 string)
+      // 4. Just a base64 string
+      let signedTx;
+      const ft = session.frozenTransaction;
+
+      if (ft && ft.transaction) {
+        // Use existing Transaction object (from local coordinator)
+        signedTx = ft.transaction;
+      } else if (ft && ft.bytes) {
+        // Reconstruct from bytes
+        signedTx = Transaction.fromBytes(ft.bytes);
+      } else if (ft && ft.base64) {
+        // Reconstruct from base64 string
+        const bytes = Buffer.from(ft.base64, 'base64');
+        signedTx = Transaction.fromBytes(bytes);
+      } else if (typeof ft === 'string') {
+        // frozenTransaction is just a base64 string
+        const bytes = Buffer.from(ft, 'base64');
+        signedTx = Transaction.fromBytes(bytes);
+      } else {
+        throw new Error('Invalid frozen transaction format - cannot reconstruct transaction');
+      }
 
       for (const sig of signatures) {
         const publicKey = PublicKey.fromString(sig.publicKey);
-        const signatureBytes = Buffer.from(sig.signature, 'base64');
 
-        signedTx = signedTx.addSignature(publicKey, signatureBytes);
+        // Handle both single signature (string) and multi-node signatures (array)
+        if (Array.isArray(sig.signature)) {
+          // Multi-node: array of signatures, one per node-specific transaction
+          const signatureArray = sig.signature.map(s => Buffer.from(s, 'base64'));
+          signedTx = signedTx.addSignature(publicKey, signatureArray);
+        } else {
+          // Single signature
+          const signatureBytes = Buffer.from(sig.signature, 'base64');
+          signedTx = signedTx.addSignature(publicKey, signatureBytes);
+        }
       }
 
       // Execute transaction

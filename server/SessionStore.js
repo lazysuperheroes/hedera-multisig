@@ -219,10 +219,18 @@ class SessionStore {
 
     const participant = session.participants.get(participantId);
     if (participant && participant.status !== 'signed') {
+      // Decrement ready count if participant was ready
+      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
+        session.stats.participantsReady--;
+      }
       session.participants.delete(participantId);
       session.stats.participantsConnected--;
     } else if (participant) {
       // Mark as disconnected but keep if signed
+      // Also decrement ready count if they were ready
+      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
+        session.stats.participantsReady--;
+      }
       participant.status = 'disconnected';
       participant.websocket = null;
     }

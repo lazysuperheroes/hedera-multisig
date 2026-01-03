@@ -206,6 +206,14 @@ export interface SessionExpiredMessage {
   payload?: Record<string, never>;
 }
 
+export interface TransactionExpiredMessage {
+  type: 'TRANSACTION_EXPIRED';
+  payload: {
+    sessionId: string;
+    message: string;
+  };
+}
+
 export interface ErrorMessage {
   type: 'ERROR';
   payload: {
@@ -227,6 +235,7 @@ export type ServerMessage =
   | SignatureRejectedMessage
   | ThresholdMetMessage
   | TransactionExecutedMessage
+  | TransactionExpiredMessage
   | ParticipantConnectedMessage
   | ParticipantReadyPayloadMessage
   | ParticipantDisconnectedMessage
@@ -258,6 +267,7 @@ export interface SigningClientEvents {
   signatureRejected: (data: SignatureRejectedMessage['payload']) => void;
   thresholdMet: (data: ThresholdMetMessage['payload']) => void;
   transactionExecuted: (data: TransactionExecutedMessage['payload']) => void;
+  transactionExpired: (data: { sessionId: string; message: string }) => void;
   rejected: (data: { reason: string }) => void;
   participantConnected: (data: ParticipantConnectedMessage['payload']) => void;
   participantReady: (data: ParticipantReadyPayloadMessage['payload']) => void;

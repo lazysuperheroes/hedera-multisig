@@ -10,9 +10,18 @@
  * - Full ABI support for parameter decoding
  * - Transaction metadata for contract calls
  *
+ * Configuration:
+ *   Create a .env file in the project root with:
+ *     OPERATOR_ID=0.0.XXX
+ *     OPERATOR_KEY=xxx
+ *     ENVIRONMENT=TEST
+ *
  * Usage:
- *   OPERATOR_ID=0.0.XXX OPERATOR_KEY=xxx node examples/smart-contract-multisig.js
+ *   node examples/smart-contract-multisig.js
  */
+
+// Load environment variables from .env file
+require('dotenv').config();
 
 const {
   Client,
@@ -68,16 +77,32 @@ async function smartContractExample() {
   try {
     // 1. Set up Hedera client
     if (!process.env.OPERATOR_ID || !process.env.OPERATOR_KEY) {
-      throw new Error('Please set OPERATOR_ID and OPERATOR_KEY environment variables');
+      throw new Error('Please set OPERATOR_ID and OPERATOR_KEY in .env file or environment');
     }
 
-    const client = Client.forTestnet();
+    // Determine network (supports testnet, mainnet, previewnet, local)
+    const envNetwork = (process.env.ENVIRONMENT || 'TEST').toUpperCase();
+    let network;
+    switch (envNetwork) {
+      case 'MAIN': case 'MAINNET': network = 'mainnet'; break;
+      case 'PREVIEW': case 'PREVIEWNET': network = 'previewnet'; break;
+      case 'LOCAL': case 'LOCALHOST': network = 'local'; break;
+      default: network = 'testnet';
+    }
+
+    let client;
+    switch (network) {
+      case 'mainnet': client = Client.forMainnet(); break;
+      case 'previewnet': client = Client.forPreviewnet(); break;
+      case 'local': client = Client.forLocalNode(); break;
+      default: client = Client.forTestnet();
+    }
     client.setOperator(
       AccountId.fromString(process.env.OPERATOR_ID),
       PrivateKey.fromString(process.env.OPERATOR_KEY)
     );
 
-    console.log(chalk.green('✅ Hedera client configured\n'));
+    console.log(chalk.green(`✅ Hedera client configured (${network})\n`));
 
     // 2. Define multi-sig keys (replace with actual keys)
     const eligiblePublicKeys = [

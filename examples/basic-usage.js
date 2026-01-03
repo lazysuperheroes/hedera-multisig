@@ -5,7 +5,16 @@
  * - 2-of-3 multi-sig
  * - Interactive mode (real-time)
  * - Using PromptKeyProvider for maximum security
+ *
+ * Configuration:
+ *   Create a .env file in the project root with:
+ *     OPERATOR_ID=0.0.XXX
+ *     OPERATOR_KEY=xxx
+ *     ENVIRONMENT=TEST
  */
+
+// Load environment variables from .env file
+require('dotenv').config();
 
 const {
   TransactionFreezer,
@@ -32,12 +41,28 @@ async function basicMultiSigExample() {
     // 1. Setup Hedera client
     console.log('Setting up Hedera client...\n');
 
-    const myAccountId = AccountId.fromString(process.env.ACCOUNT_ID || '0.0.123456');
+    const myAccountId = AccountId.fromString(process.env.OPERATOR_ID || process.env.ACCOUNT_ID || '0.0.123456');
     const myPrivateKey = PrivateKey.fromString(
-      process.env.PRIVATE_KEY || '302e020100300506032b6570042204200000000000000000000000000000000000000000000000000000000000000000'
+      process.env.OPERATOR_KEY || process.env.PRIVATE_KEY || '302e020100300506032b6570042204200000000000000000000000000000000000000000000000000000000000000000'
     );
 
-    const client = Client.forTestnet();
+    // Determine network (supports testnet, mainnet, previewnet, local)
+    const envNetwork = (process.env.ENVIRONMENT || 'TEST').toUpperCase();
+    let network;
+    switch (envNetwork) {
+      case 'MAIN': case 'MAINNET': network = 'mainnet'; break;
+      case 'PREVIEW': case 'PREVIEWNET': network = 'previewnet'; break;
+      case 'LOCAL': case 'LOCALHOST': network = 'local'; break;
+      default: network = 'testnet';
+    }
+
+    let client;
+    switch (network) {
+      case 'mainnet': client = Client.forMainnet(); break;
+      case 'previewnet': client = Client.forPreviewnet(); break;
+      case 'local': client = Client.forLocalNode(); break;
+      default: client = Client.forTestnet();
+    }
     client.setOperator(myAccountId, myPrivateKey);
 
     // 2. Create a sample transaction
