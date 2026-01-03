@@ -7,6 +7,8 @@
 
 const WebSocket = require('ws');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const chalk = require('chalk');
 
 /**
@@ -43,6 +45,16 @@ class MultiSigWebSocketServer {
     this.coordinatorClients = new Map(); // sessionId -> coordinator ws
     this.tunnel = null; // Tunnel instance (ngrok or localtunnel)
     this.tunnelType = null; // 'ngrok' or 'localtunnel'
+    this.isSecure = false; // Whether TLS is enabled
+
+    // TLS/SSL configuration
+    // Options:
+    //   tls.enabled: true to enable TLS
+    //   tls.cert: Path to certificate file or PEM string
+    //   tls.key: Path to private key file or PEM string
+    //   tls.ca: (optional) Path to CA certificate file or PEM string
+    //   tls.passphrase: (optional) Passphrase for private key
+    this.tlsOptions = options.tls || null;
 
     // Rate limiting for AUTH attempts (prevents PIN brute force and griefing)
     this.authAttempts = new Map(); // IP -> { count, resetTime, blocked }
@@ -71,11 +83,22 @@ class MultiSigWebSocketServer {
   async start() {
     return new Promise((resolve, reject) => {
       try {
-        // Create HTTP server
-        this.server = http.createServer((req, res) => {
+        // Check if TLS is enabled
+        this.isSecure = this.tlsOptions && this.tlsOptions.enabled;
+
+        const requestHandler = (req, res) => {
           res.writeHead(200, { 'Content-Type': 'text/plain' });
-          res.end('Hedera MultiSig Server\n');
-        });
+          res.end(`Hedera MultiSig Server${this.isSecure ? ' (Secure)' : ''}\n`);
+        };
+
+        if (this.isSecure) {
+          // Load TLS certificates
+          const tlsCreds = this._loadTlsCredentials();
+          this.server = https.createServer(tlsCreds, requestHandler);
+        } else {
+          // Create HTTP server (non-secure)
+          this.server = http.createServer(requestHandler);
+        }
 
         // Create WebSocket server
         this.wss = new WebSocket.Server({ server: this.server });
@@ -99,13 +122,17 @@ class MultiSigWebSocketServer {
             displayHost = 'localhost';
           }
 
-          const url = `ws://${displayHost}:${address.port}`;
+          const protocol = this.isSecure ? 'wss' : 'ws';
+          const url = `${protocol}://${displayHost}:${address.port}`;
 
           if (this.options.verbose) {
             console.log(chalk.bold.green('\n✅ WebSocket Server Started'));
             console.log(chalk.cyan('─'.repeat(50)));
             console.log(chalk.white('Host: ') + chalk.yellow(displayHost));
             console.log(chalk.white('Port: ') + chalk.yellow(address.port));
+            console.log(chalk.white('Secure: ') + (this.isSecure
+              ? chalk.green('Yes (TLS/WSS)')
+              : chalk.yellow('No (WS)')));
             console.log(chalk.white('Local URL: ') + chalk.yellow(url));
             console.log(chalk.cyan('─'.repeat(50)) + '\n');
           }
@@ -114,7 +141,8 @@ class MultiSigWebSocketServer {
             host: displayHost,
             port: address.port,
             url,
-            publicUrl: null
+            publicUrl: null,
+            isSecure: this.isSecure
           };
 
           // Start tunnel if enabled
@@ -945,6 +973,55 @@ class MultiSigWebSocketServer {
     } catch (error) {
       throw new Error(`localtunnel failed: ${error.message}`);
     }
+  }
+
+  /**
+   * Load TLS credentials from files or PEM strings
+   * @private
+   * @returns {Object} TLS credentials for https.createServer
+   */
+  _loadTlsCredentials() {
+    if (!this.tlsOptions) {
+      throw new Error('TLS options not configured');
+    }
+
+    const { cert, key, ca, passphrase } = this.tlsOptions;
+
+    if (!cert || !key) {
+      throw new Error('TLS requires both cert and key options');
+    }
+
+    const credentials = {};
+
+    // Load certificate (file path or PEM string)
+    if (cert.includes('-----BEGIN')) {
+      credentials.cert = cert;
+    } else {
+      credentials.cert = fs.readFileSync(cert);
+    }
+
+    // Load private key (file path or PEM string)
+    if (key.includes('-----BEGIN')) {
+      credentials.key = key;
+    } else {
+      credentials.key = fs.readFileSync(key);
+    }
+
+    // Load CA certificate if provided (file path or PEM string)
+    if (ca) {
+      if (ca.includes('-----BEGIN')) {
+        credentials.ca = ca;
+      } else {
+        credentials.ca = fs.readFileSync(ca);
+      }
+    }
+
+    // Add passphrase if provided
+    if (passphrase) {
+      credentials.passphrase = passphrase;
+    }
+
+    return credentials;
   }
 
   /**

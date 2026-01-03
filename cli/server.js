@@ -93,7 +93,12 @@ function parseArgs() {
         case 'LOCAL': case 'LOCALHOST': return 'local';
         default: return 'testnet';
       }
-    })()
+    })(),
+    // TLS options
+    tlsCert: null,
+    tlsKey: null,
+    tlsCa: null,
+    tlsPassphrase: null
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -142,6 +147,22 @@ function parseArgs() {
         options.network = args[++i];
         break;
 
+      case '--tls-cert':
+        options.tlsCert = args[++i];
+        break;
+
+      case '--tls-key':
+        options.tlsKey = args[++i];
+        break;
+
+      case '--tls-ca':
+        options.tlsCa = args[++i];
+        break;
+
+      case '--tls-passphrase':
+        options.tlsPassphrase = args[++i];
+        break;
+
       case '--help':
       case '-h':
         printHelp();
@@ -164,14 +185,23 @@ function printHelp() {
   console.log('  --host <host>              Server host (default: localhost)');
   console.log('  --timeout <minutes>        Session timeout in minutes (default: 30)');
   console.log('  --no-tunnel                Disable automatic tunnel (local-only)');
-  console.log('  --pin <pin>                Custom 6-digit PIN (auto-generated if not provided)');
+  console.log('  --pin <token>              Custom session token (auto-generated if not provided)');
   console.log('  -n, --network <network>    Hedera network (testnet|mainnet, default: testnet)');
+  console.log('');
+  console.log('TLS/Security Options:');
+  console.log('  --tls-cert <path>          Path to TLS certificate file (enables WSS)');
+  console.log('  --tls-key <path>           Path to TLS private key file');
+  console.log('  --tls-ca <path>            Path to CA certificate file (optional)');
+  console.log('  --tls-passphrase <pass>    Passphrase for private key (optional)');
+  console.log('');
   console.log('  -h, --help                 Show this help message\n');
   console.log('Examples:');
   console.log('  # Start server for 2-of-3 multisig');
   console.log('  node cli/server.js -t 2 -k "key1,key2,key3"\n');
   console.log('  # Start server with custom port and no tunnel');
   console.log('  node cli/server.js -t 2 -k "key1,key2,key3" --port 8080 --no-tunnel\n');
+  console.log('  # Start server with TLS (secure WebSocket)');
+  console.log('  node cli/server.js -t 2 -k "key1,key2" --tls-cert ./cert.pem --tls-key ./key.pem\n');
 }
 
 async function main() {
@@ -225,6 +255,15 @@ async function main() {
       verbose: true
     });
 
+    // Build TLS configuration if certificates provided
+    const tlsConfig = options.tlsCert && options.tlsKey ? {
+      enabled: true,
+      cert: options.tlsCert,
+      key: options.tlsKey,
+      ca: options.tlsCa || undefined,
+      passphrase: options.tlsPassphrase || undefined
+    } : null;
+
     // Create WebSocket server
     const wsServer = new WebSocketServer(sessionManager, {
       port: options.port,
@@ -233,7 +272,8 @@ async function main() {
       tunnel: options.tunnel ? {
         enabled: true,
         provider: 'auto' // ngrok → localtunnel fallback
-      } : null
+      } : null,
+      tls: tlsConfig
     });
 
     // Start server

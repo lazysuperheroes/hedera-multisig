@@ -8,6 +8,7 @@
 const crypto = require('crypto');
 const SessionStore = require('./SessionStore');
 const TransactionDecoder = require('../core/TransactionDecoder');
+const SignatureVerifier = require('../core/SignatureVerifier');
 const { PublicKey, Transaction } = require('@hashgraph/sdk');
 
 /**
@@ -308,6 +309,21 @@ class SigningSessionManager {
       // Check if this public key already signed
       if (session.signatures.has(signature.publicKey)) {
         throw new Error('This public key has already signed');
+      }
+
+      // Verify signature cryptographically against the frozen transaction
+      if (session.frozenTransaction) {
+        const frozenTxBytes = this._getFrozenTransactionBytes(session.frozenTransaction);
+        if (frozenTxBytes) {
+          const verifyResult = await SignatureVerifier.verifySingle(
+            { bytes: frozenTxBytes },
+            { publicKey: signature.publicKey, signature: signature.signature }
+          );
+
+          if (!verifyResult.valid) {
+            throw new Error(`Invalid signature: ${verifyResult.error || 'signature verification failed'}`);
+          }
+        }
       }
 
       // Add signature to session
@@ -691,12 +707,62 @@ class SigningSessionManager {
   }
 
   /**
-   * Generate random PIN code
+   * Generate random session token (8-character alphanumeric)
    * @private
    */
   _generatePin() {
-    // Generate 6-digit PIN
-    return crypto.randomInt(100000, 999999).toString();
+    // Generate 8-character alphanumeric token (A-Z, 0-9, excluding confusing chars)
+    // Uses uppercase + digits, excluding O/0, I/1, L for readability
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    const bytes = crypto.randomBytes(8);
+    let token = '';
+    for (let i = 0; i < 8; i++) {
+      token += chars[bytes[i] % chars.length];
+    }
+    return token;
+  }
+
+  /**
+   * Extract transaction bytes from frozen transaction (handles multiple formats)
+   * @private
+   * @param {string|Object} frozenTransaction - Frozen transaction in various formats
+   * @returns {Buffer|null} Transaction bytes or null if cannot extract
+   */
+  _getFrozenTransactionBytes(frozenTransaction) {
+    try {
+      // Handle different frozen transaction formats
+      if (!frozenTransaction) {
+        return null;
+      }
+
+      let base64Data;
+
+      // Format 1: Plain base64 string
+      if (typeof frozenTransaction === 'string') {
+        base64Data = frozenTransaction;
+      }
+      // Format 2: Object with base64 property
+      else if (frozenTransaction.base64) {
+        base64Data = frozenTransaction.base64;
+      }
+      // Format 3: Object with bytes property (already Buffer/Uint8Array)
+      else if (frozenTransaction.bytes) {
+        return Buffer.from(frozenTransaction.bytes);
+      }
+      // Format 4: Object with transaction property containing bytes
+      else if (frozenTransaction.transaction && frozenTransaction.transaction.bytes) {
+        return Buffer.from(frozenTransaction.transaction.bytes);
+      }
+      else {
+        return null;
+      }
+
+      // Decode base64 to bytes
+      return Buffer.from(base64Data, 'base64');
+    } catch (error) {
+      console.error('Error extracting frozen transaction bytes:', error.message);
+      return null;
+    }
   }
 
   /**
