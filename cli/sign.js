@@ -16,9 +16,37 @@ const { PrivateKey } = require('@hashgraph/sdk');
 const TransactionFreezer = require('../core/TransactionFreezer');
 const TransactionDecoder = require('../core/TransactionDecoder');
 const SignatureVerifier = require('../core/SignatureVerifier');
+const {
+  ExitCodes,
+  parseCommonFlags,
+  printVersion,
+  getVersion
+} = require('./utils/cliUtils');
+
+// Parse common flags
+const commonFlags = parseCommonFlags(process.argv.slice(2));
+
+// Handle version flag
+if (commonFlags.version) {
+  printVersion();
+  process.exit(ExitCodes.SUCCESS);
+}
+
+// Handle help flag
+if (commonFlags.help) {
+  console.log('\nHedera Multi-Sig Transaction Signer v' + getVersion() + '\n');
+  console.log('Usage: node cli/sign.js [options]\n');
+  console.log('Options:');
+  console.log('  --quick              Skip detailed display');
+  console.log('  -V, --version        Show version information');
+  console.log('  -h, --help           Show this help message\n');
+  console.log('This tool signs transactions offline for maximum security.');
+  console.log('Use on air-gapped machines for best security practices.\n');
+  process.exit(ExitCodes.SUCCESS);
+}
 
 // Check for quick mode
-const quickMode = process.argv.includes('--quick');
+const quickMode = commonFlags.remainingArgs.includes('--quick');
 
 console.log('\n╔═══════════════════════════════════════════════════════╗');
 console.log('║       HEDERA MULTI-SIG TRANSACTION SIGNER            ║');
@@ -38,7 +66,7 @@ async function main() {
 
     if (!txBytesBase64 || txBytesBase64.trim().length === 0) {
       console.error('\n❌ No transaction bytes provided. Exiting.\n');
-      process.exit(1);
+      process.exit(ExitCodes.VALIDATION_ERROR);
     }
 
     // Step 2: Verify checksum (if provided)
@@ -64,7 +92,7 @@ async function main() {
         const proceed = readlineSync.keyInYN('Continue anyway? (NOT RECOMMENDED) ');
         if (!proceed) {
           console.log('\nAborted.\n');
-          process.exit(1);
+          process.exit(ExitCodes.USER_CANCELLED);
         }
       } else {
         console.log('✅ Checksum verified!\n');
@@ -95,7 +123,7 @@ async function main() {
 
     if (!confirmSign) {
       console.log('❌ Signing cancelled.\n');
-      process.exit(0);
+      process.exit(ExitCodes.USER_CANCELLED);
     }
 
     // Step 5: Get private key
@@ -117,7 +145,7 @@ async function main() {
     } catch (error) {
       console.error('❌ Invalid private key format!');
       console.error(`   Error: ${error.message}\n`);
-      process.exit(1);
+      process.exit(ExitCodes.VALIDATION_ERROR);
     }
 
     // Step 6: Sign transaction
@@ -170,7 +198,7 @@ async function main() {
 
   } catch (error) {
     console.error('\n❌ Error: ' + error.message + '\n');
-    process.exit(1);
+    process.exit(ExitCodes.INTERNAL_ERROR);
   }
 }
 

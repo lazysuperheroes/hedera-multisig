@@ -17,12 +17,43 @@
 const fs = require('fs');
 const path = require('path');
 const KeyValidator = require('../keyManagement/KeyValidator');
+const {
+  ExitCodes,
+  parseCommonFlags,
+  printVersion,
+  getVersion
+} = require('./utils/cliUtils');
+
+// Parse common flags
+const commonFlags = parseCommonFlags(process.argv.slice(2));
+
+// Handle version flag
+if (commonFlags.version) {
+  printVersion();
+  process.exit(ExitCodes.SUCCESS);
+}
+
+// Handle help flag
+if (commonFlags.help) {
+  console.log('\nMulti-Sig Security Audit v' + getVersion() + '\n');
+  console.log('Usage: node cli/securityAudit.js [options]\n');
+  console.log('Options:');
+  console.log('  --verbose            Show detailed code snippets for issues');
+  console.log('  -V, --version        Show version information');
+  console.log('  -h, --help           Show this help message\n');
+  console.log('This tool scans the multi-sig library for potential security issues:');
+  console.log('  - Private key logging');
+  console.log('  - Insecure key storage');
+  console.log('  - Missing input validation');
+  console.log('  - Sensitive data exposure\n');
+  process.exit(ExitCodes.SUCCESS);
+}
 
 console.log('\n╔═══════════════════════════════════════════════════════╗');
 console.log('║          MULTI-SIG SECURITY AUDIT                     ║');
 console.log('╚═══════════════════════════════════════════════════════╝\n');
 
-const verbose = process.argv.includes('--verbose');
+const verbose = commonFlags.verbose || commonFlags.remainingArgs.includes('--verbose');
 
 /**
  * Security rules to check
@@ -313,17 +344,17 @@ function main() {
 
   if (allClear) {
     console.log('✅ Security audit complete - no issues found\n');
-    process.exit(0);
+    process.exit(ExitCodes.SUCCESS);
   } else {
     if (results.critical > 0) {
       console.log('🔴 CRITICAL issues found - must be fixed before production\n');
-      process.exit(1);
+      process.exit(ExitCodes.VALIDATION_ERROR);
     } else if (results.high > 0) {
       console.log('🟠 HIGH severity issues found - should be fixed\n');
-      process.exit(1);
+      process.exit(ExitCodes.VALIDATION_ERROR);
     } else {
       console.log('🟡 Medium/low issues found - review recommended\n');
-      process.exit(0);
+      process.exit(ExitCodes.SUCCESS);
     }
   }
 }

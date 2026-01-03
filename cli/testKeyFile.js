@@ -12,6 +12,34 @@
 
 const EncryptedFileProvider = require('../keyManagement/EncryptedFileProvider');
 const path = require('path');
+const {
+  ExitCodes,
+  parseCommonFlags,
+  printVersion,
+  getVersion
+} = require('./utils/cliUtils');
+
+// Parse common flags
+const commonFlags = parseCommonFlags(process.argv.slice(2));
+
+// Handle version flag
+if (commonFlags.version) {
+  printVersion();
+  process.exit(ExitCodes.SUCCESS);
+}
+
+// Handle help flag
+if (commonFlags.help) {
+  console.log('\nTest Encrypted Key File v' + getVersion() + '\n');
+  console.log('Usage: node cli/testKeyFile.js <path-to-encrypted-file>\n');
+  console.log('Options:');
+  console.log('  -V, --version        Show version information');
+  console.log('  -h, --help           Show this help message\n');
+  console.log('Example: node cli/testKeyFile.js multisig-keys.encrypted\n');
+  console.log('This tool verifies that an encrypted key file can be decrypted.');
+  console.log('It does NOT display the keys, only confirms they can be loaded.\n');
+  process.exit(ExitCodes.SUCCESS);
+}
 
 console.log('\n╔═══════════════════════════════════════════════════════╗');
 console.log('║          TEST ENCRYPTED KEY FILE                      ║');
@@ -19,13 +47,13 @@ console.log('╚═════════════════════�
 
 async function main() {
   try {
-    // Get file path from command line
-    const filePath = process.argv[2];
+    // Get file path from command line (use remaining args after common flags)
+    const filePath = commonFlags.remainingArgs[0];
 
     if (!filePath) {
       console.error('Usage: node testKeyFile.js <path-to-encrypted-file>\n');
       console.error('Example: node testKeyFile.js multisig-keys.encrypted\n');
-      process.exit(1);
+      process.exit(ExitCodes.VALIDATION_ERROR);
     }
 
     const resolvedPath = path.resolve(filePath);
@@ -45,7 +73,7 @@ async function main() {
       console.log(`  Description: ${metadata.description}\n`);
     } catch (error) {
       console.error(`❌ Failed to read file metadata: ${error.message}\n`);
-      process.exit(1);
+      process.exit(ExitCodes.FILE_ERROR);
     }
 
     // Try to decrypt
@@ -81,11 +109,11 @@ async function main() {
       console.error('  - Wrong passphrase entered');
       console.error('  - File has been corrupted');
       console.error('  - File has been tampered with\n');
+      process.exit(ExitCodes.AUTH_ERROR);
     } else {
       console.error(`❌ Error: ${error.message}\n`);
+      process.exit(ExitCodes.INTERNAL_ERROR);
     }
-
-    process.exit(1);
   }
 }
 

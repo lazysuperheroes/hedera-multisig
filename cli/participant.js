@@ -12,7 +12,16 @@
 
 const { PrivateKey } = require('@hashgraph/sdk');
 const { SigningClient } = require('../client');
-const { EncryptedFileProvider } = require('../keyManagement');
+const EncryptedFileProvider = require('../keyManagement/EncryptedFileProvider');
+const {
+  ExitCodes,
+  JsonOutput,
+  parseCommonFlags,
+  printVersion,
+  exitWithError,
+  getCommonFlagsHelp,
+  getVersion
+} = require('./utils/cliUtils');
 const readlineSync = require('readline-sync');
 const chalk = require('chalk');
 const fs = require('fs');
@@ -21,7 +30,29 @@ const path = require('path');
 // Parse command line arguments
 function parseArgs() {
   const args = process.argv.slice(2);
+
+  // Parse common flags first
+  const commonFlags = parseCommonFlags(args);
+
+  // Handle version flag
+  if (commonFlags.version) {
+    printVersion(commonFlags.json);
+    process.exit(ExitCodes.SUCCESS);
+  }
+
+  // Handle help flag
+  if (commonFlags.help) {
+    printHelp();
+    process.exit(ExitCodes.SUCCESS);
+  }
+
   const options = {
+    // Common flags
+    json: commonFlags.json,
+    verbose: commonFlags.verbose,
+    quiet: commonFlags.quiet,
+    yes: commonFlags.yes,
+    // Participant-specific options
     url: null,
     sessionId: null,
     pin: null,
@@ -30,42 +61,37 @@ function parseArgs() {
     label: null
   };
 
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
+  const remainingArgs = commonFlags.remainingArgs;
+  for (let i = 0; i < remainingArgs.length; i++) {
+    switch (remainingArgs[i]) {
       case '--url':
       case '-u':
-        options.url = args[++i];
+        options.url = remainingArgs[++i];
         break;
 
       case '--session':
       case '-s':
-        options.sessionId = args[++i];
+        options.sessionId = remainingArgs[++i];
         break;
 
       case '--pin':
       case '-p':
-        options.pin = args[++i];
+        options.pin = remainingArgs[++i];
         break;
 
       case '--key':
       case '-k':
-        options.privateKey = args[++i];
+        options.privateKey = remainingArgs[++i];
         break;
 
       case '--keyfile':
       case '-f':
-        options.keyFile = args[++i];
+        options.keyFile = remainingArgs[++i];
         break;
 
       case '--label':
       case '-l':
-        options.label = args[++i];
-        break;
-
-      case '--help':
-      case '-h':
-        printHelp();
-        process.exit(0);
+        options.label = remainingArgs[++i];
         break;
     }
   }
@@ -74,45 +100,44 @@ function parseArgs() {
 }
 
 function printHelp() {
-  console.log(chalk.bold('\n👥 Hedera MultiSig Participant\n'));
+  console.log(chalk.bold('\n👥 Hedera MultiSig Participant v' + getVersion() + '\n'));
   console.log('Usage: node cli/participant.js [options]\n');
-  console.log('Options:');
+  console.log('Connection Options:');
   console.log('  -u, --url <url>            WebSocket server URL (required)');
   console.log('  -s, --session <id>         Session ID (required)');
-  console.log('  -p, --pin <pin>            6-digit PIN code (required)');
+  console.log('  -p, --pin <pin>            Session token (required)');
+  console.log('');
+  console.log('Key Options:');
   console.log('  -f, --keyfile <path>       Load encrypted key file (RECOMMENDED - most secure)');
   console.log('  -k, --key <key>            Private key hex string (less secure, for testing)');
   console.log('  -l, --label <label>        Participant label (optional)');
-  console.log('  -h, --help                 Show this help message\n');
-  console.log('Examples:');
+  console.log(getCommonFlagsHelp());
+  console.log('\nExamples:');
   console.log('  # Connect with encrypted key file (RECOMMENDED)');
-  console.log('  node cli/participant.js -u ws://localhost:3000 -s abc123 -p 123456 -f keys.encrypted\n');
+  console.log('  node cli/participant.js -u ws://localhost:3000 -s abc123 -p TOKEN123 -f keys.encrypted\n');
   console.log('  # Connect and get prompted for key options');
-  console.log('  node cli/participant.js -u ws://localhost:3000 -s abc123 -p 123456\n');
+  console.log('  node cli/participant.js -u ws://localhost:3000 -s abc123 -p TOKEN123\n');
   console.log('  # Connect with inline key (not recommended for production)');
-  console.log('  node cli/participant.js -u ws://localhost:3000 -s abc123 -p 123456 -k <privateKey>\n');
+  console.log('  node cli/participant.js -u ws://localhost:3000 -s abc123 -p TOKEN123 -k <privateKey>\n');
 }
 
 async function main() {
   const options = parseArgs();
 
+  // Create JSON output handler
+  const jsonOutput = new JsonOutput(options.json);
+
   // Validate required options
   if (!options.url) {
-    console.error(chalk.red('❌ Error: --url is required'));
-    printHelp();
-    process.exit(1);
+    exitWithError('--url is required', ExitCodes.VALIDATION_ERROR, jsonOutput);
   }
 
   if (!options.sessionId) {
-    console.error(chalk.red('❌ Error: --session is required'));
-    printHelp();
-    process.exit(1);
+    exitWithError('--session is required', ExitCodes.VALIDATION_ERROR, jsonOutput);
   }
 
   if (!options.pin) {
-    console.error(chalk.red('❌ Error: --pin is required'));
-    printHelp();
-    process.exit(1);
+    exitWithError('--pin is required', ExitCodes.VALIDATION_ERROR, jsonOutput);
   }
 
   try {
@@ -277,30 +302,38 @@ async function main() {
     });
 
     client.on('sessionExpired', () => {
-      console.log(chalk.red('\n❌ Session expired\n'));
-      process.exit(1);
+      if (options.json) {
+        jsonOutput.addError('Session expired', ExitCodes.TIMEOUT);
+        jsonOutput.print(false);
+      } else {
+        console.log(chalk.red('\n❌ Session expired\n'));
+      }
+      process.exit(ExitCodes.TIMEOUT);
     });
 
     client.on('error', (data) => {
-      console.error(chalk.red(`\n❌ Error: ${data.message}\n`));
+      if (!options.json) {
+        console.error(chalk.red(`\n❌ Error: ${data.message}\n`));
+      }
     });
 
     // Handle Ctrl+C
     process.on('SIGINT', () => {
-      console.log(chalk.yellow('\n\n⚠️  Disconnecting...'));
+      if (!options.json) {
+        console.log(chalk.yellow('\n\n⚠️  Disconnecting...'));
+      }
       client.disconnect();
-      process.exit(0);
+      process.exit(ExitCodes.USER_CANCELLED);
     });
 
   } catch (error) {
-    console.error(chalk.red(`\n❌ Error: ${error.message}\n`));
-    console.error(chalk.gray(error.stack));
-    process.exit(1);
+    exitWithError(error.message, ExitCodes.SESSION_ERROR, jsonOutput);
   }
 }
 
 // Run
 main().catch((error) => {
+  // Fallback error handling (jsonOutput not available here)
   console.error(chalk.red(`\n❌ Fatal error: ${error.message}\n`));
-  process.exit(1);
+  process.exit(ExitCodes.INTERNAL_ERROR);
 });

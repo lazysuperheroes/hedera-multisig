@@ -20,6 +20,15 @@ require('dotenv').config();
 const { Client } = require('@hashgraph/sdk');
 const { SigningSessionManager, WebSocketServer } = require('../server');
 const { generateConnectionString } = require('../shared/connection-string');
+const {
+  ExitCodes,
+  JsonOutput,
+  parseCommonFlags,
+  printVersion,
+  exitWithError,
+  getCommonFlagsHelp,
+  getVersion
+} = require('./utils/cliUtils');
 const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
@@ -67,7 +76,28 @@ function cleanupSessionFile() {
 // Parse command line arguments
 function parseArgs() {
   const args = process.argv.slice(2);
+
+  // Parse common flags first
+  const commonFlags = parseCommonFlags(args);
+
+  // Handle version flag
+  if (commonFlags.version) {
+    printVersion(commonFlags.json);
+    process.exit(ExitCodes.SUCCESS);
+  }
+
+  // Handle help flag
+  if (commonFlags.help) {
+    printHelp();
+    process.exit(ExitCodes.SUCCESS);
+  }
+
   const options = {
+    // Common flags
+    json: commonFlags.json,
+    verbose: commonFlags.verbose,
+    quiet: commonFlags.quiet,
+    // Server-specific options
     threshold: null,
     eligibleKeys: [],
     participants: null,
@@ -92,16 +122,18 @@ function parseArgs() {
     tlsPassphrase: null
   };
 
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
+  // Parse remaining args (after common flags are removed)
+  const remainingArgs = commonFlags.remainingArgs;
+  for (let i = 0; i < remainingArgs.length; i++) {
+    switch (remainingArgs[i]) {
       case '--threshold':
       case '-t':
-        options.threshold = parseInt(args[++i]);
+        options.threshold = parseInt(remainingArgs[++i]);
         break;
 
       case '--keys':
       case '-k':
-        options.eligibleKeys = args[++i].split(',').map(k => {
+        options.eligibleKeys = remainingArgs[++i].split(',').map(k => {
           const key = k.trim();
           // Normalize: ensure 0x prefix for consistency
           return key.startsWith('0x') ? key : `0x${key}`;
@@ -110,19 +142,19 @@ function parseArgs() {
 
       case '--participants':
       case '-p':
-        options.participants = parseInt(args[++i]);
+        options.participants = parseInt(remainingArgs[++i]);
         break;
 
       case '--port':
-        options.port = parseInt(args[++i]);
+        options.port = parseInt(remainingArgs[++i]);
         break;
 
       case '--host':
-        options.host = args[++i];
+        options.host = remainingArgs[++i];
         break;
 
       case '--timeout':
-        options.timeout = parseInt(args[++i]) * 60000; // Convert minutes to ms
+        options.timeout = parseInt(remainingArgs[++i]) * 60000; // Convert minutes to ms
         break;
 
       case '--no-tunnel':
@@ -130,34 +162,28 @@ function parseArgs() {
         break;
 
       case '--pin':
-        options.pin = args[++i];
+        options.pin = remainingArgs[++i];
         break;
 
       case '--network':
       case '-n':
-        options.network = args[++i];
+        options.network = remainingArgs[++i];
         break;
 
       case '--tls-cert':
-        options.tlsCert = args[++i];
+        options.tlsCert = remainingArgs[++i];
         break;
 
       case '--tls-key':
-        options.tlsKey = args[++i];
+        options.tlsKey = remainingArgs[++i];
         break;
 
       case '--tls-ca':
-        options.tlsCa = args[++i];
+        options.tlsCa = remainingArgs[++i];
         break;
 
       case '--tls-passphrase':
-        options.tlsPassphrase = args[++i];
-        break;
-
-      case '--help':
-      case '-h':
-        printHelp();
-        process.exit(0);
+        options.tlsPassphrase = remainingArgs[++i];
         break;
     }
   }
@@ -166,9 +192,9 @@ function parseArgs() {
 }
 
 function printHelp() {
-  console.log(chalk.bold('\n📋 Hedera MultiSig Server\n'));
+  console.log(chalk.bold('\n📋 Hedera MultiSig Server v' + getVersion() + '\n'));
   console.log('Usage: node cli/server.js [options]\n');
-  console.log('Options:');
+  console.log('Server Options:');
   console.log('  -t, --threshold <n>        Number of signatures required (required)');
   console.log('  -k, --keys <keys>          Comma-separated eligible public keys (required)');
   console.log('  -p, --participants <n>     Expected number of participants (defaults to key count)');
@@ -184,36 +210,39 @@ function printHelp() {
   console.log('  --tls-key <path>           Path to TLS private key file');
   console.log('  --tls-ca <path>            Path to CA certificate file (optional)');
   console.log('  --tls-passphrase <pass>    Passphrase for private key (optional)');
-  console.log('');
-  console.log('  -h, --help                 Show this help message\n');
-  console.log('Examples:');
+  console.log(getCommonFlagsHelp());
+  console.log('\nExamples:');
   console.log('  # Start server for 2-of-3 multisig');
   console.log('  node cli/server.js -t 2 -k "key1,key2,key3"\n');
   console.log('  # Start server with custom port and no tunnel');
   console.log('  node cli/server.js -t 2 -k "key1,key2,key3" --port 8080 --no-tunnel\n');
   console.log('  # Start server with TLS (secure WebSocket)');
   console.log('  node cli/server.js -t 2 -k "key1,key2" --tls-cert ./cert.pem --tls-key ./key.pem\n');
+  console.log('  # Get session info as JSON (for scripting)');
+  console.log('  node cli/server.js -t 2 -k "key1,key2" --json\n');
 }
 
 async function main() {
   const options = parseArgs();
 
+  // Create JSON output handler
+  const jsonOutput = new JsonOutput(options.json);
+
   // Validate required options
   if (!options.threshold) {
-    console.error(chalk.red('❌ Error: --threshold is required'));
-    printHelp();
-    process.exit(1);
+    exitWithError('--threshold is required', ExitCodes.VALIDATION_ERROR, jsonOutput);
   }
 
   if (options.eligibleKeys.length === 0) {
-    console.error(chalk.red('❌ Error: --keys is required'));
-    printHelp();
-    process.exit(1);
+    exitWithError('--keys is required', ExitCodes.VALIDATION_ERROR, jsonOutput);
   }
 
   if (options.threshold > options.eligibleKeys.length) {
-    console.error(chalk.red(`❌ Error: Threshold (${options.threshold}) cannot exceed number of keys (${options.eligibleKeys.length})`));
-    process.exit(1);
+    exitWithError(
+      `Threshold (${options.threshold}) cannot exceed number of keys (${options.eligibleKeys.length})`,
+      ExitCodes.VALIDATION_ERROR,
+      jsonOutput
+    );
   }
 
   // Set expected participants
@@ -305,42 +334,10 @@ async function main() {
       }
     });
 
-    // Display session info
-    console.log(chalk.bold.green('✅ Pre-Session Created Successfully!\n'));
-    console.log(chalk.cyan('═'.repeat(60)));
-    console.log(chalk.bold.white('SESSION INFORMATION'));
-    console.log(chalk.cyan('═'.repeat(60)));
-    console.log(chalk.white('Session ID: ') + chalk.yellow(session.sessionId));
-    console.log(chalk.white('PIN: ') + chalk.bold.yellow(session.pin));
-
-    if (serverInfo.publicUrl) {
-      console.log(chalk.white('Public URL: ') + chalk.yellow(serverInfo.publicUrl));
-      console.log(chalk.white('Local URL: ') + chalk.gray(serverInfo.url));
-    } else {
-      console.log(chalk.white('Local URL: ') + chalk.yellow(serverInfo.url));
-    }
-
-    console.log(chalk.white('Expires: ') + chalk.yellow(new Date(session.expiresAt).toLocaleString()));
-    console.log(chalk.cyan('═'.repeat(60)));
-
-    console.log(chalk.bold.white('\n📋 SHARE WITH PARTICIPANTS:\n'));
+    // Build session data
     const shareUrl = serverInfo.publicUrl || serverInfo.url;
-    console.log(chalk.yellow(`Server URL: ${shareUrl}`));
-    console.log(chalk.yellow(`Session ID: ${session.sessionId}`));
-    console.log(chalk.yellow(`PIN: ${session.pin}\n`));
-
-    // Generate and display connection string
     const connectionString = generateConnectionString(shareUrl, session.sessionId, session.pin);
-    console.log(chalk.bold.white('🔗 CONNECTION STRING (paste in dApp):'));
-    console.log(chalk.cyan(`  ${connectionString}\n`));
 
-    // Display QR code
-    displayQRCode(connectionString);
-
-    console.log(chalk.white('\nParticipants can also run:'));
-    console.log(chalk.gray(`  node cli/participant.js --url "${shareUrl}" --session "${session.sessionId}" --pin "${session.pin}"\n`));
-
-    // Write session file for auto-discovery
     const sessionFileData = {
       sessionId: session.sessionId,
       pin: session.pin,
@@ -355,22 +352,67 @@ async function main() {
       createdAt: Date.now()
     };
 
-    if (writeSessionFile(sessionFileData)) {
+    // JSON mode: output structured data and continue running
+    if (options.json) {
+      jsonOutput.set('session', sessionFileData);
+      jsonOutput.set('status', 'running');
+      jsonOutput.print(true);
+      // Continue running server but no more console output
+    } else {
+      // Display session info (interactive mode)
+      console.log(chalk.bold.green('✅ Pre-Session Created Successfully!\n'));
+      console.log(chalk.cyan('═'.repeat(60)));
+      console.log(chalk.bold.white('SESSION INFORMATION'));
+      console.log(chalk.cyan('═'.repeat(60)));
+      console.log(chalk.white('Session ID: ') + chalk.yellow(session.sessionId));
+      console.log(chalk.white('PIN: ') + chalk.bold.yellow(session.pin));
+
+      if (serverInfo.publicUrl) {
+        console.log(chalk.white('Public URL: ') + chalk.yellow(serverInfo.publicUrl));
+        console.log(chalk.white('Local URL: ') + chalk.gray(serverInfo.url));
+      } else {
+        console.log(chalk.white('Local URL: ') + chalk.yellow(serverInfo.url));
+      }
+
+      console.log(chalk.white('Expires: ') + chalk.yellow(new Date(session.expiresAt).toLocaleString()));
+      console.log(chalk.cyan('═'.repeat(60)));
+
+      console.log(chalk.bold.white('\n📋 SHARE WITH PARTICIPANTS:\n'));
+      console.log(chalk.yellow(`Server URL: ${shareUrl}`));
+      console.log(chalk.yellow(`Session ID: ${session.sessionId}`));
+      console.log(chalk.yellow(`PIN: ${session.pin}\n`));
+
+      console.log(chalk.bold.white('🔗 CONNECTION STRING (paste in dApp):'));
+      console.log(chalk.cyan(`  ${connectionString}\n`));
+
+      // Display QR code
+      displayQRCode(connectionString);
+
+      console.log(chalk.white('\nParticipants can also run:'));
+      console.log(chalk.gray(`  node cli/participant.js --url "${shareUrl}" --session "${session.sessionId}" --pin "${session.pin}"\n`));
+    }
+
+    // Write session file for auto-discovery
+    if (writeSessionFile(sessionFileData) && !options.json) {
       console.log(chalk.cyan('═'.repeat(60)));
       console.log(chalk.green(`✅ Session file written: ${SESSION_FILE}`));
       console.log(chalk.gray('   Other scripts will auto-detect this session.\n'));
     }
 
-    console.log(chalk.cyan('═'.repeat(60)));
-    console.log(chalk.bold.white('\n⏳ Waiting for participants to connect and become ready...\n'));
+    if (!options.json) {
+      console.log(chalk.cyan('═'.repeat(60)));
+      console.log(chalk.bold.white('\n⏳ Waiting for participants to connect and become ready...\n'));
+    }
 
     // Keep server running
     process.on('SIGINT', async () => {
-      console.log(chalk.yellow('\n\n⚠️  Shutting down server...'));
+      if (!options.json) {
+        console.log(chalk.yellow('\n\n⚠️  Shutting down server...'));
+      }
       cleanupSessionFile();
       await wsServer.stop();
       sessionManager.shutdown();
-      process.exit(0);
+      process.exit(ExitCodes.SUCCESS);
     });
 
     // Also cleanup on other exit signals
@@ -379,13 +421,13 @@ async function main() {
     });
 
   } catch (error) {
-    console.error(chalk.red(`\n❌ Error: ${error.message}\n`));
-    process.exit(1);
+    exitWithError(error.message, ExitCodes.SESSION_ERROR, jsonOutput);
   }
 }
 
 // Run
 main().catch((error) => {
+  // Fallback error handling (jsonOutput not available here)
   console.error(chalk.red(`\n❌ Fatal error: ${error.message}\n`));
-  process.exit(1);
+  process.exit(ExitCodes.INTERNAL_ERROR);
 });
