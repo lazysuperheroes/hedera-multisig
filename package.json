@@ -34,9 +34,14 @@
 		"url": "https://github.com/lazysuperheroes/hedera-multisig/issues"
 	},
 	"homepage": "https://github.com/lazysuperheroes/hedera-multisig#readme",
+	"bin": {
+		"hedera-multisig": "cli/index.js",
+		"multisig": "cli/index.js"
+	},
 	"dependencies": {
 		"@hashgraph/sdk": "^2.49.0",
 		"chalk": "^4.1.2",
+		"commander": "^14.0.2",
 		"dotenv": "^16.0.0",
 		"ethers": "^6.16.0",
 		"localtunnel": "^2.0.2",
@@ -88,6 +93,7 @@
 		"workflows/",
 		"ui/",
 		"cli/",
+		"completions/",
 		"server/",
 		"client/",
 		"shared/",
