@@ -11,6 +11,7 @@ const https = require('https');
 const fs = require('fs');
 const chalk = require('chalk');
 const { normalizePublicKey, isKeyEligible } = require('./utils/keyUtils');
+const { createLogger } = require('../shared/logger');
 
 class MultiSigWebSocketServer {
   constructor(sessionManager, options = {}) {
@@ -21,6 +22,9 @@ class MultiSigWebSocketServer {
       verbose: options.verbose !== false,
       ...options
     };
+
+    // Create logger instance for this server
+    this.log = createLogger('WebSocketServer');
 
     this.server = null;
     this.wss = null;
@@ -107,6 +111,9 @@ class MultiSigWebSocketServer {
 
           const protocol = this.isSecure ? 'wss' : 'ws';
           const url = `${protocol}://${displayHost}:${address.port}`;
+
+          // Structured logging
+          this.log.info('Server started', { host: displayHost, port: address.port, secure: this.isSecure, url });
 
           if (this.options.verbose) {
             console.log(chalk.bold.green('\n✅ WebSocket Server Started'));
@@ -334,6 +341,7 @@ class MultiSigWebSocketServer {
         }
 
       } catch (error) {
+        this.log.error('Error handling message', { error: error.message, sessionId, participantId });
         console.error(chalk.red(`\n❌ Error handling message: ${error.message}\n`));
         ws.send(JSON.stringify({
           type: 'ERROR',
@@ -531,6 +539,7 @@ class MultiSigWebSocketServer {
         }
       }));
 
+      this.log.info('Coordinator authenticated', { sessionId, clientIp });
       if (this.options.verbose) {
         console.log(chalk.green(`✅ Coordinator authenticated for session ${sessionId}`));
       }
@@ -566,6 +575,7 @@ class MultiSigWebSocketServer {
         }
       }));
 
+      this.log.info('Participant authenticated', { sessionId, participantId, label: label || 'anonymous', clientIp });
       if (this.options.verbose) {
         console.log(chalk.green(`✅ Participant ${participantId} authenticated (${label || 'anonymous'})`));
       }
@@ -610,11 +620,21 @@ class MultiSigWebSocketServer {
     try {
       const { publicKey, signature } = message.payload;
 
+      this.log.debug('Signature submitted', { sessionId, participantId, publicKeyPreview: '...' + publicKey.slice(-8) });
+
       const result = await this.sessionManager.submitSignature(
         sessionId,
         participantId,
         { publicKey, signature }
       );
+
+      this.log.info('Signature accepted', {
+        sessionId,
+        participantId,
+        signaturesCollected: result.signaturesCollected,
+        signaturesRequired: result.signaturesRequired,
+        thresholdMet: result.thresholdMet
+      });
 
       // Confirm to participant
       this.sendToParticipant(participantId, {

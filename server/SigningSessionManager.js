@@ -11,6 +11,7 @@ const TransactionDecoder = require('../core/TransactionDecoder');
 const SignatureVerifier = require('../core/SignatureVerifier');
 const { normalizePublicKey, isKeyEligible } = require('./utils/keyUtils');
 const { PublicKey, Transaction } = require('@hashgraph/sdk');
+const { createLogger } = require('../shared/logger');
 
 class SigningSessionManager {
   constructor(client, options = {}) {
@@ -22,6 +23,9 @@ class SigningSessionManager {
       verbose: options.verbose !== false,
       ...options
     };
+
+    // Create logger instance
+    this.log = createLogger('SessionManager');
 
     this.store = new SessionStore({
       defaultTimeout: this.options.defaultTimeout
@@ -65,6 +69,14 @@ class SigningSessionManager {
 
         // Initialize event handlers for this session
         this._initializeEventHandlers(session.sessionId, config);
+
+        this.log.info('Pre-session created', {
+          sessionId: session.sessionId,
+          threshold: config.threshold,
+          eligibleKeys: config.eligiblePublicKeys.length,
+          expectedParticipants: session.stats.participantsExpected,
+          expiresAt: session.expiresAt
+        });
 
         if (this.options.verbose) {
           console.log('\n✅ Pre-session created successfully (waiting for transaction)');

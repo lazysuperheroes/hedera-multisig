@@ -27,7 +27,8 @@ const {
   printVersion,
   exitWithError,
   getCommonFlagsHelp,
-  getVersion
+  getVersion,
+  initializeLogging
 } = require('./utils/cliUtils');
 const chalk = require('chalk');
 const fs = require('fs');
@@ -97,6 +98,9 @@ function parseArgs() {
     json: commonFlags.json,
     verbose: commonFlags.verbose,
     quiet: commonFlags.quiet,
+    trace: commonFlags.trace,
+    exportLogs: commonFlags.exportLogs,
+    logFile: commonFlags.logFile,
     // Server-specific options
     threshold: null,
     eligibleKeys: [],
@@ -224,6 +228,9 @@ function printHelp() {
 
 async function main() {
   const options = parseArgs();
+
+  // Initialize logging based on CLI flags
+  const log = initializeLogging(options, 'Server');
 
   // Create JSON output handler
   const jsonOutput = new JsonOutput(options.json);

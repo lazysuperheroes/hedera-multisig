@@ -20,7 +20,8 @@ const {
   printVersion,
   exitWithError,
   getCommonFlagsHelp,
-  getVersion
+  getVersion,
+  initializeLogging
 } = require('./utils/cliUtils');
 const readlineSync = require('readline-sync');
 const chalk = require('chalk');
@@ -51,6 +52,9 @@ function parseArgs() {
     json: commonFlags.json,
     verbose: commonFlags.verbose,
     quiet: commonFlags.quiet,
+    trace: commonFlags.trace,
+    exportLogs: commonFlags.exportLogs,
+    logFile: commonFlags.logFile,
     yes: commonFlags.yes,
     // Participant-specific options
     url: null,
@@ -123,6 +127,9 @@ function printHelp() {
 
 async function main() {
   const options = parseArgs();
+
+  // Initialize logging based on CLI flags
+  const log = initializeLogging(options, 'Participant');
 
   // Create JSON output handler
   const jsonOutput = new JsonOutput(options.json);

@@ -7,6 +7,7 @@
 
 const chalk = require('chalk');
 const path = require('path');
+const logger = require('../../shared/logger');
 
 // Load version from package.json
 const packageJson = require(path.join(__dirname, '../../package.json'));
@@ -118,8 +119,11 @@ function parseCommonFlags(args) {
     help: false,
     verbose: false,
     quiet: false,
+    trace: false,    // Most detailed logging
     yes: false,      // Skip confirmations
     dryRun: false,   // Show what would happen
+    exportLogs: null, // Path to export logs
+    logFile: null,    // Path for live log file
     remainingArgs: []
   };
 
@@ -146,12 +150,30 @@ function parseCommonFlags(args) {
       case '-q':
         result.quiet = true;
         break;
+      case '--trace':
+        result.trace = true;
+        break;
       case '--yes':
       case '-y':
         result.yes = true;
         break;
       case '--dry-run':
         result.dryRun = true;
+        break;
+      case '--export-logs':
+        // Next argument is the file path
+        if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+          result.exportLogs = args[++i];
+        } else {
+          // Default to timestamped file in current directory
+          result.exportLogs = `multisig-logs-${Date.now()}.json`;
+        }
+        break;
+      case '--log-file':
+        // Next argument is the file path
+        if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+          result.logFile = args[++i];
+        }
         break;
       default:
         result.remainingArgs.push(arg);
@@ -208,11 +230,94 @@ function getCommonFlagsHelp() {
 Common Options:
   --json               Output results as JSON (for scripting/automation)
   -V, --version        Show version information
-  -v, --verbose        Enable verbose output
+  -v, --verbose        Enable verbose/debug output
   -q, --quiet          Suppress non-essential output
+  --trace              Enable trace-level logging (most detailed)
   -y, --yes            Skip confirmation prompts (non-interactive mode)
   --dry-run            Show what would happen without executing
+  --export-logs [path] Export debug logs to file on exit
+  --log-file <path>    Write logs to file in real-time
   -h, --help           Show this help message`;
+}
+
+/**
+ * Initialize logging based on parsed CLI flags
+ * Call this early in your CLI tool after parsing flags
+ *
+ * @param {Object} flags - Parsed flags from parseCommonFlags
+ * @param {string} component - Component name for the logger
+ * @returns {Object} Logger instance for the component
+ */
+function initializeLogging(flags, component = 'CLI') {
+  // Configure log level based on flags
+  logger.setLevelFromFlags({
+    verbose: flags.verbose,
+    quiet: flags.quiet,
+    trace: flags.trace
+  });
+
+  // Configure JSON mode if requested
+  if (flags.json) {
+    logger.configure({ json: true });
+  }
+
+  // Set up live log file if requested
+  if (flags.logFile) {
+    logger.setLogFile(flags.logFile);
+  }
+
+  // Set up export on exit if requested
+  if (flags.exportLogs) {
+    setupLogExport(flags.exportLogs);
+  }
+
+  // Return a logger instance for the component
+  return logger.createLogger(component);
+}
+
+/**
+ * Set up automatic log export on process exit
+ *
+ * @param {string} filePath - Path to export logs to
+ */
+function setupLogExport(filePath) {
+  const handleExit = async () => {
+    try {
+      const count = await logger.exportLogs(filePath);
+      // Use console directly since we're shutting down
+      console.error(`Exported ${count} log entries to ${filePath}`);
+    } catch (error) {
+      console.error(`Failed to export logs: ${error.message}`);
+    } finally {
+      logger.close();
+    }
+  };
+
+  // Handle various exit scenarios
+  process.on('exit', () => {
+    // Synchronous cleanup only - can't await here
+    const buffer = logger.getLogBuffer();
+    if (buffer.length > 0) {
+      try {
+        const fs = require('fs');
+        const output = buffer.map(entry => JSON.stringify(entry)).join('\n');
+        fs.writeFileSync(filePath, output, 'utf8');
+      } catch (e) {
+        // Ignore errors during exit
+      }
+    }
+  });
+
+  // For SIGINT/SIGTERM we can do async cleanup
+  process.on('SIGINT', async () => {
+    await handleExit();
+    process.exit(130);
+  });
+
+  process.on('SIGTERM', async () => {
+    await handleExit();
+    process.exit(143);
+  });
 }
 
 /**
@@ -239,6 +344,8 @@ module.exports = {
   getCommonFlagsHelp,
   getVersion,
   getPackageName,
+  initializeLogging,
+  setupLogExport,
   VERSION,
   PACKAGE_NAME
 };
