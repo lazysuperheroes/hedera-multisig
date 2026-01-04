@@ -1,8 +1,19 @@
 /**
- * Transaction Decoder
+ * Transaction Decoder (Browser Implementation)
  *
- * Browser-compatible port of client/TransactionReviewer.js
- * Decodes frozen transactions, validates metadata, and generates checksums.
+ * ARCHITECTURE NOTE: This is intentionally a separate implementation from
+ * shared/transaction-decoder/index.js. The Hedera SDK has Node.js-specific
+ * dependencies (dns, fs, grpc-js) that cannot be bundled for browser environments.
+ *
+ * This browser version:
+ * - Uses Web Crypto API for SHA-256 hashing
+ * - Imports only transaction types from @hashgraph/sdk (tree-shakeable)
+ * - Provides identical API to the shared module for consistency
+ *
+ * The shared module (shared/transaction-decoder/) is used by:
+ * - Server (server/WebSocketServer.js)
+ * - CLI tools (cli/*.js)
+ * - Node.js client (client/SigningClient.js)
  *
  * Security-critical: Provides cryptographically verified transaction data
  * separate from unverified coordinator-provided metadata.

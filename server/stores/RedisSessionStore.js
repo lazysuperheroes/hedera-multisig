@@ -181,7 +181,8 @@ class RedisSessionStore {
       return false;
     }
 
-    return session.pin === pin;
+    // Use timing-safe comparison to prevent timing attacks
+    return this._timingSafeCompare(session.pin, pin);
   }
 
   /**
@@ -601,6 +602,35 @@ class RedisSessionStore {
     external.coordinatorClient = this.coordinatorWebsockets.get(session.sessionId) || null;
 
     return external;
+  }
+
+  /**
+   * Timing-safe string comparison to prevent timing attacks
+   * @private
+   * @param {string} a - First string
+   * @param {string} b - Second string
+   * @returns {boolean} True if strings are equal
+   */
+  _timingSafeCompare(a, b) {
+    // Handle null/undefined
+    if (!a || !b) {
+      return false;
+    }
+
+    // Convert to buffers - pad shorter to match longer to avoid length-based timing leaks
+    const bufA = Buffer.from(a, 'utf8');
+    const bufB = Buffer.from(b, 'utf8');
+
+    // If lengths differ, still compare but return false
+    // Use max length buffer comparison to avoid timing leak
+    if (bufA.length !== bufB.length) {
+      // Compare against a dummy to maintain constant time, then return false
+      const dummy = Buffer.alloc(bufA.length, 0);
+      crypto.timingSafeEqual(bufA, dummy);
+      return false;
+    }
+
+    return crypto.timingSafeEqual(bufA, bufB);
   }
 
   /**
