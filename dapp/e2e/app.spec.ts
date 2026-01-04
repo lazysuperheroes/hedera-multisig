@@ -19,29 +19,27 @@ test.describe('dApp Basic Tests', () => {
   });
 
   test('displays join session UI', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/join');
 
-    // Look for session connection elements
-    const sessionInput = page.getByPlaceholder(/session|server|url/i).first();
-    await expect(sessionInput).toBeVisible();
+    // Look for connection string input (primary join method)
+    const connectionInput = page.getByPlaceholder(/hmsc:|connection/i).first();
+    await expect(connectionInput).toBeVisible();
   });
 
   test('shows error for invalid session connection', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/join');
 
-    // Try to connect with invalid data
-    const serverInput = page.getByPlaceholder(/server|url/i).first();
-    if (await serverInput.isVisible()) {
-      await serverInput.fill('invalid-url');
+    // Try to connect with invalid connection string
+    const connectionInput = page.getByPlaceholder(/hmsc:|connection/i).first();
+    await connectionInput.fill('invalid-connection-string');
 
-      // Find and click connect button
-      const connectBtn = page.getByRole('button', { name: /connect|join/i }).first();
-      if (await connectBtn.isVisible()) {
-        await connectBtn.click();
+    // Find and click connect button
+    const connectBtn = page.getByRole('button', { name: /connect|join/i }).first();
+    if (await connectBtn.isVisible()) {
+      await connectBtn.click();
 
-        // Should show error
-        await expect(page.getByText(/error|invalid|failed/i).first()).toBeVisible({ timeout: 5000 });
-      }
+      // Should show error
+      await expect(page.getByText(/error|invalid|failed/i).first()).toBeVisible({ timeout: 5000 });
     }
   });
 
@@ -56,9 +54,15 @@ test.describe('dApp Basic Tests', () => {
 
 test.describe('Session UI', () => {
   test('PIN input accepts correct format', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/join');
 
-    const pinInput = page.getByPlaceholder(/pin|code/i).first();
+    // Click manual entry to show individual fields
+    const manualEntry = page.getByText(/manual|enter.*manually/i).first();
+    if (await manualEntry.isVisible()) {
+      await manualEntry.click();
+    }
+
+    const pinInput = page.getByPlaceholder(/pin/i).first();
     if (await pinInput.isVisible()) {
       await pinInput.fill('ABC12345');
       await expect(pinInput).toHaveValue('ABC12345');
@@ -66,9 +70,16 @@ test.describe('Session UI', () => {
   });
 
   test('session ID input accepts hex format', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/join');
 
-    const sessionInput = page.getByPlaceholder(/session.*id/i).first();
+    // Click manual entry to show individual fields
+    const manualEntry = page.getByText(/manual|enter.*manually/i).first();
+    if (await manualEntry.isVisible()) {
+      await manualEntry.click();
+    }
+
+    // Session ID field uses placeholder like "abc123def456"
+    const sessionInput = page.getByPlaceholder(/abc123|session/i).first();
     if (await sessionInput.isVisible()) {
       await sessionInput.fill('abcdef1234567890');
       await expect(sessionInput).toHaveValue('abcdef1234567890');
