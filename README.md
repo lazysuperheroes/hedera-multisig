@@ -160,6 +160,8 @@ console.log('Transaction executed:', result.transactionId);
 ### Documentation
 
 - **User Guide**: [docs/WALLETCONNECT.md](docs/WALLETCONNECT.md) - Complete WalletConnect guide
+- **Offline Signing**: [docs/OFFLINE_SIGNING_GUIDE.md](docs/OFFLINE_SIGNING_GUIDE.md) - Air-gapped signing workflow
+- **Roadmap**: [docs/ROADMAP.md](docs/ROADMAP.md) - Future plans and architecture decisions
 - **dApp Setup**: [dapp/README.md](dapp/README.md) - Developer setup and deployment
 - **Testing**: [dapp/INTEGRATION_TESTING.md](dapp/INTEGRATION_TESTING.md) - End-to-end testing guide
 - **Quick Test**: [dapp/QUICKSTART.md](dapp/QUICKSTART.md) - 5-minute local test
@@ -774,6 +776,9 @@ Special thanks to:
 ## 📬 Support
 
 - **Documentation**: [Full Guides](https://github.com/lazysuperheroes/hedera-multisig/tree/main/docs)
+  - [Offline Signing Guide](docs/OFFLINE_SIGNING_GUIDE.md) - Air-gapped signing workflow
+  - [Security Architecture](docs/SECURITY_ARCHITECTURE.md) - Security model details
+  - [Roadmap](docs/ROADMAP.md) - Future plans and decisions
 - **Issues**: [GitHub Issues](https://github.com/lazysuperheroes/hedera-multisig/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/lazysuperheroes/hedera-multisig/discussions)
 - **Email**: support@lazysuperheroes.com
@@ -794,10 +799,11 @@ Special thanks to:
 - ✅ Structured logging with export
 - ✅ npx initialization wizard
 - ✅ E2E testing with Playwright
-
-### v2.0 (Planned)
 - [ ] Public demo instance
 - [ ] Video walkthroughs
+
+
+### v2.0 (Planned)
 - [ ] Batch multi-sig operations
 - [ ] Scheduled multi-sig transactions
 

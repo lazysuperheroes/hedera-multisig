@@ -18,6 +18,7 @@ complete -c hedera-multisig -n "__fish_use_subcommand" -a "sign" -d "Sign transa
 complete -c hedera-multisig -n "__fish_use_subcommand" -a "keys" -d "Key management commands"
 complete -c hedera-multisig -n "__fish_use_subcommand" -a "audit" -d "Run security audit on codebase"
 complete -c hedera-multisig -n "__fish_use_subcommand" -a "account" -d "Account management (interactive menu)"
+complete -c hedera-multisig -n "__fish_use_subcommand" -a "offline" -d "Offline workflow commands (freeze, decode, execute)"
 complete -c hedera-multisig -n "__fish_use_subcommand" -a "help" -d "Display help for a command"
 
 # Global options for main command
@@ -70,8 +71,42 @@ complete -c hedera-multisig -n "__fish_seen_subcommand_from keys; and __fish_see
 # Audit command options
 complete -c hedera-multisig -n "__fish_seen_subcommand_from audit" -l verbose -d "Show detailed code snippets"
 
+# Offline command and subcommands
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and not __fish_seen_subcommand_from freeze decode execute" -a "freeze" -d "Freeze a transaction and output base64"
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and not __fish_seen_subcommand_from freeze decode execute" -a "decode" -d "Decode base64 transaction and display details"
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and not __fish_seen_subcommand_from freeze decode execute" -a "execute" -d "Collect signatures and execute transaction"
+
+# Offline freeze options
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -s t -l type -d "Transaction type" -xa "transfer contract-execute"
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -s f -l from -d "Source account ID" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -s T -l to -d "Destination account ID" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -s a -l amount -d "Amount in HBAR" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -s c -l contract -d "Contract ID" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -s g -l gas -d "Gas limit" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -s d -l data -d "Function call data in hex" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -s o -l output -d "Output to file" -r -F
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -l raw -d "Output raw base64 only"
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from freeze" -s j -l json -d "Output as JSON"
+
+# Offline decode options
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from decode" -s b -l base64 -d "Base64-encoded transaction bytes" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from decode" -s f -l file -d "Read base64 from file" -r -F
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from decode" -s c -l checksum -d "Expected checksum" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from decode" -l verbose -d "Show raw bytes breakdown"
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from decode" -l raw -d "Output raw decoded JSON"
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from decode" -s j -l json -d "Output as JSON"
+
+# Offline execute options
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from execute" -s b -l base64 -d "Base64-encoded frozen transaction" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from execute" -s f -l file -d "Read frozen transaction from file" -r -F
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from execute" -s s -l signatures -d "Signature tuples" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from execute" -l sig-file -d "Read signatures from file" -r -F
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from execute" -s t -l threshold -d "Required signature threshold" -r
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from execute" -l dry-run -d "Validate signatures without executing"
+complete -c hedera-multisig -n "__fish_seen_subcommand_from offline; and __fish_seen_subcommand_from execute" -s j -l json -d "Output as JSON"
+
 # Help command
-complete -c hedera-multisig -n "__fish_seen_subcommand_from help" -a "server participant sign keys audit account"
+complete -c hedera-multisig -n "__fish_seen_subcommand_from help" -a "server participant sign keys audit account offline"
 
 # Copy completions for 'multisig' alias
 complete -c multisig -w hedera-multisig

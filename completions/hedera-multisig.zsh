@@ -41,6 +41,7 @@ _hedera_multisig() {
                 'keys:Key management commands'
                 'audit:Run security audit on codebase'
                 'account:Account management (interactive menu)'
+                'offline:Offline workflow commands (freeze, decode, execute)'
                 'help:Display help for a command'
             )
             _describe -t commands 'command' commands
@@ -117,9 +118,64 @@ _hedera_multisig() {
                         $global_opts \
                         '--verbose[Show detailed code snippets]'
                     ;;
+                offline)
+                    local -a offline_cmds
+                    offline_cmds=(
+                        'freeze:Freeze a transaction and output base64 for offline signing'
+                        'decode:Decode base64 transaction and display human-readable details'
+                        'execute:Collect signature tuples and execute a frozen transaction'
+                    )
+                    _arguments -C \
+                        '1:subcommand:->offline_cmd' \
+                        '*::arg:->offline_args'
+                    case "$state" in
+                        offline_cmd)
+                            _describe -t commands 'offline command' offline_cmds
+                            ;;
+                        offline_args)
+                            case "$words[1]" in
+                                freeze)
+                                    _arguments \
+                                        $global_opts \
+                                        '(-t --type)'{-t,--type}'[Transaction type]:type:(transfer contract-execute)' \
+                                        '(-f --from)'{-f,--from}'[Source account ID]:account:' \
+                                        '(-T --to)'{-T,--to}'[Destination account ID]:account:' \
+                                        '(-a --amount)'{-a,--amount}'[Amount in HBAR]:amount:' \
+                                        '(-c --contract)'{-c,--contract}'[Contract ID]:contract:' \
+                                        '(-g --gas)'{-g,--gas}'[Gas limit]:gas:' \
+                                        '(-d --data)'{-d,--data}'[Function call data in hex]:data:' \
+                                        '(-o --output)'{-o,--output}'[Output to file]:file:_files' \
+                                        '--raw[Output raw base64 only]' \
+                                        '(-j --json)'{-j,--json}'[Output as JSON]'
+                                    ;;
+                                decode)
+                                    _arguments \
+                                        $global_opts \
+                                        '(-b --base64)'{-b,--base64}'[Base64-encoded transaction bytes]:base64:' \
+                                        '(-f --file)'{-f,--file}'[Read base64 from file]:file:_files' \
+                                        '(-c --checksum)'{-c,--checksum}'[Expected checksum]:checksum:' \
+                                        '--verbose[Show raw bytes breakdown]' \
+                                        '--raw[Output raw decoded JSON]' \
+                                        '(-j --json)'{-j,--json}'[Output as JSON]'
+                                    ;;
+                                execute)
+                                    _arguments \
+                                        $global_opts \
+                                        '(-b --base64)'{-b,--base64}'[Base64-encoded frozen transaction]:base64:' \
+                                        '(-f --file)'{-f,--file}'[Read frozen transaction from file]:file:_files' \
+                                        '(-s --signatures)'{-s,--signatures}'[Signature tuples]:signatures:' \
+                                        '--sig-file[Read signatures from file]:file:_files' \
+                                        '(-t --threshold)'{-t,--threshold}'[Required signature threshold]:threshold:' \
+                                        '--dry-run[Validate signatures without executing]' \
+                                        '(-j --json)'{-j,--json}'[Output as JSON]'
+                                    ;;
+                            esac
+                            ;;
+                    esac
+                    ;;
                 help)
                     local -a commands
-                    commands=(server participant sign keys audit account)
+                    commands=(server participant sign keys audit account offline)
                     _describe -t commands 'command' commands
                     ;;
             esac
