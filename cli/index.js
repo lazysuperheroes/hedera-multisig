@@ -15,6 +15,7 @@
  *   sign          Sign transactions offline (air-gapped)
  *   keys          Key management commands
  *   audit         Run security audit on codebase
+ *   offline       Offline workflow commands (freeze, decode, execute)
  */
 
 const { program } = require('commander');
@@ -47,6 +48,7 @@ require('./commands/sign')(program);
 require('./commands/keys')(program);
 require('./commands/audit')(program);
 require('./commands/completions')(program);
+require('./commands/offline')(program);
 
 // Add init command (project setup wizard)
 program
