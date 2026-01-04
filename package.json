@@ -1,6 +1,6 @@
 {
 	"name": "@lazysuperheroes/hedera-multisig",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"description": "Production-grade multi-signature transaction management library for Hedera blockchain with M-of-N threshold support, WalletConnect browser dApp, encrypted key storage, and comprehensive audit logging",
 	"main": "index.js",
 	"types": "types/index.d.ts",
