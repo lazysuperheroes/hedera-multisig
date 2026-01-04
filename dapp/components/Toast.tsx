@@ -38,10 +38,10 @@ function Toast({ toast, onClose }: ToastProps) {
   }, [toast.id, toast.duration, onClose]);
 
   const colors = {
-    success: 'bg-green-50 border-green-500 text-green-800',
-    error: 'bg-red-50 border-red-500 text-red-800',
-    info: 'bg-blue-50 border-blue-500 text-blue-800',
-    warning: 'bg-yellow-50 border-yellow-500 text-yellow-800',
+    success: 'bg-green-50 dark:bg-green-900/30 border-green-500 text-green-800 dark:text-green-200',
+    error: 'bg-red-50 dark:bg-red-900/30 border-red-500 text-red-800 dark:text-red-200',
+    info: 'bg-blue-50 dark:bg-blue-900/30 border-blue-500 text-blue-800 dark:text-blue-200',
+    warning: 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-500 text-yellow-800 dark:text-yellow-200',
   };
 
   const icons = {

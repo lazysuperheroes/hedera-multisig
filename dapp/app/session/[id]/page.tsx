@@ -452,12 +452,12 @@ export default function SessionPage({ params }: PageProps) {
     const isSessionMismatch = errorMessage?.includes('previously connected') || errorMessage?.includes('mismatch');
 
     return (
-      <main className="min-h-screen flex items-center justify-center p-8 bg-gray-50">
-        <div className="max-w-lg w-full bg-white border-2 border-red-500 rounded-lg p-8">
+      <main className="min-h-screen flex items-center justify-center p-8 bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-lg w-full bg-white dark:bg-gray-800 border-2 border-red-500 rounded-lg p-8">
           <div className="text-center mb-6">
             <div className="text-6xl mb-4">❌</div>
-            <h1 className="text-2xl font-bold text-red-800 mb-2">Error</h1>
-            <p className="text-red-600">{errorMessage}</p>
+            <h1 className="text-2xl font-bold text-red-800 dark:text-red-400 mb-2">Error</h1>
+            <p className="text-red-600 dark:text-red-400">{errorMessage}</p>
           </div>
           <div className="space-y-3">
             {isSessionMismatch && (
@@ -483,17 +483,17 @@ export default function SessionPage({ params }: PageProps) {
   // Render loading state
   if (currentStep === 'loading') {
     return (
-      <main className="min-h-screen flex items-center justify-center p-8 bg-gray-50">
+      <main className="min-h-screen flex items-center justify-center p-8 bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading session information...</p>
+          <p className="text-gray-600 dark:text-gray-400">Loading session information...</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen p-8 bg-gray-50">
+    <main className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
       {/* Toast Notifications */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
 
@@ -510,13 +510,13 @@ export default function SessionPage({ params }: PageProps) {
 
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="bg-white border-2 border-gray-300 rounded-lg p-6">
+        <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-700 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">Multi-Signature Session</h1>
+              <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Multi-Signature Session</h1>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm text-gray-600">Session ID:</span>
-                <code className="text-sm font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-800">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Session ID:</span>
+                <code className="text-sm font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-800 dark:text-gray-200">
                   {sessionId.length > 16 ? `${sessionId.slice(0, 8)}...${sessionId.slice(-6)}` : sessionId}
                 </code>
                 <CopyButton text={sessionId} label="Session ID" size="sm" />
@@ -538,7 +538,7 @@ export default function SessionPage({ params }: PageProps) {
               {sessionInfo && (currentStep === 'waiting' || currentStep === 'reviewing' || currentStep === 'ready') && (
                 <button
                   onClick={() => setShowShareDialog(true)}
-                  className="px-4 py-2 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 flex items-center gap-2"
+                  className="px-4 py-2 text-sm bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 flex items-center gap-2"
                   title="Share session with other participants"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -549,7 +549,7 @@ export default function SessionPage({ params }: PageProps) {
               )}
               <button
                 onClick={handleDisconnect}
-                className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
               >
                 Disconnect
               </button>
@@ -652,9 +652,9 @@ export default function SessionPage({ params }: PageProps) {
 
         {/* Error Display */}
         {errorMessage && (
-          <div className="bg-red-50 border-2 border-red-500 rounded-lg p-4">
+          <div className="bg-red-50 dark:bg-red-900/30 border-2 border-red-500 rounded-lg p-4">
             <div className="flex items-start space-x-3">
-              <svg className="w-6 h-6 text-red-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -663,8 +663,8 @@ export default function SessionPage({ params }: PageProps) {
                 />
               </svg>
               <div>
-                <h3 className="font-semibold text-red-800">Error</h3>
-                <p className="text-sm text-red-600">{errorMessage}</p>
+                <h3 className="font-semibold text-red-800 dark:text-red-300">Error</h3>
+                <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
               </div>
             </div>
           </div>
@@ -695,8 +695,8 @@ export default function SessionPage({ params }: PageProps) {
             />
 
             {/* Session Status */}
-            <div className="bg-white border-2 border-gray-300 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Session Status</h3>
+            <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Session Status</h3>
               <div className="space-y-3">
                 <StatusItem
                   label="WebSocket Connection"
@@ -751,9 +751,9 @@ export default function SessionPage({ params }: PageProps) {
 
         {/* Step 3a: Signing in progress */}
         {currentStep === 'signing' && (
-          <div className="bg-blue-50 border-2 border-blue-500 rounded-lg p-8 text-center">
+          <div className="bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-500 rounded-lg p-8 text-center">
             <div className="animate-pulse mb-4">
-              <svg className="w-16 h-16 text-blue-600 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-16 h-16 text-blue-600 dark:text-blue-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -762,8 +762,8 @@ export default function SessionPage({ params }: PageProps) {
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-blue-800 mb-2">Signing Transaction...</h2>
-            <p className="text-blue-700">Please approve the signature request in your wallet</p>
+            <h2 className="text-xl font-bold text-blue-800 dark:text-blue-300 mb-2">Signing Transaction...</h2>
+            <p className="text-blue-700 dark:text-blue-400">Please approve the signature request in your wallet</p>
           </div>
         )}
 
@@ -779,9 +779,9 @@ export default function SessionPage({ params }: PageProps) {
 
         {/* Step 4: Completed */}
         {currentStep === 'completed' && (
-          <div className="bg-green-50 border-2 border-green-600 rounded-lg p-8 text-center">
+          <div className="bg-green-50 dark:bg-green-900/30 border-2 border-green-600 rounded-lg p-8 text-center">
             <div className="mb-4">
-              <svg className="w-20 h-20 text-green-600 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-20 h-20 text-green-600 dark:text-green-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -790,8 +790,8 @@ export default function SessionPage({ params }: PageProps) {
                 />
               </svg>
             </div>
-            <h2 className="text-2xl font-bold text-green-800 mb-2">Transaction Executed!</h2>
-            <p className="text-green-700 mb-6">
+            <h2 className="text-2xl font-bold text-green-800 dark:text-green-300 mb-2">Transaction Executed!</h2>
+            <p className="text-green-700 dark:text-green-400 mb-6">
               The multi-signature transaction has been successfully executed on the Hedera network.
             </p>
 
@@ -804,7 +804,7 @@ export default function SessionPage({ params }: PageProps) {
               </button>
               <button
                 onClick={() => router.push('/join')}
-                className="w-full px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                className="w-full px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"
               >
                 Join Another Session
               </button>
@@ -814,9 +814,9 @@ export default function SessionPage({ params }: PageProps) {
 
         {/* Waiting state */}
         {currentStep === 'waiting' && (
-          <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-8 text-center">
+          <div className="bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-lg p-8 text-center">
             <div className="animate-pulse mb-4">
-              <svg className="w-16 h-16 text-blue-600 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-16 h-16 text-blue-600 dark:text-blue-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -825,12 +825,12 @@ export default function SessionPage({ params }: PageProps) {
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-blue-800 mb-2">Waiting for Transaction...</h2>
-            <p className="text-blue-700 mb-6">The coordinator will send the transaction for review shortly</p>
+            <h2 className="text-xl font-bold text-blue-800 dark:text-blue-300 mb-2">Waiting for Transaction...</h2>
+            <p className="text-blue-700 dark:text-blue-400 mb-6">The coordinator will send the transaction for review shortly</p>
 
             <button
               onClick={handleDisconnect}
-              className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              className="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
             >
               Leave Session
             </button>
@@ -862,12 +862,12 @@ function StepIndicator({
             ? 'bg-green-500 text-white'
             : active
             ? 'bg-blue-500 text-white'
-            : 'bg-gray-200 text-gray-500'
+            : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
         }`}
       >
         {completed ? '✓' : step}
       </div>
-      <div className={`text-xs mt-1 text-center ${active ? 'text-blue-600 font-semibold' : completed ? 'text-green-600' : 'text-gray-500'}`}>
+      <div className={`text-xs mt-1 text-center ${active ? 'text-blue-600 dark:text-blue-400 font-semibold' : completed ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
         {label}
       </div>
     </div>
@@ -876,17 +876,17 @@ function StepIndicator({
 
 function StepConnector({ completed }: { completed: boolean }) {
   return (
-    <div className="flex-1 h-1 bg-gray-200 min-w-[20px]">
-      <div className={`h-full transition-all ${completed ? 'bg-green-500' : 'bg-gray-200'}`} />
+    <div className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 min-w-[20px]">
+      <div className={`h-full transition-all ${completed ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
     </div>
   );
 }
 
 function StatusItem({ label, status }: { label: string; status: string }) {
   return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-200">
-      <span className="text-sm text-gray-600">{label}:</span>
-      <span className="text-sm font-mono font-semibold text-gray-800">{status}</span>
+    <div className="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-700">
+      <span className="text-sm text-gray-600 dark:text-gray-400">{label}:</span>
+      <span className="text-sm font-mono font-semibold text-gray-800 dark:text-gray-200">{status}</span>
     </div>
   );
 }

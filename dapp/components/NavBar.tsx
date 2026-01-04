@@ -11,6 +11,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useWallet } from '../hooks/useWallet';
 import { WalletSelectionDialog } from './WalletSelectionDialog';
+import { ThemeToggle } from './ThemeToggle';
 
 export function NavBar() {
   const { accountId, publicKey, publicKeyType, evmAddress, balance, isConnected, isConnecting, connect, disconnect } = useWallet();
@@ -69,17 +70,37 @@ export function NavBar() {
                 <h1 className="text-lg font-bold text-gray-900 dark:text-white">
                   Hedera MultiSig
                 </h1>
-                {network === 'testnet' && (
-                  <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">
-                    TESTNET
-                  </span>
-                )}
+                <span className={`
+                  inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold
+                  ${network === 'mainnet'
+                    ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 border border-green-300 dark:border-green-700'
+                    : 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border border-orange-300 dark:border-orange-700'
+                  }
+                `}>
+                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                    network === 'mainnet' ? 'bg-green-500' : 'bg-orange-500 animate-pulse'
+                  }`}></span>
+                  {network.toUpperCase()}
+                </span>
               </div>
             </Link>
 
-            {/* Right Side: Wallet Info + Connect Button */}
+            {/* Right Side: Theme Toggle + Wallet Info + Connect Button */}
             <div className="flex items-center gap-4">
-              {/* Connected Wallet Info */}
+              {/* Theme Toggle */}
+              <ThemeToggle />
+
+              {/* Connected Wallet Info - Mobile (compact) */}
+              {isConnected && accountId && (
+                <div className="lg:hidden flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
+                  <span className="text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">
+                    {accountId}
+                  </span>
+                </div>
+              )}
+
+              {/* Connected Wallet Info - Desktop (full) */}
               {isConnected && accountId && (
                 <div className="hidden lg:flex items-start gap-3 px-4 py-2.5 bg-gray-100 dark:bg-gray-800 rounded-lg max-w-2xl">
                   <div className="w-7 h-7 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">

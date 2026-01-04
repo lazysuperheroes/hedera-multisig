@@ -13,10 +13,21 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+}
+
+/* Class-based dark mode (for manual toggle) */
+:root.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+/* Smooth theme transitions */
+:root {
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
 
 body {
@@ -107,17 +118,16 @@ body {
   animation: pulse-soft 2s ease-in-out infinite;
 }
 
-/* Smooth Transitions */
-* {
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
 /* Loading Skeleton */
 .skeleton {
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 1000px 100%;
   animation: shimmer 2s infinite;
   border-radius: 4px;
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg, #1f2937 25%, #374151 50%, #1f2937 75%);
 }
 
 /* Improved Focus Styles */

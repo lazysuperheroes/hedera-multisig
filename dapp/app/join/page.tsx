@@ -134,14 +134,14 @@ function JoinPageContent() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-gradient-to-b from-gray-50 to-gray-100">
+    <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
       {/* QR Scanner Modal */}
       {showQRScanner && (
         <Suspense fallback={
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-            <div className="bg-white p-8 rounded-lg">
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading camera...</p>
+              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading camera...</p>
             </div>
           </div>
         }>
@@ -155,25 +155,25 @@ function JoinPageContent() {
       <div className="max-w-2xl w-full space-y-8">
         {/* Header */}
         <div className="text-center space-y-2">
-          <Link href="/" className="text-blue-600 hover:underline text-sm">
+          <Link href="/" className="text-blue-600 dark:text-blue-400 hover:underline text-sm">
             ← Back to Home
           </Link>
-          <h1 className="text-4xl font-bold text-gray-900">
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
             Join Signing Session
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 dark:text-gray-400">
             Paste a connection string or enter session details manually
           </p>
         </div>
 
         {/* Quick Connect - Connection String */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Quick Connect</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Quick Connect</h2>
 
           <div className="space-y-4">
             {/* Connection String Input */}
             <div>
-              <label htmlFor="connectionString" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="connectionString" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Connection String
               </label>
               <div className="flex gap-2">
@@ -183,12 +183,12 @@ function JoinPageContent() {
                   value={connectionString}
                   onChange={handleConnectionStringChange}
                   placeholder="hmsc:eyJzIjoi..."
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 font-mono text-sm"
+                  className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 font-mono text-sm"
                 />
                 <button
                   type="button"
                   onClick={handlePaste}
-                  className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+                  className="px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center gap-2"
                   title="Paste from clipboard"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -208,11 +208,11 @@ function JoinPageContent() {
                   Scan
                 </button>
               </div>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 Paste the connection string from your coordinator, or scan the QR code
               </p>
               {parseError && (
-                <p className="mt-1 text-sm text-red-600">{parseError}</p>
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{parseError}</p>
               )}
             </div>
 
@@ -221,7 +221,7 @@ function JoinPageContent() {
               <button
                 type="button"
                 onClick={() => setShowManualForm(true)}
-                className="text-sm text-blue-600 hover:text-blue-800 underline"
+                className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
               >
                 Enter details manually instead
               </button>
@@ -231,11 +231,11 @@ function JoinPageContent() {
 
         {/* Manual Form */}
         {showManualForm && (
-          <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">Session Details</h2>
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Session Details</h2>
               {connectionString && (
-                <span className="text-sm text-green-600 flex items-center gap-1">
+                <span className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
@@ -247,7 +247,7 @@ function JoinPageContent() {
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Server URL */}
               <div>
-                <label htmlFor="serverUrl" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="serverUrl" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   WebSocket Server URL
                 </label>
                 <input
@@ -257,14 +257,14 @@ function JoinPageContent() {
                   value={formData.serverUrl}
                   onChange={handleChange}
                   placeholder="ws://localhost:3001 or wss://example.com"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   required
                 />
               </div>
 
               {/* Session ID */}
               <div>
-                <label htmlFor="sessionId" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="sessionId" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Session ID
                 </label>
                 <input
@@ -274,14 +274,14 @@ function JoinPageContent() {
                   value={formData.sessionId}
                   onChange={handleChange}
                   placeholder="abc123def456"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 font-mono"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 font-mono"
                   required
                 />
               </div>
 
               {/* PIN */}
               <div>
-                <label htmlFor="pin" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="pin" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Session PIN
                 </label>
                 <input
@@ -291,11 +291,11 @@ function JoinPageContent() {
                   value={formData.pin}
                   onChange={handleChange}
                   placeholder="Enter session PIN"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   required
                 />
                 {!formData.pin && connectionString && (
-                  <p className="mt-1 text-sm text-yellow-600">
+                  <p className="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
                     PIN not included in connection string - please enter it manually
                   </p>
                 )}
@@ -314,9 +314,9 @@ function JoinPageContent() {
         )}
 
         {/* Info Box */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="font-semibold text-blue-900 mb-2">What happens next?</h3>
-          <ol className="list-decimal list-inside space-y-2 text-sm text-blue-800">
+        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
+          <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">What happens next?</h3>
+          <ol className="list-decimal list-inside space-y-2 text-sm text-blue-800 dark:text-blue-300">
             <li>Connect your Hedera wallet via WalletConnect</li>
             <li>Join the signing session with the provided credentials</li>
             <li>Review the transaction details (verified and unverified data)</li>
@@ -326,11 +326,11 @@ function JoinPageContent() {
         </div>
 
         {/* Connection String Format Info */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-600">
+        <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-xs text-gray-600 dark:text-gray-400">
           <details>
-            <summary className="cursor-pointer font-medium text-gray-700">About connection strings</summary>
+            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300">About connection strings</summary>
             <p className="mt-2">
-              Connection strings start with <code className="bg-gray-200 px-1 rounded">hmsc:</code> followed by encoded session data.
+              Connection strings start with <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">hmsc:</code> followed by encoded session data.
               They contain the server URL, session ID, and optionally the PIN. Your coordinator will provide this when creating a session.
             </p>
           </details>
@@ -343,10 +343,10 @@ function JoinPageContent() {
 export default function JoinPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-b from-gray-50 to-gray-100">
+      <main className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
         </div>
       </main>
     }>
