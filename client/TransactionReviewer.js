@@ -3,31 +3,42 @@
  *
  * Client-side transaction review and validation.
  * Provides metadata validation and visual transaction approval interface.
+ *
+ * Uses shared transaction decoder for core functionality.
  */
 
-const crypto = require('crypto');
 const { ethers } = require('ethers');
-const TransactionDecoder = require('../core/TransactionDecoder');
+const {
+  TransactionDecoder: SharedDecoder,
+  generateChecksum
+} = require('../shared/transaction-decoder');
 
 class TransactionReviewer {
   /**
    * Decode frozen transaction with optional ABI support
    *
    * @param {string} frozenTxBase64 - Base64 encoded frozen transaction
-   * @param {Object} contractInterface - Optional Solidity contract ABI
-   * @returns {Object} Decoded transaction details
+   * @param {Object} contractInterface - Optional Solidity contract ABI (ethers.Interface or ABI array)
+   * @returns {Promise<Object>} Decoded transaction details
    */
-  static decode(frozenTxBase64, contractInterface = null) {
+  static async decode(frozenTxBase64, contractInterface = null) {
     try {
-      const frozenTxBytes = Buffer.from(frozenTxBase64, 'base64');
+      // Convert ABI array to ethers.Interface if needed
+      let iface = contractInterface;
+      if (contractInterface && !contractInterface.parseTransaction) {
+        iface = new ethers.Interface(contractInterface);
+      }
 
-      // Use existing TransactionDecoder for basic decoding
-      const txDetails = TransactionDecoder.decode(frozenTxBytes, contractInterface);
+      // Use shared decoder
+      const decoded = await SharedDecoder.decode(frozenTxBase64, iface);
 
-      // Add checksum for verification
-      txDetails.checksum = this.generateChecksum(frozenTxBytes);
-
-      return txDetails;
+      // Return in expected format for backwards compatibility
+      return {
+        ...decoded.details,
+        checksum: decoded.shortChecksum,
+        fullChecksum: decoded.checksum,
+        bytes: decoded.bytes
+      };
     } catch (error) {
       throw new Error(`Failed to decode transaction: ${error.message}`);
     }
@@ -41,66 +52,28 @@ class TransactionReviewer {
    * @returns {Object} Validation result with warnings
    */
   static validateMetadata(txDetails, metadata) {
+    // Use shared decoder's validation
+    const sharedValidation = SharedDecoder.validateMetadata(txDetails, metadata || {});
+
+    // Convert to legacy format for backwards compatibility
     const validation = {
-      valid: true,
-      warnings: [],
+      valid: sharedValidation.valid,
+      warnings: sharedValidation.warnings.map(w => ({
+        field: 'general',
+        message: w,
+        severity: w.includes('MISMATCH') ? 'high' : 'medium'
+      })),
       errors: [],
       matches: {}
     };
 
-    if (!metadata) {
-      return validation;
+    // Mark matches based on no mismatches
+    if (!sharedValidation.mismatches.amounts) {
+      validation.matches.amount = true;
     }
-
-    // Extract actual amounts from transaction
-    const actualAmounts = this.extractAmounts(txDetails);
-    const actualAccounts = this.extractAccounts(txDetails);
-
-    // Validate amount if provided
-    if (metadata.amount && metadata.amount.value) {
-      const metadataAmount = metadata.amount.value.toString();
-      const foundMatch = actualAmounts.some(amt => amt.toString() === metadataAmount);
-
-      if (!foundMatch) {
-        validation.warnings.push({
-          field: 'amount',
-          message: `Metadata amount (${metadataAmount}) not found in transaction`,
-          severity: 'high'
-        });
-      } else {
-        validation.matches.amount = true;
-      }
+    if (!sharedValidation.mismatches.accounts) {
+      validation.matches.recipient = true;
     }
-
-    // Validate recipient if provided
-    if (metadata.recipient && metadata.recipient.address) {
-      const metadataRecipient = metadata.recipient.address.toLowerCase();
-      const foundMatch = actualAccounts.some(
-        acc => acc.toLowerCase() === metadataRecipient
-      );
-
-      if (!foundMatch) {
-        validation.warnings.push({
-          field: 'recipient',
-          message: `Metadata recipient (${metadataRecipient}) not found in transaction`,
-          severity: 'high'
-        });
-      } else {
-        validation.matches.recipient = true;
-      }
-    }
-
-    // Check for suspicious description flags
-    if (metadata.description && metadata.description.flagged) {
-      validation.warnings.push({
-        field: 'description',
-        message: metadata.description.warning,
-        severity: 'medium'
-      });
-    }
-
-    // Overall validation result
-    validation.valid = validation.errors.length === 0;
 
     return validation;
   }
@@ -217,36 +190,10 @@ class TransactionReviewer {
    * Extract amounts from transaction details
    *
    * @param {Object} txDetails - Decoded transaction details
-   * @returns {Array} Array of amounts (in HBAR or tokens)
+   * @returns {Array} Array of amounts
    */
   static extractAmounts(txDetails) {
-    const amounts = [];
-
-    // Check for transfer amounts
-    if (txDetails.transfers && Array.isArray(txDetails.transfers)) {
-      txDetails.transfers.forEach(transfer => {
-        if (transfer.amount) {
-          amounts.push(Math.abs(transfer.amount));
-        }
-      });
-    }
-
-    // Check for token transfers
-    if (txDetails.tokenTransfers && Array.isArray(txDetails.tokenTransfers)) {
-      txDetails.tokenTransfers.forEach(transfer => {
-        if (transfer.amount) {
-          amounts.push(Math.abs(transfer.amount));
-        }
-      });
-    }
-
-    // Check for contract call value
-    if (txDetails.contractCall && txDetails.contractCall.gas) {
-      // Gas is paid in HBAR
-      amounts.push(txDetails.contractCall.gas);
-    }
-
-    return amounts;
+    return SharedDecoder.extractAmounts(txDetails);
   }
 
   /**
@@ -256,59 +203,24 @@ class TransactionReviewer {
    * @returns {Array} Array of account IDs
    */
   static extractAccounts(txDetails) {
-    const accounts = new Set();
-
-    // Add payer account
-    if (txDetails.transactionId) {
-      const parts = txDetails.transactionId.split('@');
-      if (parts[0]) {
-        accounts.add(parts[0]);
-      }
-    }
-
-    // Add transfer accounts
-    if (txDetails.transfers && Array.isArray(txDetails.transfers)) {
-      txDetails.transfers.forEach(transfer => {
-        if (transfer.accountId) {
-          accounts.add(transfer.accountId);
-        }
-      });
-    }
-
-    // Add token transfer accounts
-    if (txDetails.tokenTransfers && Array.isArray(txDetails.tokenTransfers)) {
-      txDetails.tokenTransfers.forEach(transfer => {
-        if (transfer.accountId) {
-          accounts.add(transfer.accountId);
-        }
-      });
-    }
-
-    // Add contract ID
-    if (txDetails.contractCall && txDetails.contractCall.contractId) {
-      accounts.add(txDetails.contractCall.contractId);
-    }
-
-    return Array.from(accounts);
+    return SharedDecoder.extractAccounts(txDetails);
   }
 
   /**
    * Generate checksum for transaction verification
    *
-   * @param {Buffer} txBytes - Transaction bytes
-   * @returns {string} SHA256 checksum
+   * @param {Buffer|Uint8Array} txBytes - Transaction bytes
+   * @returns {Promise<string>} SHA256 checksum (truncated to 16 chars)
    */
-  static generateChecksum(txBytes) {
-    const hash = crypto.createHash('sha256');
-    hash.update(txBytes);
-    return hash.digest('hex').substring(0, 16);
+  static async generateChecksum(txBytes) {
+    return generateChecksum(txBytes);
   }
 
   /**
    * Decode Solidity function call using ABI
    *
-   * @param {string} functionData - Hex-encoded function call data
-   * @param {Object} contractInterface - Solidity contract ABI
+   * @param {string|Uint8Array} functionData - Hex-encoded function call data or bytes
+   * @param {Object} contractInterface - Solidity contract ABI or ethers.Interface
    * @returns {Object} Decoded function call
    */
   static decodeSolidityFunction(functionData, contractInterface) {
@@ -317,12 +229,29 @@ class TransactionReviewer {
         return null;
       }
 
-      const iface = new ethers.utils.Interface(contractInterface);
-      const decoded = iface.parseTransaction({ data: functionData });
+      // Convert to ethers.Interface if needed
+      const iface = contractInterface.parseTransaction
+        ? contractInterface
+        : new ethers.Interface(contractInterface);
+
+      // Ensure functionData is a hex string
+      let dataHex = functionData;
+      if (functionData instanceof Uint8Array || Buffer.isBuffer(functionData)) {
+        dataHex = '0x' + Buffer.from(functionData).toString('hex');
+      } else if (!functionData.startsWith('0x')) {
+        dataHex = '0x' + functionData;
+      }
+
+      const decoded = iface.parseTransaction({ data: dataHex });
+
+      if (!decoded) {
+        return null;
+      }
 
       return {
         functionName: decoded.name,
         signature: decoded.signature,
+        selector: decoded.selector,
         args: decoded.args,
         decodedParams: this._formatSolidityParams(decoded.args, decoded.fragment.inputs)
       };
@@ -343,8 +272,8 @@ class TransactionReviewer {
       const name = input.name || `param${idx}`;
       let value = args[idx];
 
-      // Format BigNumber values
-      if (ethers.BigNumber.isBigNumber(value)) {
+      // Format BigInt values (ethers v6 uses native BigInt)
+      if (typeof value === 'bigint') {
         value = value.toString();
       }
 

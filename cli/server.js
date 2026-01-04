@@ -5,19 +5,104 @@
  *
  * Start a multi-signature session server from the command line.
  *
+ * Configuration:
+ *   Create a .env file in the project root with:
+ *     ENVIRONMENT=TEST     # Network: TEST or MAIN
+ *
  * Usage:
  *   node cli/server.js --threshold 2 --keys "key1,key2,key3" --participants 3
  *   npm run multisig-server -- --threshold 2 --keys "key1,key2,key3"
  */
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 const { Client } = require('@hashgraph/sdk');
 const { SigningSessionManager, WebSocketServer } = require('../server');
+const { createSessionStore } = require('../server/stores');
+const { generateConnectionString } = require('../shared/connection-string');
+const {
+  ExitCodes,
+  JsonOutput,
+  parseCommonFlags,
+  printVersion,
+  exitWithError,
+  getCommonFlagsHelp,
+  getVersion,
+  initializeLogging
+} = require('./utils/cliUtils');
 const chalk = require('chalk');
+const fs = require('fs');
+const path = require('path');
+const qrcode = require('qrcode-terminal');
+
+/**
+ * Display QR code in terminal
+ */
+function displayQRCode(connectionString) {
+  console.log(chalk.bold.white('\n📱 SCAN QR CODE TO JOIN:\n'));
+  qrcode.generate(connectionString, { small: true }, (qr) => {
+    console.log(qr);
+  });
+}
+
+// Session file for auto-discovery by other scripts
+const SESSION_FILE = path.join(process.cwd(), '.multisig-session.json');
+
+/**
+ * Write session details to file for auto-discovery
+ */
+function writeSessionFile(sessionData) {
+  try {
+    fs.writeFileSync(SESSION_FILE, JSON.stringify(sessionData, null, 2), 'utf8');
+    return true;
+  } catch (error) {
+    console.log(chalk.yellow(`⚠️  Could not write session file: ${error.message}`));
+    return false;
+  }
+}
+
+/**
+ * Clean up session file on shutdown
+ */
+function cleanupSessionFile() {
+  try {
+    if (fs.existsSync(SESSION_FILE)) {
+      fs.unlinkSync(SESSION_FILE);
+    }
+  } catch (error) {
+    // Ignore cleanup errors
+  }
+}
 
 // Parse command line arguments
 function parseArgs() {
   const args = process.argv.slice(2);
+
+  // Parse common flags first
+  const commonFlags = parseCommonFlags(args);
+
+  // Handle version flag
+  if (commonFlags.version) {
+    printVersion(commonFlags.json);
+    process.exit(ExitCodes.SUCCESS);
+  }
+
+  // Handle help flag
+  if (commonFlags.help) {
+    printHelp();
+    process.exit(ExitCodes.SUCCESS);
+  }
+
   const options = {
+    // Common flags
+    json: commonFlags.json,
+    verbose: commonFlags.verbose,
+    quiet: commonFlags.quiet,
+    trace: commonFlags.trace,
+    exportLogs: commonFlags.exportLogs,
+    logFile: commonFlags.logFile,
+    // Server-specific options
     threshold: null,
     eligibleKeys: [],
     participants: null,
@@ -26,36 +111,60 @@ function parseArgs() {
     timeout: 1800000, // 30 minutes
     tunnel: true,
     pin: null,
-    network: 'testnet'
+    network: (() => {
+      const env = (process.env.ENVIRONMENT || 'TEST').toUpperCase();
+      switch (env) {
+        case 'MAIN': case 'MAINNET': return 'mainnet';
+        case 'PREVIEW': case 'PREVIEWNET': return 'previewnet';
+        case 'LOCAL': case 'LOCALHOST': return 'local';
+        default: return 'testnet';
+      }
+    })(),
+    // TLS options
+    tlsCert: null,
+    tlsKey: null,
+    tlsCa: null,
+    tlsPassphrase: null,
+    // Redis options
+    redis: false,
+    redisHost: process.env.REDIS_HOST || 'localhost',
+    redisPort: parseInt(process.env.REDIS_PORT) || 6379,
+    redisPassword: process.env.REDIS_PASSWORD || null
   };
 
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
+  // Parse remaining args (after common flags are removed)
+  const remainingArgs = commonFlags.remainingArgs;
+  for (let i = 0; i < remainingArgs.length; i++) {
+    switch (remainingArgs[i]) {
       case '--threshold':
       case '-t':
-        options.threshold = parseInt(args[++i]);
+        options.threshold = parseInt(remainingArgs[++i]);
         break;
 
       case '--keys':
       case '-k':
-        options.eligibleKeys = args[++i].split(',').map(k => k.trim());
+        options.eligibleKeys = remainingArgs[++i].split(',').map(k => {
+          const key = k.trim();
+          // Normalize: ensure 0x prefix for consistency
+          return key.startsWith('0x') ? key : `0x${key}`;
+        });
         break;
 
       case '--participants':
       case '-p':
-        options.participants = parseInt(args[++i]);
+        options.participants = parseInt(remainingArgs[++i]);
         break;
 
       case '--port':
-        options.port = parseInt(args[++i]);
+        options.port = parseInt(remainingArgs[++i]);
         break;
 
       case '--host':
-        options.host = args[++i];
+        options.host = remainingArgs[++i];
         break;
 
       case '--timeout':
-        options.timeout = parseInt(args[++i]) * 60000; // Convert minutes to ms
+        options.timeout = parseInt(remainingArgs[++i]) * 60000; // Convert minutes to ms
         break;
 
       case '--no-tunnel':
@@ -63,18 +172,44 @@ function parseArgs() {
         break;
 
       case '--pin':
-        options.pin = args[++i];
+        options.pin = remainingArgs[++i];
         break;
 
       case '--network':
       case '-n':
-        options.network = args[++i];
+        options.network = remainingArgs[++i];
         break;
 
-      case '--help':
-      case '-h':
-        printHelp();
-        process.exit(0);
+      case '--tls-cert':
+        options.tlsCert = remainingArgs[++i];
+        break;
+
+      case '--tls-key':
+        options.tlsKey = remainingArgs[++i];
+        break;
+
+      case '--tls-ca':
+        options.tlsCa = remainingArgs[++i];
+        break;
+
+      case '--tls-passphrase':
+        options.tlsPassphrase = remainingArgs[++i];
+        break;
+
+      case '--redis':
+        options.redis = true;
+        break;
+
+      case '--redis-host':
+        options.redisHost = remainingArgs[++i];
+        break;
+
+      case '--redis-port':
+        options.redisPort = parseInt(remainingArgs[++i]);
+        break;
+
+      case '--redis-password':
+        options.redisPassword = remainingArgs[++i];
         break;
     }
   }
@@ -83,9 +218,9 @@ function parseArgs() {
 }
 
 function printHelp() {
-  console.log(chalk.bold('\n📋 Hedera MultiSig Server\n'));
+  console.log(chalk.bold('\n📋 Hedera MultiSig Server v' + getVersion() + '\n'));
   console.log('Usage: node cli/server.js [options]\n');
-  console.log('Options:');
+  console.log('Server Options:');
   console.log('  -t, --threshold <n>        Number of signatures required (required)');
   console.log('  -k, --keys <keys>          Comma-separated eligible public keys (required)');
   console.log('  -p, --participants <n>     Expected number of participants (defaults to key count)');
@@ -93,35 +228,58 @@ function printHelp() {
   console.log('  --host <host>              Server host (default: localhost)');
   console.log('  --timeout <minutes>        Session timeout in minutes (default: 30)');
   console.log('  --no-tunnel                Disable automatic tunnel (local-only)');
-  console.log('  --pin <pin>                Custom 6-digit PIN (auto-generated if not provided)');
+  console.log('  --pin <token>              Custom session token (auto-generated if not provided)');
   console.log('  -n, --network <network>    Hedera network (testnet|mainnet, default: testnet)');
-  console.log('  -h, --help                 Show this help message\n');
-  console.log('Examples:');
+  console.log('');
+  console.log('TLS/Security Options:');
+  console.log('  --tls-cert <path>          Path to TLS certificate file (enables WSS)');
+  console.log('  --tls-key <path>           Path to TLS private key file');
+  console.log('  --tls-ca <path>            Path to CA certificate file (optional)');
+  console.log('  --tls-passphrase <pass>    Passphrase for private key (optional)');
+  console.log('');
+  console.log('Persistence Options:');
+  console.log('  --redis                    Enable Redis session persistence');
+  console.log('  --redis-host <host>        Redis host (default: localhost, env: REDIS_HOST)');
+  console.log('  --redis-port <port>        Redis port (default: 6379, env: REDIS_PORT)');
+  console.log('  --redis-password <pass>    Redis password (env: REDIS_PASSWORD)');
+  console.log(getCommonFlagsHelp());
+  console.log('\nExamples:');
   console.log('  # Start server for 2-of-3 multisig');
   console.log('  node cli/server.js -t 2 -k "key1,key2,key3"\n');
   console.log('  # Start server with custom port and no tunnel');
   console.log('  node cli/server.js -t 2 -k "key1,key2,key3" --port 8080 --no-tunnel\n');
+  console.log('  # Start server with TLS (secure WebSocket)');
+  console.log('  node cli/server.js -t 2 -k "key1,key2" --tls-cert ./cert.pem --tls-key ./key.pem\n');
+  console.log('  # Start server with Redis persistence');
+  console.log('  node cli/server.js -t 2 -k "key1,key2" --redis --redis-host redis.example.com\n');
+  console.log('  # Get session info as JSON (for scripting)');
+  console.log('  node cli/server.js -t 2 -k "key1,key2" --json\n');
 }
 
 async function main() {
   const options = parseArgs();
 
+  // Initialize logging based on CLI flags
+  const log = initializeLogging(options, 'Server');
+
+  // Create JSON output handler
+  const jsonOutput = new JsonOutput(options.json);
+
   // Validate required options
   if (!options.threshold) {
-    console.error(chalk.red('❌ Error: --threshold is required'));
-    printHelp();
-    process.exit(1);
+    exitWithError('--threshold is required', ExitCodes.VALIDATION_ERROR, jsonOutput);
   }
 
   if (options.eligibleKeys.length === 0) {
-    console.error(chalk.red('❌ Error: --keys is required'));
-    printHelp();
-    process.exit(1);
+    exitWithError('--keys is required', ExitCodes.VALIDATION_ERROR, jsonOutput);
   }
 
   if (options.threshold > options.eligibleKeys.length) {
-    console.error(chalk.red(`❌ Error: Threshold (${options.threshold}) cannot exceed number of keys (${options.eligibleKeys.length})`));
-    process.exit(1);
+    exitWithError(
+      `Threshold (${options.threshold}) cannot exceed number of keys (${options.eligibleKeys.length})`,
+      ExitCodes.VALIDATION_ERROR,
+      jsonOutput
+    );
   }
 
   // Set expected participants
@@ -133,22 +291,60 @@ async function main() {
     console.log(chalk.bold.cyan('\n🚀 Starting Hedera MultiSig Server\n'));
     console.log(chalk.cyan('═'.repeat(60)));
 
-    // Create Hedera client
-    const client = options.network === 'mainnet'
-      ? Client.forMainnet()
-      : Client.forTestnet();
+    // Create Hedera client (supports testnet, mainnet, previewnet, local)
+    let client;
+    switch (options.network) {
+      case 'mainnet': client = Client.forMainnet(); break;
+      case 'previewnet': client = Client.forPreviewnet(); break;
+      case 'local': client = Client.forLocalNode(); break;
+      default: client = Client.forTestnet();
+    }
 
     console.log(chalk.white('Network: ') + chalk.yellow(options.network));
     console.log(chalk.white('Threshold: ') + chalk.yellow(`${options.threshold} of ${options.eligibleKeys.length}`));
     console.log(chalk.white('Expected Participants: ') + chalk.yellow(options.participants));
     console.log(chalk.white('Session Timeout: ') + chalk.yellow(`${options.timeout / 60000} minutes`));
+
+    // Create session store (Redis or in-memory)
+    const store = createSessionStore({
+      type: options.redis ? 'redis' : 'memory',
+      defaultTimeout: options.timeout,
+      redis: options.redis ? {
+        host: options.redisHost,
+        port: options.redisPort,
+        password: options.redisPassword
+      } : undefined
+    });
+
+    // Connect to Redis if enabled
+    if (options.redis) {
+      const connected = await store.connect();
+      if (connected) {
+        console.log(chalk.white('Session Store: ') + chalk.green('Redis') + chalk.gray(` (${options.redisHost}:${options.redisPort})`));
+      } else {
+        console.log(chalk.white('Session Store: ') + chalk.yellow('In-Memory (Redis unavailable)'));
+      }
+    } else {
+      console.log(chalk.white('Session Store: ') + chalk.yellow('In-Memory'));
+    }
+
     console.log(chalk.cyan('═'.repeat(60)) + '\n');
 
-    // Create session manager
+    // Create session manager with store
     const sessionManager = new SigningSessionManager(client, {
       defaultTimeout: options.timeout,
-      verbose: true
+      verbose: true,
+      store: store
     });
+
+    // Build TLS configuration if certificates provided
+    const tlsConfig = options.tlsCert && options.tlsKey ? {
+      enabled: true,
+      cert: options.tlsCert,
+      key: options.tlsKey,
+      ca: options.tlsCa || undefined,
+      passphrase: options.tlsPassphrase || undefined
+    } : null;
 
     // Create WebSocket server
     const wsServer = new WebSocketServer(sessionManager, {
@@ -158,7 +354,8 @@ async function main() {
       tunnel: options.tunnel ? {
         enabled: true,
         provider: 'auto' // ngrok → localtunnel fallback
-      } : null
+      } : null,
+      tls: tlsConfig
     });
 
     // Start server
@@ -199,52 +396,100 @@ async function main() {
       }
     });
 
-    // Display session info
-    console.log(chalk.bold.green('✅ Pre-Session Created Successfully!\n'));
-    console.log(chalk.cyan('═'.repeat(60)));
-    console.log(chalk.bold.white('SESSION INFORMATION'));
-    console.log(chalk.cyan('═'.repeat(60)));
-    console.log(chalk.white('Session ID: ') + chalk.yellow(session.sessionId));
-    console.log(chalk.white('PIN: ') + chalk.bold.yellow(session.pin));
+    // Build session data
+    const shareUrl = serverInfo.publicUrl || serverInfo.url;
+    const connectionString = generateConnectionString(shareUrl, session.sessionId, session.pin);
 
-    if (serverInfo.publicUrl) {
-      console.log(chalk.white('Public URL: ') + chalk.yellow(serverInfo.publicUrl));
-      console.log(chalk.white('Local URL: ') + chalk.gray(serverInfo.url));
+    const sessionFileData = {
+      sessionId: session.sessionId,
+      pin: session.pin,
+      serverUrl: shareUrl,
+      localUrl: serverInfo.url,
+      publicUrl: serverInfo.publicUrl || null,
+      connectionString: connectionString,
+      network: options.network,
+      threshold: options.threshold,
+      expectedParticipants: options.participants,
+      expiresAt: session.expiresAt,
+      createdAt: Date.now()
+    };
+
+    // JSON mode: output structured data and continue running
+    if (options.json) {
+      jsonOutput.set('session', sessionFileData);
+      jsonOutput.set('status', 'running');
+      jsonOutput.print(true);
+      // Continue running server but no more console output
     } else {
-      console.log(chalk.white('Local URL: ') + chalk.yellow(serverInfo.url));
+      // Display session info (interactive mode)
+      console.log(chalk.bold.green('✅ Pre-Session Created Successfully!\n'));
+      console.log(chalk.cyan('═'.repeat(60)));
+      console.log(chalk.bold.white('SESSION INFORMATION'));
+      console.log(chalk.cyan('═'.repeat(60)));
+      console.log(chalk.white('Session ID: ') + chalk.yellow(session.sessionId));
+      console.log(chalk.white('PIN: ') + chalk.bold.yellow(session.pin));
+
+      if (serverInfo.publicUrl) {
+        console.log(chalk.white('Public URL: ') + chalk.yellow(serverInfo.publicUrl));
+        console.log(chalk.white('Local URL: ') + chalk.gray(serverInfo.url));
+      } else {
+        console.log(chalk.white('Local URL: ') + chalk.yellow(serverInfo.url));
+      }
+
+      console.log(chalk.white('Expires: ') + chalk.yellow(new Date(session.expiresAt).toLocaleString()));
+      console.log(chalk.cyan('═'.repeat(60)));
+
+      console.log(chalk.bold.white('\n📋 SHARE WITH PARTICIPANTS:\n'));
+      console.log(chalk.yellow(`Server URL: ${shareUrl}`));
+      console.log(chalk.yellow(`Session ID: ${session.sessionId}`));
+      console.log(chalk.yellow(`PIN: ${session.pin}\n`));
+
+      console.log(chalk.bold.white('🔗 CONNECTION STRING (paste in dApp):'));
+      console.log(chalk.cyan(`  ${connectionString}\n`));
+
+      // Display QR code
+      displayQRCode(connectionString);
+
+      console.log(chalk.white('\nParticipants can also run:'));
+      console.log(chalk.gray(`  node cli/participant.js --url "${shareUrl}" --session "${session.sessionId}" --pin "${session.pin}"\n`));
     }
 
-    console.log(chalk.white('Expires: ') + chalk.yellow(new Date(session.expiresAt).toLocaleString()));
-    console.log(chalk.cyan('═'.repeat(60)));
+    // Write session file for auto-discovery
+    if (writeSessionFile(sessionFileData) && !options.json) {
+      console.log(chalk.cyan('═'.repeat(60)));
+      console.log(chalk.green(`✅ Session file written: ${SESSION_FILE}`));
+      console.log(chalk.gray('   Other scripts will auto-detect this session.\n'));
+    }
 
-    console.log(chalk.bold.white('\n📋 SHARE WITH PARTICIPANTS:\n'));
-    const shareUrl = serverInfo.publicUrl || serverInfo.url;
-    console.log(chalk.yellow(`Server URL: ${shareUrl}`));
-    console.log(chalk.yellow(`Session ID: ${session.sessionId}`));
-    console.log(chalk.yellow(`PIN: ${session.pin}\n`));
-
-    console.log(chalk.white('Participants should run:'));
-    console.log(chalk.cyan(`  node cli/participant.js --url "${shareUrl}" --session "${session.sessionId}" --pin "${session.pin}"\n`));
-
-    console.log(chalk.cyan('═'.repeat(60)));
-    console.log(chalk.bold.white('\n⏳ Waiting for participants to connect and become ready...\n'));
+    if (!options.json) {
+      console.log(chalk.cyan('═'.repeat(60)));
+      console.log(chalk.bold.white('\n⏳ Waiting for participants to connect and become ready...\n'));
+    }
 
     // Keep server running
     process.on('SIGINT', async () => {
-      console.log(chalk.yellow('\n\n⚠️  Shutting down server...'));
+      if (!options.json) {
+        console.log(chalk.yellow('\n\n⚠️  Shutting down server...'));
+      }
+      cleanupSessionFile();
       await wsServer.stop();
       sessionManager.shutdown();
-      process.exit(0);
+      process.exit(ExitCodes.SUCCESS);
+    });
+
+    // Also cleanup on other exit signals
+    process.on('SIGTERM', () => {
+      cleanupSessionFile();
     });
 
   } catch (error) {
-    console.error(chalk.red(`\n❌ Error: ${error.message}\n`));
-    process.exit(1);
+    exitWithError(error.message, ExitCodes.SESSION_ERROR, jsonOutput);
   }
 }
 
 // Run
 main().catch((error) => {
+  // Fallback error handling (jsonOutput not available here)
   console.error(chalk.red(`\n❌ Fatal error: ${error.message}\n`));
-  process.exit(1);
+  process.exit(ExitCodes.INTERNAL_ERROR);
 });

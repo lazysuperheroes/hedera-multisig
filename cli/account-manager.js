@@ -29,6 +29,12 @@ const { spawn } = require('child_process');
 const readlineSync = require('readline-sync');
 const chalk = require('chalk');
 const path = require('path');
+const {
+  ExitCodes,
+  parseCommonFlags,
+  printVersion,
+  getVersion
+} = require('./utils/cliUtils');
 
 function getArg(arg) {
   const index = process.argv.indexOf(`--${arg}`);
@@ -180,7 +186,7 @@ async function main() {
 
     if (operationKey) {
       await runOperation(operationKey);
-      process.exit(0);
+      process.exit(ExitCodes.SUCCESS);
     } else {
       console.log(chalk.red(`\n❌ Unknown operation: ${operationArg}\n`));
       console.log(chalk.white('Available operations:'));
@@ -188,7 +194,7 @@ async function main() {
         console.log(chalk.gray(`  - ${op.name}`));
       });
       console.log('');
-      process.exit(1);
+      process.exit(ExitCodes.VALIDATION_ERROR);
     }
   }
 
@@ -200,7 +206,7 @@ async function main() {
 
     if (choice === '0') {
       console.log(chalk.green('\n👋 Goodbye!\n'));
-      process.exit(0);
+      process.exit(ExitCodes.SUCCESS);
     }
 
     const success = await runOperation(choice);
@@ -214,18 +220,32 @@ async function main() {
 
     if (!continueChoice) {
       console.log(chalk.green('\n👋 Goodbye!\n'));
-      process.exit(0);
+      process.exit(ExitCodes.SUCCESS);
     }
   }
 }
 
+// Parse common flags
+const commonFlags = parseCommonFlags(process.argv.slice(2));
+
+// Show version
+if (commonFlags.version) {
+  printVersion();
+  process.exit(ExitCodes.SUCCESS);
+}
+
 // Show help
-if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log('Hedera Multi-Sig Account Manager');
+if (commonFlags.help) {
+  console.log('Hedera Multi-Sig Account Manager v' + getVersion());
   console.log('');
   console.log('Usage:');
   console.log('  node cli/account-manager.js                    # Interactive menu');
   console.log('  node cli/account-manager.js --operation <name> # Direct operation');
+  console.log('');
+  console.log('Options:');
+  console.log('  --operation <name>   Run a specific operation directly');
+  console.log('  -V, --version        Show version information');
+  console.log('  -h, --help           Show this help message');
   console.log('');
   console.log('Available Operations:');
   Object.values(operations).forEach(op => {
@@ -237,11 +257,11 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log('  node cli/account-manager.js --operation generate-keys');
   console.log('  node cli/account-manager.js --operation setup-multisig');
   console.log('');
-  process.exit(0);
+  process.exit(ExitCodes.SUCCESS);
 }
 
 // Run
 main().catch(error => {
   console.error(chalk.red(`\n❌ Fatal error: ${error.message}\n`));
-  process.exit(1);
+  process.exit(ExitCodes.INTERNAL_ERROR);
 });

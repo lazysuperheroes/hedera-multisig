@@ -7,7 +7,12 @@
 
 const WebSocket = require('ws');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const chalk = require('chalk');
+const { normalizePublicKey, isKeyEligible } = require('./utils/keyUtils');
+const { createLogger } = require('../shared/logger');
+const { timerController } = require('../shared/TimerController');
 
 class MultiSigWebSocketServer {
   constructor(sessionManager, options = {}) {
@@ -19,12 +24,25 @@ class MultiSigWebSocketServer {
       ...options
     };
 
+    // Create logger instance for this server
+    this.log = createLogger('WebSocketServer');
+
     this.server = null;
     this.wss = null;
     this.clients = new Map(); // participantId -> ws connection
     this.coordinatorClients = new Map(); // sessionId -> coordinator ws
     this.tunnel = null; // Tunnel instance (ngrok or localtunnel)
     this.tunnelType = null; // 'ngrok' or 'localtunnel'
+    this.isSecure = false; // Whether TLS is enabled
+
+    // TLS/SSL configuration
+    // Options:
+    //   tls.enabled: true to enable TLS
+    //   tls.cert: Path to certificate file or PEM string
+    //   tls.key: Path to private key file or PEM string
+    //   tls.ca: (optional) Path to CA certificate file or PEM string
+    //   tls.passphrase: (optional) Passphrase for private key
+    this.tlsOptions = options.tls || null;
 
     // Rate limiting for AUTH attempts (prevents PIN brute force and griefing)
     this.authAttempts = new Map(); // IP -> { count, resetTime, blocked }
@@ -34,15 +52,22 @@ class MultiSigWebSocketServer {
       blockDurationMs: 300000  // 5 minute block after too many failures
     };
 
-    // Cleanup expired rate limit entries every 10 minutes
-    this.rateLimitCleanupInterval = setInterval(() => {
+    // Heartbeat configuration for detecting dead connections
+    this.heartbeatConfig = {
+      interval: options.heartbeatInterval || 30000,  // Ping every 30 seconds
+      timeout: options.heartbeatTimeout || 10000     // Wait 10 seconds for pong
+    };
+    this.heartbeatTimerId = null;
+
+    // Cleanup expired rate limit entries every 10 minutes (using TimerController)
+    this.rateLimitCleanupTimerId = timerController.setInterval(() => {
       const now = Date.now();
       for (const [ip, data] of this.authAttempts.entries()) {
         if (data.resetTime < now) {
           this.authAttempts.delete(ip);
         }
       }
-    }, 600000);
+    }, 600000, 'rate-limit-cleanup');
   }
 
   /**
@@ -53,11 +78,22 @@ class MultiSigWebSocketServer {
   async start() {
     return new Promise((resolve, reject) => {
       try {
-        // Create HTTP server
-        this.server = http.createServer((req, res) => {
+        // Check if TLS is enabled
+        this.isSecure = this.tlsOptions && this.tlsOptions.enabled;
+
+        const requestHandler = (req, res) => {
           res.writeHead(200, { 'Content-Type': 'text/plain' });
-          res.end('Hedera MultiSig Server\n');
-        });
+          res.end(`Hedera MultiSig Server${this.isSecure ? ' (Secure)' : ''}\n`);
+        };
+
+        if (this.isSecure) {
+          // Load TLS certificates
+          const tlsCreds = this._loadTlsCredentials();
+          this.server = https.createServer(tlsCreds, requestHandler);
+        } else {
+          // Create HTTP server (non-secure)
+          this.server = http.createServer(requestHandler);
+        }
 
         // Create WebSocket server
         this.wss = new WebSocket.Server({ server: this.server });
@@ -70,23 +106,45 @@ class MultiSigWebSocketServer {
         // Start listening
         this.server.listen(this.options.port, this.options.host, async () => {
           const address = this.server.address();
-          const url = `ws://${address.address}:${address.port}`;
+
+          // Convert IPv6 addresses to user-friendly format
+          let displayHost = address.address;
+          if (displayHost === '::1' || displayHost === '::') {
+            // IPv6 localhost → use 'localhost' for clarity
+            displayHost = 'localhost';
+          } else if (displayHost === '0.0.0.0') {
+            // All interfaces → show as localhost for local connections
+            displayHost = 'localhost';
+          }
+
+          const protocol = this.isSecure ? 'wss' : 'ws';
+          const url = `${protocol}://${displayHost}:${address.port}`;
+
+          // Structured logging
+          this.log.info('Server started', { host: displayHost, port: address.port, secure: this.isSecure, url });
 
           if (this.options.verbose) {
             console.log(chalk.bold.green('\n✅ WebSocket Server Started'));
             console.log(chalk.cyan('─'.repeat(50)));
-            console.log(chalk.white('Host: ') + chalk.yellow(address.address));
+            console.log(chalk.white('Host: ') + chalk.yellow(displayHost));
             console.log(chalk.white('Port: ') + chalk.yellow(address.port));
+            console.log(chalk.white('Secure: ') + (this.isSecure
+              ? chalk.green('Yes (TLS/WSS)')
+              : chalk.yellow('No (WS)')));
             console.log(chalk.white('Local URL: ') + chalk.yellow(url));
             console.log(chalk.cyan('─'.repeat(50)) + '\n');
           }
 
           const result = {
-            host: address.address,
+            host: displayHost,
             port: address.port,
             url,
-            publicUrl: null
+            publicUrl: null,
+            isSecure: this.isSecure
           };
+
+          // Start heartbeat for connection health monitoring
+          this._startHeartbeat();
 
           // Start tunnel if enabled
           if (this.options.tunnel && this.options.tunnel.enabled) {
@@ -129,9 +187,13 @@ class MultiSigWebSocketServer {
     // Stop tunnel first
     await this._stopTunnel();
 
-    // Clear rate limit cleanup interval
-    if (this.rateLimitCleanupInterval) {
-      clearInterval(this.rateLimitCleanupInterval);
+    // Stop heartbeat
+    this._stopHeartbeat();
+
+    // Clear rate limit cleanup interval via TimerController
+    if (this.rateLimitCleanupTimerId) {
+      timerController.clear(this.rateLimitCleanupTimerId);
+      this.rateLimitCleanupTimerId = null;
     }
 
     return new Promise((resolve) => {
@@ -228,13 +290,37 @@ class MultiSigWebSocketServer {
     let sessionId = null;
     let isCoordinator = false;
 
+    // Initialize heartbeat tracking
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
     if (this.options.verbose) {
-      console.log(chalk.cyan(`\n📡 New connection from ${req.socket.remoteAddress}`));
+      // Format IP address for display (convert IPv6 localhost to friendly format)
+      let displayAddress = req.socket.remoteAddress;
+      if (displayAddress === '::1' || displayAddress === '::ffff:127.0.0.1') {
+        displayAddress = 'localhost';
+      } else if (displayAddress?.startsWith('::ffff:')) {
+        // Strip IPv6-mapped IPv4 prefix
+        displayAddress = displayAddress.replace('::ffff:', '');
+      }
+      console.log(chalk.cyan(`\n📡 New connection from ${displayAddress}`));
     }
 
     // Handle messages from client
     ws.on('message', async (data) => {
       try {
+        // PERF-04: Validate message before parsing
+        const validationError = this._validateRawMessage(data);
+        if (validationError) {
+          ws.send(JSON.stringify({
+            type: 'ERROR',
+            payload: { message: validationError }
+          }));
+          return;
+        }
+
         const message = JSON.parse(data.toString());
 
         if (this.options.verbose) {
@@ -286,6 +372,7 @@ class MultiSigWebSocketServer {
         }
 
       } catch (error) {
+        this.log.error('Error handling message', { error: error.message, sessionId, participantId });
         console.error(chalk.red(`\n❌ Error handling message: ${error.message}\n`));
         ws.send(JSON.stringify({
           type: 'ERROR',
@@ -442,7 +529,7 @@ class MultiSigWebSocketServer {
       const sessionInfo = this.sessionManager.getSessionInfo(sessionId);
 
       if (sessionInfo && sessionInfo.eligiblePublicKeys) {
-        const isEligible = sessionInfo.eligiblePublicKeys.includes(publicKey);
+        const isEligible = isKeyEligible(publicKey, sessionInfo.eligiblePublicKeys);
 
         if (!isEligible) {
           this._recordFailedAuth(clientIp, rateLimitAttempts);
@@ -483,6 +570,7 @@ class MultiSigWebSocketServer {
         }
       }));
 
+      this.log.info('Coordinator authenticated', { sessionId, clientIp });
       if (this.options.verbose) {
         console.log(chalk.green(`✅ Coordinator authenticated for session ${sessionId}`));
       }
@@ -518,6 +606,7 @@ class MultiSigWebSocketServer {
         }
       }));
 
+      this.log.info('Participant authenticated', { sessionId, participantId, label: label || 'anonymous', clientIp });
       if (this.options.verbose) {
         console.log(chalk.green(`✅ Participant ${participantId} authenticated (${label || 'anonymous'})`));
       }
@@ -562,11 +651,21 @@ class MultiSigWebSocketServer {
     try {
       const { publicKey, signature } = message.payload;
 
+      this.log.debug('Signature submitted', { sessionId, participantId, publicKeyPreview: '...' + publicKey.slice(-8) });
+
       const result = await this.sessionManager.submitSignature(
         sessionId,
         participantId,
         { publicKey, signature }
       );
+
+      this.log.info('Signature accepted', {
+        sessionId,
+        participantId,
+        signaturesCollected: result.signaturesCollected,
+        signaturesRequired: result.signaturesRequired,
+        thresholdMet: result.thresholdMet
+      });
 
       // Confirm to participant
       this.sendToParticipant(participantId, {
@@ -638,25 +737,51 @@ class MultiSigWebSocketServer {
     try {
       const { frozenTransaction, txDetails, metadata, contractInterface } = message.payload;
 
-      // Transaction should be passed as bytes from coordinator
-      // Reconstruct from bytes (coordinator already has Transaction object)
-      // For now, we expect the coordinator to serialize and send txDetails
-
-      // Update session with transaction
-      const result = {
-        sessionId,
-        status: 'transaction-received',
-        txDetails,
-        metadata
-      };
+      // Normalize frozen transaction format at ingestion (PERF-03)
+      const normalizedTx = this._normalizeFrozenTransaction(frozenTransaction);
+      if (!normalizedTx) {
+        throw new Error('Invalid frozen transaction format');
+      }
 
       // Store in session via SessionStore
       const session = this.sessionManager.store.getSession(sessionId);
       if (session) {
-        session.frozenTransaction = frozenTransaction;
+        // Clear any existing expiration timeout via TimerController
+        if (session.expirationTimerId) {
+          timerController.clear(session.expirationTimerId);
+        }
+
+        session.frozenTransaction = normalizedTx;
         session.txDetails = txDetails;
         session.status = 'transaction-received';
         session.transactionReceivedAt = Date.now();
+
+        // Calculate expiration time from txDetails
+        // txDetails should contain validStartTimestamp and transactionValidDuration
+        // IMPORTANT: Store transaction expiration separately from session expiration
+        if (txDetails && txDetails.validStartTimestamp) {
+          const validDuration = txDetails.transactionValidDuration || 120;
+          const txExpiresAt = txDetails.validStartTimestamp + validDuration;
+          session.transactionExpiresAt = txExpiresAt; // Separate from session.expiresAt
+
+          // Set up expiration timeout
+          const now = Math.floor(Date.now() / 1000);
+          const timeUntilExpiry = (txExpiresAt - now) * 1000;
+
+          if (timeUntilExpiry > 0) {
+            session.expirationTimerId = timerController.setTimeout(() => {
+              this._handleTransactionExpired(sessionId);
+            }, timeUntilExpiry, `tx-expiry-${sessionId}`);
+
+            if (this.options.verbose) {
+              console.log(chalk.yellow(`⏱️  Transaction expires in ${Math.round(timeUntilExpiry / 1000)}s`));
+            }
+          } else {
+            // Already expired
+            this._handleTransactionExpired(sessionId);
+            return;
+          }
+        }
       }
 
       // Broadcast to all participants
@@ -679,6 +804,59 @@ class MultiSigWebSocketServer {
         type: 'INJECTION_FAILED',
         payload: { message: error.message }
       });
+    }
+  }
+
+  /**
+   * Handle transaction expiration
+   * @private
+   */
+  _handleTransactionExpired(sessionId) {
+    const session = this.sessionManager.store.getSession(sessionId);
+
+    if (session && session.status !== 'completed') {
+      // Transaction expired, but session is still valid
+      // Reset to 'waiting' so a new transaction can be injected
+      const wasExpired = session.status === 'transaction-expired';
+
+      if (!wasExpired) {
+        session.status = 'transaction-expired';
+
+        if (this.options.verbose) {
+          console.log(chalk.red(`\n⏱️  Transaction expired for session ${sessionId}\n`));
+          console.log(chalk.yellow(`   Session remains active - can inject new transaction\n`));
+        }
+
+        // Broadcast to all participants
+        this.broadcastToSession(sessionId, {
+          type: 'TRANSACTION_EXPIRED',
+          payload: {
+            sessionId,
+            message: 'Transaction has expired and can no longer be signed'
+          }
+        });
+
+        // Notify coordinator
+        this.sendToCoordinator(sessionId, {
+          type: 'TRANSACTION_EXPIRED',
+          payload: {
+            sessionId,
+            message: 'Transaction has expired'
+          }
+        });
+
+        // Clear the transaction from session but keep session alive
+        session.frozenTransaction = null;
+        session.txDetails = null;
+        session.transactionExpiresAt = null;
+
+        // Clear any collected signatures (they're for the expired transaction)
+        session.signatures.clear();
+        session.stats.signaturesCollected = 0;
+
+        // Reset to waiting so a new transaction can be injected
+        session.status = 'waiting';
+      }
     }
   }
 
@@ -727,6 +905,135 @@ class MultiSigWebSocketServer {
         payload: { message: error.message }
       });
     }
+  }
+
+  /**
+   * Validate raw WebSocket message before JSON parsing (PERF-04)
+   * @private
+   * @param {Buffer} data - Raw message data
+   * @returns {string|null} Error message or null if valid
+   */
+  _validateRawMessage(data) {
+    // Check size limits
+    const MAX_MESSAGE_SIZE = 5 * 1024 * 1024; // 5MB max (transactions can be large)
+    const size = data.length;
+
+    if (size > MAX_MESSAGE_SIZE) {
+      this.log.warn('Message rejected: too large', { size, max: MAX_MESSAGE_SIZE });
+      return `Message too large: ${size} bytes (max: ${MAX_MESSAGE_SIZE})`;
+    }
+
+    if (size === 0) {
+      return 'Empty message received';
+    }
+
+    // Quick structure validation (avoid full parse for malformed data)
+    const str = data.toString('utf8', 0, Math.min(100, size));
+    const trimmed = str.trim();
+
+    if (!trimmed.startsWith('{')) {
+      return 'Invalid message format: expected JSON object';
+    }
+
+    // Check for type field presence (quick heuristic check)
+    if (!str.includes('"type"')) {
+      return 'Invalid message format: missing "type" field';
+    }
+
+    return null; // Valid
+  }
+
+  /**
+   * Normalize frozen transaction to standard format (PERF-03)
+   * Ensures consistent format: { bytes: Buffer, base64: string }
+   * @private
+   */
+  _normalizeFrozenTransaction(frozenTransaction) {
+    if (!frozenTransaction) {
+      return null;
+    }
+
+    let bytes;
+    let base64;
+
+    // Format 1: Plain base64 string
+    if (typeof frozenTransaction === 'string') {
+      base64 = frozenTransaction;
+      bytes = Buffer.from(base64, 'base64');
+    }
+    // Format 2: Object with base64 property
+    else if (frozenTransaction.base64) {
+      base64 = frozenTransaction.base64;
+      bytes = frozenTransaction.bytes
+        ? Buffer.from(frozenTransaction.bytes)
+        : Buffer.from(base64, 'base64');
+    }
+    // Format 3: Object with bytes property only
+    else if (frozenTransaction.bytes) {
+      bytes = Buffer.from(frozenTransaction.bytes);
+      base64 = bytes.toString('base64');
+    }
+    else {
+      return null;
+    }
+
+    return { bytes, base64 };
+  }
+
+  /**
+   * Start heartbeat ping/pong cycle for connection health monitoring
+   * @private
+   */
+  _startHeartbeat() {
+    if (this.heartbeatTimerId) {
+      return; // Already running
+    }
+
+    this.heartbeatTimerId = timerController.setInterval(() => {
+      this._sendHeartbeats();
+    }, this.heartbeatConfig.interval, 'ws-heartbeat');
+
+    this.log.debug('Heartbeat started', {
+      interval: this.heartbeatConfig.interval,
+      timeout: this.heartbeatConfig.timeout
+    });
+  }
+
+  /**
+   * Stop heartbeat cycle
+   * @private
+   */
+  _stopHeartbeat() {
+    if (this.heartbeatTimerId) {
+      timerController.clear(this.heartbeatTimerId);
+      this.heartbeatTimerId = null;
+    }
+  }
+
+  /**
+   * Send ping to all connected clients and check for dead connections
+   * @private
+   */
+  _sendHeartbeats() {
+    if (!this.wss) {
+      return;
+    }
+
+    const now = Date.now();
+
+    this.wss.clients.forEach((ws) => {
+      // Check if client missed last heartbeat (didn't respond to ping)
+      if (ws.isAlive === false) {
+        this.log.warn('Client failed heartbeat, terminating', {
+          readyState: ws.readyState
+        });
+        return ws.terminate();
+      }
+
+      // Mark as pending response and send ping
+      ws.isAlive = false;
+      ws.ping();
+    });
   }
 
   /**
@@ -831,6 +1138,55 @@ class MultiSigWebSocketServer {
     } catch (error) {
       throw new Error(`localtunnel failed: ${error.message}`);
     }
+  }
+
+  /**
+   * Load TLS credentials from files or PEM strings
+   * @private
+   * @returns {Object} TLS credentials for https.createServer
+   */
+  _loadTlsCredentials() {
+    if (!this.tlsOptions) {
+      throw new Error('TLS options not configured');
+    }
+
+    const { cert, key, ca, passphrase } = this.tlsOptions;
+
+    if (!cert || !key) {
+      throw new Error('TLS requires both cert and key options');
+    }
+
+    const credentials = {};
+
+    // Load certificate (file path or PEM string)
+    if (cert.includes('-----BEGIN')) {
+      credentials.cert = cert;
+    } else {
+      credentials.cert = fs.readFileSync(cert);
+    }
+
+    // Load private key (file path or PEM string)
+    if (key.includes('-----BEGIN')) {
+      credentials.key = key;
+    } else {
+      credentials.key = fs.readFileSync(key);
+    }
+
+    // Load CA certificate if provided (file path or PEM string)
+    if (ca) {
+      if (ca.includes('-----BEGIN')) {
+        credentials.ca = ca;
+      } else {
+        credentials.ca = fs.readFileSync(ca);
+      }
+    }
+
+    // Add passphrase if provided
+    if (passphrase) {
+      credentials.passphrase = passphrase;
+    }
+
+    return credentials;
   }
 
   /**

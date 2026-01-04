@@ -3,6 +3,7 @@
 	"version": "1.1.0",
 	"description": "Production-grade multi-signature transaction management library for Hedera blockchain with M-of-N threshold support, WalletConnect browser dApp, encrypted key storage, and comprehensive audit logging",
 	"main": "index.js",
+	"types": "types/index.d.ts",
 	"type": "commonjs",
 	"keywords": [
 		"hedera",
@@ -33,24 +34,36 @@
 		"url": "https://github.com/lazysuperheroes/hedera-multisig/issues"
 	},
 	"homepage": "https://github.com/lazysuperheroes/hedera-multisig#readme",
+	"bin": {
+		"hedera-multisig": "cli/index.js",
+		"multisig": "cli/index.js"
+	},
 	"dependencies": {
 		"@hashgraph/sdk": "^2.49.0",
-		"readline-sync": "^1.4.10",
-		"ws": "^8.14.2",
 		"chalk": "^4.1.2",
-		"ngrok": "^5.0.0-beta.2",
+		"commander": "^14.0.2",
+		"dotenv": "^16.0.0",
+		"ethers": "^6.16.0",
 		"localtunnel": "^2.0.2",
-		"ethers": "^5.7.2",
+		"ngrok": "^5.0.0-beta.2",
 		"node-fetch": "^2.7.0",
-		"dotenv": "^16.0.0"
+		"qrcode-terminal": "^0.12.0",
+		"readline-sync": "^1.4.10",
+		"ws": "^8.14.2"
+	},
+	"optionalDependencies": {
+		"ioredis": "^5.3.2"
 	},
 	"devDependencies": {
-		"mocha": "^10.0.0",
-		"chai": "^4.3.0"
+		"chai": "^4.3.0",
+		"clean-jsdoc-theme": "^4.3.0",
+		"jsdoc": "^4.0.4",
+		"mocha": "^10.0.0"
 	},
 	"scripts": {
+		"docs": "jsdoc -c jsdoc.json",
 		"test": "mocha test/*.test.js --timeout 120000",
-		"test:unit": "mocha test/keyProviders.test.js test/multiKeyType.test.js --timeout 120000",
+		"test:unit": "mocha test/keyProviders.test.js test/multiKeyType.test.js test/websocket.test.js test/sessionStore.test.js --timeout 120000",
 		"test:workflows": "mocha test/workflows.test.js --timeout 120000",
 		"test:networked": "mocha test/networked-workflow.test.js --timeout 120000",
 		"sign": "node cli/sign.js",
@@ -77,13 +90,16 @@
 	},
 	"files": [
 		"index.js",
+		"types/",
 		"core/",
 		"keyManagement/",
 		"workflows/",
 		"ui/",
 		"cli/",
+		"completions/",
 		"server/",
 		"client/",
+		"shared/",
 		"scripts/",
 		"examples/",
 		"README.md",
@@ -91,5 +107,8 @@
 		"CHANGELOG.md",
 		"TESTING.md",
 		"SETUP_GUIDE.md"
-	]
+	],
+	"overrides": {
+		"axios": "^1.7.9"
+	}
 }

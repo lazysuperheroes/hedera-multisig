@@ -1,10 +1,16 @@
 const { AccountId, ContractId } = require('@hashgraph/sdk');
+const {
+  TransactionDecoder: SharedDecoder,
+  getTransactionTypeName
+} = require('../shared/transaction-decoder');
 
 /**
  * TransactionDecoder - Decode and display Hedera transactions for user verification
  *
  * Provides detailed, human-readable information about transactions before signing.
  * Critical for user trust - users should never blindly sign transactions.
+ *
+ * This module provides terminal display functionality on top of the shared decoder.
  */
 class TransactionDecoder {
   /**
@@ -24,7 +30,8 @@ class TransactionDecoder {
    * @property {Object} raw - Raw transaction data and breakdown
    */
   static decode(transaction, contractInterface = null) {
-    const type = transaction.constructor.name;
+    // Use shared type detection (minification-safe)
+    const type = getTransactionTypeName(transaction);
     const details = {
       type,
       contract: null,
@@ -227,8 +234,8 @@ class TransactionDecoder {
    * @private
    */
   static _formatParameterValue(value, type) {
-    // Handle BigNumber/BigInt
-    if (value._isBigNumber || typeof value === 'bigint') {
+    // Handle BigInt (ethers v6 uses native BigInt)
+    if (typeof value === 'bigint') {
       const numValue = value.toString();
 
       // For large numbers, add helpful context

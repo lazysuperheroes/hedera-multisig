@@ -6,12 +6,14 @@
  */
 
 const crypto = require('crypto');
+const { timerController } = require('../shared/TimerController');
 
 class SessionStore {
   constructor(options = {}) {
     this.sessions = new Map();
     this.defaultTimeout = options.defaultTimeout || 1800000; // 30 minutes
     this.cleanupInterval = options.cleanupInterval || 60000; // 1 minute
+    this.cleanupTimerId = null;
 
     // Start automatic cleanup
     this._startCleanup();
@@ -104,7 +106,8 @@ class SessionStore {
       return false;
     }
 
-    return session.pin === pin;
+    // Use timing-safe comparison to prevent timing attacks
+    return this._timingSafeCompare(session.pin, pin);
   }
 
   /**
@@ -219,10 +222,18 @@ class SessionStore {
 
     const participant = session.participants.get(participantId);
     if (participant && participant.status !== 'signed') {
+      // Decrement ready count if participant was ready
+      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
+        session.stats.participantsReady--;
+      }
       session.participants.delete(participantId);
       session.stats.participantsConnected--;
     } else if (participant) {
       // Mark as disconnected but keep if signed
+      // Also decrement ready count if they were ready
+      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
+        session.stats.participantsReady--;
+      }
       participant.status = 'disconnected';
       participant.websocket = null;
     }
@@ -389,6 +400,35 @@ class SessionStore {
   }
 
   /**
+   * Timing-safe string comparison to prevent timing attacks
+   * @private
+   * @param {string} a - First string
+   * @param {string} b - Second string
+   * @returns {boolean} True if strings are equal
+   */
+  _timingSafeCompare(a, b) {
+    // Handle null/undefined
+    if (!a || !b) {
+      return false;
+    }
+
+    // Convert to buffers - pad shorter to match longer to avoid length-based timing leaks
+    const bufA = Buffer.from(a, 'utf8');
+    const bufB = Buffer.from(b, 'utf8');
+
+    // If lengths differ, still compare but return false
+    // Use max length buffer comparison to avoid timing leak
+    if (bufA.length !== bufB.length) {
+      // Compare against a dummy to maintain constant time, then return false
+      const dummy = Buffer.alloc(bufA.length, 0);
+      crypto.timingSafeEqual(bufA, dummy);
+      return false;
+    }
+
+    return crypto.timingSafeEqual(bufA, bufB);
+  }
+
+  /**
    * Generate unique session ID
    * @private
    */
@@ -409,9 +449,9 @@ class SessionStore {
    * @private
    */
   _startCleanup() {
-    this.cleanupTimer = setInterval(() => {
+    this.cleanupTimerId = timerController.setInterval(() => {
       this._cleanupExpiredSessions();
-    }, this.cleanupInterval);
+    }, this.cleanupInterval, 'session-cleanup');
   }
 
   /**
@@ -449,9 +489,9 @@ class SessionStore {
    * Stop cleanup timer
    */
   shutdown() {
-    if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = null;
+    if (this.cleanupTimerId) {
+      timerController.clear(this.cleanupTimerId);
+      this.cleanupTimerId = null;
     }
   }
 }

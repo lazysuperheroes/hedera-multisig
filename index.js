@@ -4,8 +4,9 @@
  * Production-grade multi-signature transaction management for Hedera blockchain.
  *
  * @module @lazysuperheroes/hedera-multisig
- * @version 1.0.0
  */
+
+const packageJson = require('./package.json');
 
 // Core Components
 const TransactionFreezer = require('./core/TransactionFreezer');
@@ -37,6 +38,9 @@ const { SessionStore, SigningSessionManager, WebSocketServer } = require('./serv
 
 // Client Components (Network-based Multi-Sig)
 const { SigningClient, TransactionReviewer } = require('./client');
+
+// Shared Components
+const SharedTransactionDecoder = require('./shared/transaction-decoder');
 
 // Main exports
 module.exports = {
@@ -74,6 +78,9 @@ module.exports = {
   SigningClient,
   TransactionReviewer,
 
+  // Shared Components
+  SharedTransactionDecoder,
+
   // Version
-  version: '1.0.0'
+  version: packageJson.version
 };

@@ -388,7 +388,7 @@ const { ethers } = require('ethers');
 class ContractCallAdapter {
   constructor(contractId, contractABI, client) {
     this.contractId = contractId;
-    this.contractInterface = new ethers.utils.Interface(contractABI);
+    this.contractInterface = new ethers.Interface(contractABI);
     this.client = client;
   }
 

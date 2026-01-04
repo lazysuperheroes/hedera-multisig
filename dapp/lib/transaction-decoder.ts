@@ -1,15 +1,108 @@
 /**
- * Transaction Decoder
+ * Transaction Decoder (Browser Implementation)
  *
- * Browser-compatible port of client/TransactionReviewer.js
- * Decodes frozen transactions, validates metadata, and generates checksums.
+ * ARCHITECTURE NOTE: This is intentionally a separate implementation from
+ * shared/transaction-decoder/index.js. The Hedera SDK has Node.js-specific
+ * dependencies (dns, fs, grpc-js) that cannot be bundled for browser environments.
+ *
+ * This browser version:
+ * - Uses Web Crypto API for SHA-256 hashing
+ * - Imports only transaction types from @hashgraph/sdk (tree-shakeable)
+ * - Provides identical API to the shared module for consistency
+ *
+ * The shared module (shared/transaction-decoder/) is used by:
+ * - Server (server/WebSocketServer.js)
+ * - CLI tools (cli/*.js)
+ * - Node.js client (client/SigningClient.js)
  *
  * Security-critical: Provides cryptographically verified transaction data
  * separate from unverified coordinator-provided metadata.
  */
 
-import { Transaction, TransferTransaction, TokenAssociateTransaction, AccountId, Hbar } from '@hashgraph/sdk';
+import {
+  Transaction,
+  TransferTransaction,
+  TokenAssociateTransaction,
+  TokenDissociateTransaction,
+  AccountCreateTransaction,
+  AccountUpdateTransaction,
+  AccountDeleteTransaction,
+  ContractCreateTransaction,
+  ContractExecuteTransaction,
+  ContractDeleteTransaction,
+  TokenCreateTransaction,
+  TokenMintTransaction,
+  TokenBurnTransaction,
+  TokenUpdateTransaction,
+  TokenDeleteTransaction,
+  TopicCreateTransaction,
+  TopicUpdateTransaction,
+  TopicDeleteTransaction,
+  TopicMessageSubmitTransaction,
+  FileCreateTransaction,
+  FileUpdateTransaction,
+  FileDeleteTransaction,
+  FileAppendTransaction,
+  ScheduleCreateTransaction,
+  ScheduleSignTransaction,
+  ScheduleDeleteTransaction,
+  AccountId,
+  Hbar,
+} from '@hashgraph/sdk';
 import { ethers } from 'ethers';
+
+/**
+ * Get the human-readable transaction type name
+ * Uses instanceof checks to avoid minification issues with constructor.name
+ */
+function getTransactionTypeName(transaction: Transaction): string {
+  // Transfer types
+  if (transaction instanceof TransferTransaction) return 'TransferTransaction';
+
+  // Token types
+  if (transaction instanceof TokenAssociateTransaction) return 'TokenAssociateTransaction';
+  if (transaction instanceof TokenDissociateTransaction) return 'TokenDissociateTransaction';
+  if (transaction instanceof TokenCreateTransaction) return 'TokenCreateTransaction';
+  if (transaction instanceof TokenMintTransaction) return 'TokenMintTransaction';
+  if (transaction instanceof TokenBurnTransaction) return 'TokenBurnTransaction';
+  if (transaction instanceof TokenUpdateTransaction) return 'TokenUpdateTransaction';
+  if (transaction instanceof TokenDeleteTransaction) return 'TokenDeleteTransaction';
+
+  // Account types
+  if (transaction instanceof AccountCreateTransaction) return 'AccountCreateTransaction';
+  if (transaction instanceof AccountUpdateTransaction) return 'AccountUpdateTransaction';
+  if (transaction instanceof AccountDeleteTransaction) return 'AccountDeleteTransaction';
+
+  // Contract types
+  if (transaction instanceof ContractCreateTransaction) return 'ContractCreateTransaction';
+  if (transaction instanceof ContractExecuteTransaction) return 'ContractExecuteTransaction';
+  if (transaction instanceof ContractDeleteTransaction) return 'ContractDeleteTransaction';
+
+  // Topic types
+  if (transaction instanceof TopicCreateTransaction) return 'TopicCreateTransaction';
+  if (transaction instanceof TopicUpdateTransaction) return 'TopicUpdateTransaction';
+  if (transaction instanceof TopicDeleteTransaction) return 'TopicDeleteTransaction';
+  if (transaction instanceof TopicMessageSubmitTransaction) return 'TopicMessageSubmitTransaction';
+
+  // File types
+  if (transaction instanceof FileCreateTransaction) return 'FileCreateTransaction';
+  if (transaction instanceof FileUpdateTransaction) return 'FileUpdateTransaction';
+  if (transaction instanceof FileDeleteTransaction) return 'FileDeleteTransaction';
+  if (transaction instanceof FileAppendTransaction) return 'FileAppendTransaction';
+
+  // Schedule types
+  if (transaction instanceof ScheduleCreateTransaction) return 'ScheduleCreateTransaction';
+  if (transaction instanceof ScheduleSignTransaction) return 'ScheduleSignTransaction';
+  if (transaction instanceof ScheduleDeleteTransaction) return 'ScheduleDeleteTransaction';
+
+  // Fallback - try constructor.name (may be minified)
+  const constructorName = transaction.constructor.name;
+  if (constructorName && constructorName.length > 1) {
+    return constructorName;
+  }
+
+  return 'UnknownTransaction';
+}
 
 export interface DecodedTransaction {
   type: string;
@@ -24,6 +117,11 @@ export interface TransactionDetails {
   nodeAccountIds?: string[];
   maxTransactionFee?: string;
   transactionMemo?: string;
+
+  // Timing - for countdown timer
+  validStartTimestamp?: number; // Unix timestamp in seconds
+  transactionValidDuration?: number; // Duration in seconds (default 120)
+  expiresAt?: number; // Unix timestamp when transaction expires
 
   // Transfer-specific
   transfers?: Array<{ accountId: string; amount: string }>;
@@ -89,11 +187,14 @@ export class TransactionDecoder {
       // Generate checksum (SHA256)
       const checksum = await this.generateChecksum(txBytes);
 
+      // Get transaction type name (handles minification)
+      const typeName = getTransactionTypeName(transaction);
+
       // Extract transaction details
-      const details = this.extractTransactionDetails(transaction, contractInterface);
+      const details = this.extractTransactionDetails(transaction, typeName, contractInterface);
 
       return {
-        type: transaction.constructor.name,
+        type: typeName,
         checksum: checksum,
         bytes: txBytes,
         details: details,
@@ -132,35 +233,64 @@ export class TransactionDecoder {
    * Extract transaction details from parsed transaction
    *
    * @param transaction - Parsed Hedera transaction
+   * @param typeName - Transaction type name (from getTransactionTypeName)
    * @param contractInterface - Optional ABI for contract decoding
    * @returns Transaction details object
    */
   static extractTransactionDetails(
     transaction: Transaction,
+    typeName: string,
     contractInterface?: ethers.Interface
   ): TransactionDetails {
+    // Extract valid start time from transaction ID
+    // Format: "0.0.2076@1764452239.277675395" -> 1764452239 seconds
+    const txId = transaction.transactionId;
+    let validStartTimestamp: number | undefined;
+    let transactionValidDuration = 120; // Default 120 seconds
+    let expiresAt: number | undefined;
+
+    if (txId) {
+      const txIdStr = txId.toString();
+      const match = txIdStr.match(/@(\d+)\./);
+      if (match) {
+        validStartTimestamp = parseInt(match[1], 10);
+      }
+
+      // Try to get the actual valid duration from the transaction
+      const duration = (transaction as any).transactionValidDuration;
+      if (duration) {
+        // Duration could be a Duration object with seconds property or a number
+        transactionValidDuration = typeof duration === 'number'
+          ? duration
+          : (duration.seconds || duration._seconds || 120);
+      }
+
+      if (validStartTimestamp) {
+        expiresAt = validStartTimestamp + transactionValidDuration;
+      }
+    }
+
     const details: TransactionDetails = {
-      type: transaction.constructor.name,
+      type: typeName,
       transactionId: transaction.transactionId?.toString(),
       nodeAccountIds: transaction.nodeAccountIds?.map((id) => id.toString()) || [],
       maxTransactionFee: transaction.maxTransactionFee?.toString() || '0',
       transactionMemo: (transaction as any).transactionMemo || '',
+      validStartTimestamp,
+      transactionValidDuration,
+      expiresAt,
     };
 
-    // Decode based on transaction type
-    const txName = transaction.constructor.name;
-
-    if (txName === 'TransferTransaction') {
-      this.decodeTransferTransaction(transaction as TransferTransaction, details);
-    } else if (txName === 'TokenAssociateTransaction') {
-      this.decodeTokenAssociateTransaction(transaction as TokenAssociateTransaction, details);
-    } else if (txName === 'ContractExecuteTransaction') {
+    // Decode based on transaction type using instanceof for reliability
+    if (transaction instanceof TransferTransaction) {
+      this.decodeTransferTransaction(transaction, details);
+    } else if (transaction instanceof TokenAssociateTransaction) {
+      this.decodeTokenAssociateTransaction(transaction, details);
+    } else if (transaction instanceof ContractExecuteTransaction) {
       this.decodeContractExecuteTransaction(transaction as any, details, contractInterface);
-    } else if (txName === 'ContractCallQuery') {
-      this.decodeContractCallQuery(transaction as any, details, contractInterface);
     } else {
       // Generic transaction - extract what we can
-      console.log(`Generic transaction type: ${txName}`);
+      console.log(`Generic transaction type: ${typeName}`);
     }
 
     return details;
@@ -170,51 +300,58 @@ export class TransactionDecoder {
    * Decode TransferTransaction
    */
   static decodeTransferTransaction(tx: TransferTransaction, details: TransactionDetails): void {
-    // Hbar transfers
+    // Hbar transfers - _hbarTransfers is an ARRAY of Transfer objects, not a Map!
     const hbarTransfers = (tx as any)._hbarTransfers;
-    if (hbarTransfers && hbarTransfers.size > 0) {
+    if (hbarTransfers && Array.isArray(hbarTransfers) && hbarTransfers.length > 0) {
       details.transfers = [];
-      for (const [accountId, amount] of hbarTransfers) {
+      for (const transfer of hbarTransfers) {
         details.transfers.push({
-          accountId: accountId.toString(),
-          amount: amount.toString(),
+          accountId: transfer.accountId.toString(),
+          amount: transfer.amount.toString(), // Hbar object stringifies to "X ℏ" format
         });
       }
     }
 
-    // Token transfers
+    // Token transfers - _tokenTransfers is an array of TokenTransfer objects
     const tokenTransfers = (tx as any)._tokenTransfers;
-    if (tokenTransfers && tokenTransfers.size > 0) {
+    if (tokenTransfers && Array.isArray(tokenTransfers) && tokenTransfers.length > 0) {
       details.tokenTransfers = [];
-      for (const [tokenId, transfers] of tokenTransfers) {
-        const transferArray = [];
-        for (const [accountId, amount] of transfers) {
-          transferArray.push({
-            accountId: accountId.toString(),
-            amount: amount.toString(),
-          });
+      // Group by token ID
+      const byToken = new Map<string, Array<{ accountId: string; amount: string }>>();
+      for (const transfer of tokenTransfers) {
+        const tokenId = transfer.tokenId.toString();
+        if (!byToken.has(tokenId)) {
+          byToken.set(tokenId, []);
         }
-        details.tokenTransfers.push({
-          tokenId: tokenId.toString(),
-          transfers: transferArray,
+        byToken.get(tokenId)!.push({
+          accountId: transfer.accountId.toString(),
+          amount: transfer.amount.toString(),
         });
+      }
+      for (const [tokenId, transfers] of byToken) {
+        details.tokenTransfers.push({ tokenId, transfers });
       }
     }
 
-    // NFT transfers
+    // NFT transfers - _nftTransfers is an array of TokenNftTransfer objects
     const nftTransfers = (tx as any)._nftTransfers;
-    if (nftTransfers && nftTransfers.size > 0) {
+    if (nftTransfers && Array.isArray(nftTransfers) && nftTransfers.length > 0) {
       details.nftTransfers = [];
-      for (const [tokenId, transfers] of nftTransfers) {
-        const transferArray = transfers.map((transfer: any) => ({
+      // Group by token ID
+      const byToken = new Map<string, Array<{ senderAccountId: string; receiverAccountId: string; serialNumber: number }>>();
+      for (const transfer of nftTransfers) {
+        const tokenId = transfer.tokenId.toString();
+        if (!byToken.has(tokenId)) {
+          byToken.set(tokenId, []);
+        }
+        byToken.get(tokenId)!.push({
           senderAccountId: transfer.sender.toString(),
           receiverAccountId: transfer.receiver.toString(),
-          serialNumber: transfer.serial.toNumber(),
-        }));
-        details.nftTransfers.push({
-          tokenId: tokenId.toString(),
-          transfers: transferArray,
+          serialNumber: typeof transfer.serial?.toNumber === 'function' ? transfer.serial.toNumber() : Number(transfer.serial),
         });
+      }
+      for (const [tokenId, transfers] of byToken) {
+        details.nftTransfers.push({ tokenId, transfers });
       }
     }
   }
@@ -493,20 +630,37 @@ export class TransactionDecoder {
     });
 
     // Validate amounts if provided
-    if (metadata.amount || metadata.amounts) {
+    // Note: A transfer has multiple accounting entries (debit + credit), so we validate
+    // that the claimed amount exists somewhere in the transaction, not count matching
+    if (metadata.amount) {
       const actualAmounts = this.extractAmounts(txDetails);
-      const metadataAmounts = metadata.amounts || [metadata.amount];
 
-      // Simple validation - check if counts match
-      if (actualAmounts.length !== metadataAmounts.length) {
-        mismatches.amounts = {
-          metadata: metadataAmounts,
-          actual: actualAmounts,
-        };
-        warnings.push(
-          `❌ AMOUNT MISMATCH: Metadata claims ${metadataAmounts.length} amounts, ` +
-          `but transaction has ${actualAmounts.length} amounts`
-        );
+      // Extract the numeric value from metadata (e.g., "1 ℏ" -> 1, or { value: "1", unit: "HBAR" } -> 1)
+      let claimedValue: string | null = null;
+      if (typeof metadata.amount === 'object' && metadata.amount.value) {
+        claimedValue = metadata.amount.value.toString().replace(/[^\d.-]/g, '');
+      } else if (typeof metadata.amount === 'string') {
+        claimedValue = metadata.amount.replace(/[^\d.-]/g, '');
+      }
+
+      if (claimedValue && actualAmounts.length > 0) {
+        // Check if the claimed value exists in any of the actual amounts (absolute value)
+        const claimedNum = Math.abs(parseFloat(claimedValue));
+        const foundMatch = actualAmounts.some((a) => {
+          const actualNum = Math.abs(parseFloat(a.amount.replace(/[^\d.-]/g, '')));
+          return Math.abs(actualNum - claimedNum) < 0.0001; // Allow small float tolerance
+        });
+
+        if (!foundMatch) {
+          mismatches.amounts = {
+            metadata: metadata.amount,
+            actual: actualAmounts.map((a) => a.amount),
+          };
+          warnings.push(
+            `❌ AMOUNT MISMATCH: Metadata claims "${claimedValue}", ` +
+            `but no matching amount found in transaction`
+          );
+        }
       }
     }
 
@@ -534,15 +688,34 @@ export class TransactionDecoder {
     }
 
     // Validate transaction type if provided
+    // Allow colloquial aliases (e.g., "HBAR Transfer" = "TransferTransaction")
+    const typeAliases: Record<string, string[]> = {
+      TransferTransaction: ['HBAR Transfer', 'Transfer', 'Crypto Transfer', 'Token Transfer'],
+      TokenAssociateTransaction: ['Token Associate', 'Token Association'],
+      TokenDissociateTransaction: ['Token Dissociate', 'Token Dissociation'],
+      ContractExecuteTransaction: ['Contract Call', 'Contract Execute', 'Smart Contract Call'],
+      ContractCreateTransaction: ['Contract Deploy', 'Contract Create', 'Smart Contract Deploy'],
+      AccountCreateTransaction: ['Account Create', 'Create Account'],
+      AccountUpdateTransaction: ['Account Update', 'Update Account'],
+    };
+
     if (metadata.type && metadata.type !== txDetails.type) {
-      mismatches.type = {
-        metadata: metadata.type,
-        actual: txDetails.type,
-      };
-      warnings.push(
-        `❌ TYPE MISMATCH: Metadata claims "${metadata.type}", ` +
-        `but transaction is "${txDetails.type}"`
+      // Check if metadata type is a valid alias
+      const aliases = typeAliases[txDetails.type] || [];
+      const isValidAlias = aliases.some(
+        (alias) => alias.toLowerCase() === metadata.type.toLowerCase()
       );
+
+      if (!isValidAlias) {
+        mismatches.type = {
+          metadata: metadata.type,
+          actual: txDetails.type,
+        };
+        warnings.push(
+          `❌ TYPE MISMATCH: Metadata claims "${metadata.type}", ` +
+          `but transaction is "${txDetails.type}"`
+        );
+      }
     }
 
     // Validate function name if provided (contract calls)

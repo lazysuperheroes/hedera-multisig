@@ -16,6 +16,34 @@ const path = require('path');
 const fs = require('fs');
 const EncryptedFileProvider = require('../keyManagement/EncryptedFileProvider');
 const KeyValidator = require('../keyManagement/KeyValidator');
+const {
+  ExitCodes,
+  parseCommonFlags,
+  printVersion,
+  getVersion
+} = require('./utils/cliUtils');
+
+// Parse common flags
+const commonFlags = parseCommonFlags(process.argv.slice(2));
+
+// Handle version flag
+if (commonFlags.version) {
+  printVersion();
+  process.exit(ExitCodes.SUCCESS);
+}
+
+// Handle help flag
+if (commonFlags.help) {
+  console.log('\nCreate Encrypted Key File v' + getVersion() + '\n');
+  console.log('Usage: node cli/createKeyFile.js [options]\n');
+  console.log('Options:');
+  console.log('  --output <path>      Path to output file (default: multisig-keys.encrypted)');
+  console.log('  -V, --version        Show version information');
+  console.log('  -h, --help           Show this help message\n');
+  console.log('This tool creates an AES-256-GCM encrypted file to securely');
+  console.log('store multi-sig private keys with PBKDF2 key derivation.\n');
+  process.exit(ExitCodes.SUCCESS);
+}
 
 console.log('\n╔═══════════════════════════════════════════════════════╗');
 console.log('║        CREATE ENCRYPTED KEY FILE                      ║');

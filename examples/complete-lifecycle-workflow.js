@@ -11,13 +11,21 @@
  * This shows how the CLI tools (drop-in replacement for manual workflows)
  * integrate with the networked workflow (for superior coordination).
  *
+ * Configuration:
+ *   Create a .env file in the project root with:
+ *     OPERATOR_ID=0.0.XXX
+ *     OPERATOR_KEY=xxx
+ *     ENVIRONMENT=TEST
+ *
  * Prerequisites:
- *   - OPERATOR_ID and OPERATOR_KEY environment variables set
  *   - At least 3 team members with generated keys
  *
  * Usage:
- *   OPERATOR_ID=0.0.XXX OPERATOR_KEY=xxx node examples/complete-lifecycle-workflow.js
+ *   node examples/complete-lifecycle-workflow.js
  */
+
+// Load environment variables from .env file
+require('dotenv').config();
 
 const {
   Client,

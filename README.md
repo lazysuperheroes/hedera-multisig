@@ -11,10 +11,14 @@
 - ✅ Mixed key type support (Ed25519 + ECDSA secp256k1)
 - ✅ Interactive workflow (<110s real-time coordination)
 - ✅ Offline workflow (air-gapped signing)
-- ✅ **NEW: Web-based signing with WalletConnect** (hardware wallet support)
+- ✅ **Web-based signing with WalletConnect** (hardware wallet support)
+- ✅ **TLS/WSS encryption** for secure WebSocket connections
+- ✅ **Redis session persistence** for production reliability
+- ✅ **TypeScript definitions** included
+- ✅ **Unified CLI** with Commander.js and shell completions
 - ✅ Three security tiers (prompt, encrypted files, env vars)
+- ✅ Structured logging with debug export
 - ✅ Comprehensive audit logging
-- ✅ 236 tests, 0 vulnerabilities
 - ✅ Production-ready with complete documentation
 
 ---
@@ -167,6 +171,113 @@ console.log('Transaction executed:', result.transactionId);
 |--------|-------------|--------|--------|--------|
 | **HashPack** | ✅ | ✅ | ✅ | Recommended |
 | **Blade** | ✅ | ✅ | ⚠️ | Supported |
+
+---
+
+## 💻 CLI Usage
+
+The package includes a unified CLI with subcommands for all operations:
+
+```bash
+# Install globally
+npm install -g @lazysuperheroes/hedera-multisig
+
+# Or use via npx
+npx hedera-multisig --help
+```
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `hedera-multisig init` | Initialize a new multi-sig project |
+| `hedera-multisig server` | Start the multi-sig WebSocket server |
+| `hedera-multisig participant` | Join a signing session as participant |
+| `hedera-multisig sign` | Sign a frozen transaction file |
+| `hedera-multisig keys` | Key management (create, test, audit) |
+| `hedera-multisig audit` | Run security audit |
+| `hedera-multisig account` | Hedera account management |
+| `hedera-multisig completions` | Generate shell completions |
+
+### Quick Start with Init Wizard
+
+The fastest way to get started is with the initialization wizard:
+
+```bash
+npx @lazysuperheroes/hedera-multisig init
+```
+
+The wizard will guide you through:
+
+1. **Project Directory** - Create in current directory or new folder
+2. **Network Selection** - Testnet (development), Mainnet (production), or Previewnet
+3. **Operator Account** - Account ID and private key for paying transaction fees
+4. **Server Configuration** - WebSocket server port
+5. **Security Options** - Create directories for keys and logs
+
+**Generated Project Structure:**
+
+```
+my-multisig/
+├── .env                 # Configuration (network, operator, port)
+├── .env.example         # Template for team members
+├── .gitignore           # Security-aware gitignore
+├── package.json         # npm scripts for common operations
+├── keys/                # Encrypted key file storage
+├── logs/                # Audit log storage
+└── examples/
+    ├── transfer.js          # Interactive 2-of-3 transfer example
+    └── networked-session.js # WebSocket session example
+```
+
+**After initialization:**
+
+```bash
+cd my-multisig
+npm install
+npm run server -- --threshold 2 --keys "key1,key2,key3"
+```
+
+### Server Command Options
+
+```bash
+# Start server with TLS
+hedera-multisig server \
+  --port 3001 \
+  --threshold 2 \
+  --keys "key1,key2,key3" \
+  --tls --cert cert.pem --key key.pem
+
+# With Redis persistence
+hedera-multisig server \
+  --redis \
+  --redis-host localhost \
+  --redis-port 6379
+
+# With structured logging
+hedera-multisig server \
+  --log-level debug \
+  --log-file ./logs/server.log \
+  --export-logs
+```
+
+### Shell Completions
+
+```bash
+# Bash
+hedera-multisig completions bash >> ~/.bashrc
+
+# Zsh
+hedera-multisig completions zsh >> ~/.zshrc
+
+# Fish
+hedera-multisig completions fish > ~/.config/fish/completions/hedera-multisig.fish
+
+# PowerShell
+hedera-multisig completions powershell >> $PROFILE
+```
+
+---
 
 ### Example: Mixed CLI + Web Session
 
@@ -675,21 +786,27 @@ Special thanks to:
 - ✅ M-of-N threshold signatures
 - ✅ Interactive and offline workflows
 - ✅ Mixed key types support
-- ✅ Comprehensive testing (236 tests)
+- ✅ WalletConnect dApp with hardware wallet support
+- ✅ TypeScript definitions
+- ✅ TLS/WSS encryption
+- ✅ Redis session persistence
+- ✅ Unified CLI with Commander.js
+- ✅ Structured logging with export
+- ✅ npx initialization wizard
+- ✅ E2E testing with Playwright
 
 ### v2.0 (Planned)
-- [ ] Hardware wallet integration (Ledger, Trezor)
-- [ ] Mobile app signing support
+- [ ] Public demo instance
+- [ ] Video walkthroughs
 - [ ] Batch multi-sig operations
 - [ ] Scheduled multi-sig transactions
-- [ ] Web UI for signature coordination
-- [ ] TypeScript definitions
 
 ### Future
 - [ ] Multi-chain support
 - [ ] Hierarchical deterministic (HD) keys
 - [ ] Shamir Secret Sharing integration
 - [ ] Policy-based automation
+- [ ] Multi-language SDK (Python, Go)
 
 ---
 
