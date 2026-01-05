@@ -80,12 +80,13 @@ Collect signatures → Execute
 
 **Pros**:
 - Maximum security (keys never online)
-- No time pressure
 - Perfect audit trail
 
 **Cons**:
-- Slower (hours to days)
-- Requires secure file distribution
+- Slower (tough to fit in the 120 second window)
+- Requires secure file distribution / secondary communication lines
+
+**Future**: Once Scheduled Transactions are supported this will be more meaningful.
 
 **When to use**: Treasury movements over $100K, key rotations, contract upgrades
 
@@ -167,8 +168,7 @@ The distinction between VERIFIED (cryptographically derived from transaction byt
 
 ### 4. Implement Key Rotation
 
-Keys should be rotated:
-- Annually (minimum)
+Ideally keys should be *rotated annually*, but at a minimum always:
 - When any team member leaves
 - After any security incident
 - When upgrading key storage
