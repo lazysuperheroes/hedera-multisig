@@ -15,6 +15,9 @@
  *     }
  *   });
  *   await agent.connect(serverUrl, sessionId, pin, privateKey);
+ *
+ * Transport-agnostic: Uses WebSocket by default. Future Flora transport
+ * can be passed via options.transport without changing agent logic.
  */
 
 const WebSocket = require('ws');
@@ -29,6 +32,7 @@ class AgentSigningClient {
    * @param {number} [options.maxReconnectAttempts] - Max reconnection attempts (default: 10)
    * @param {number} [options.reconnectInterval] - Reconnection interval in ms (default: 5000)
    * @param {boolean} [options.autoReady] - Automatically signal ready after connect (default: true)
+   * @param {string} [options.transportType] - Transport type: 'websocket' (default) or 'flora' (future)
    */
   constructor(options = {}) {
     if (!options.approvalPolicy || typeof options.approvalPolicy !== 'function') {
@@ -40,6 +44,7 @@ class AgentSigningClient {
     this.maxReconnectAttempts = options.maxReconnectAttempts || 10;
     this.reconnectInterval = options.reconnectInterval || 5000;
     this.autoReady = options.autoReady !== false;
+    this.transportType = options.transportType || 'websocket';
 
     this.ws = null;
     this.sessionId = null;

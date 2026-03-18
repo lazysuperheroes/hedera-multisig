@@ -13,6 +13,13 @@ const transactionUtils = require('./transaction-utils');
 const errors = require('./errors');
 const { createLogger } = require('./logger');
 const { TimerController, timerController } = require('./TimerController');
+const {
+  CoordinationTransport,
+  WebSocketTransport,
+  FloraTransport,
+  createTransport,
+  TRANSPORT_TYPES,
+} = require('./CoordinationTransport');
 
 module.exports = {
   // Connection string utilities
@@ -38,4 +45,11 @@ module.exports = {
   // Timer management
   TimerController,
   timerController,
+
+  // Coordination transport abstraction
+  CoordinationTransport,
+  WebSocketTransport,
+  FloraTransport,
+  createTransport,
+  TRANSPORT_TYPES,
 };

@@ -200,14 +200,75 @@ The two approaches complement each other. WebSocket for real-time, Flora for per
 
 ---
 
+## Additional Relevant Standards
+
+Beyond the core three (HCS-10, HCS-15, HCS-16), these standards are directly relevant:
+
+### HCS-17: State Hash Calculation
+Provides tamper-evident state verification for Flora groups. Calculates SHA-384 hashes aggregating topic running hashes, public keys, and member states. Enables rapid reconciliation and audit trails for multi-party formations. **Direct integration with Flora mode** — every state change is verifiable.
+
+### HCS-18: Flora Discovery Protocol
+Decentralized formation protocol extending HCS-2 topic registries. Petals broadcast availability, propose groups, collect acceptances, and form Floras — all without a central coordinator. **Relevant for autonomous agent multi-sig** — agents can discover and join multi-sig groups without human setup.
+
+### HCS-26: Decentralized Agent Skills Registry
+Agents register versioned skills (like "multi-sig signing") as discoverable capabilities. Our signing agent could register its capabilities, letting other agents/services discover and invoke it. **Lower priority but interesting** for the agent-to-agent ecosystem.
+
+### HCS-8/9: Poll Topics
+Framework for decentralized voting via HCS topics. Could be relevant for governance decisions within a Flora (e.g., voting on whether to approve a large transfer). **Future consideration** — not needed for initial Flora integration.
+
+---
+
+## Architectural Preparation (Completed)
+
+The following groundwork has been laid to enable Flora integration when the standard matures:
+
+1. **`shared/CoordinationTransport.js`** — Abstract transport interface with:
+   - `CoordinationTransport` base class (broadcast, sendTo, sendToCoordinator, event handlers)
+   - `WebSocketTransport` adapter wrapping existing WebSocket server
+   - `FloraTransport` stub with documented behavior for each method
+   - `createTransport(type, options)` factory function
+   - `TRANSPORT_TYPES` constants
+
+2. **Transport-agnostic AgentSigningClient** — Constructor accepts `transportType` option. WebSocket is default; Flora can be swapped in without changing policy engine or signing logic.
+
+3. **SigningSessionManager is already transport-agnostic** — It manages session state purely through method calls and event handlers. No WebSocket coupling. Flora integration only needs a new transport, not session management changes.
+
+### Migration Path When Flora Is Ready
+
+1. Implement `FloraTransport.start()` — subscribe to HCS topics
+2. Implement `FloraTransport.broadcast()` — publish to session CTopic
+3. Implement `FloraTransport.sendTo()` — use HCS-10 inbound topics
+4. Implement `FloraTransport.onMessage()` — mirror node subscription for topic messages
+5. Add `flora` CLI subcommand group
+6. Add Flora mode to dApp session creation
+
+**Estimated effort with prep work in place: 1-2 weeks** (vs 3-5 weeks without it).
+
+---
+
+## Timing Recommendation
+
+**Build Flora integration when 2 of these 3 signals appear:**
+1. HCS-16 spec moves from "Draft" to "Accepted" status
+2. Reference implementations exist (SDK or tooling)
+3. Other Hedera ecosystem tools adopt HCS-16
+
+**Current status (March 2026)**: HCS-16 is Draft. No reference implementations seen. Architectural prep complete — ready to build when timing is right.
+
+---
+
 ## References
 
 - [HCS-10 OpenConvAI](https://hol.org/docs/standards/hcs-10/) — Agent communication standard
 - [HCS-15 Petals](https://hol.org/docs/standards/hcs-15/) — Multi-account profile standard
 - [HCS-16 Flora](https://hol.org/docs/standards/hcs-16/) — Multi-sig coordination standard
+- [HCS-17 State Hash](https://hol.org/docs/standards/hcs-17/) — Tamper-evident state verification
+- [HCS-18 Flora Discovery](https://hol.org/docs/standards/hcs-18/) — Decentralized group formation
+- [HCS-26 Agent Skills](https://hol.org/docs/standards/hcs-26/) — Discoverable agent capabilities
 - [HCS-11 Profiles](https://hol.org/docs/standards/hcs-11/) — Agent/account metadata standard
 - [HCS-1 Files](https://hol.org/docs/standards/hcs-1/) — Large message storage
 
 ---
 
 *Analysis conducted 2026-03-18 as part of v2.0 planning.*
+*Architectural prep completed 2026-03-18. Full build planned for when HCS-16 stabilizes.*

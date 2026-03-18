@@ -133,6 +133,38 @@ Transform from developer tool to end-user product:
 - One-click server deploy (Railway/Render/Fly.io)
 - Transaction templates
 
+### Phase 6: HOL Standards Integration (Flora)
+
+**Status**: Architectural prep complete | **Target**: v3.0.0 (when HCS-16 stabilizes)
+
+On-chain multi-sig coordination via HOL standards, adding a fifth coordination mode alongside Interactive, Offline, Networked, and Scheduled:
+
+**Architectural Prep (Complete):**
+- `CoordinationTransport` interface abstraction (`shared/CoordinationTransport.js`)
+- `WebSocketTransport` adapter wrapping existing WebSocket server
+- `FloraTransport` stub with documented Flora-specific behavior
+- Transport factory: `createTransport('websocket' | 'flora', options)`
+- Transport-agnostic AgentSigningClient design
+
+**When HCS-16 stabilizes (planned Q3/Q4 2026):**
+- `FloraWorkflow` — on-chain coordination via HCS topics
+- `flora` CLI subcommand group (create, join, propose, sign, status)
+- HCS-17 state hash verification
+- HCS-18 Flora discovery protocol
+- dApp Flora management page
+
+**Relevant HOL Standards:**
+| Standard | Role |
+|----------|------|
+| HCS-10 | Agent communication (discovery, connection channels) |
+| HCS-15 | Petal accounts (multi-account identity with shared keys) |
+| HCS-16 | Flora coordination (on-chain multi-sig groups) |
+| HCS-17 | State hash verification (tamper-evident state proofs) |
+| HCS-18 | Flora discovery (decentralized group formation) |
+| HCS-26 | Agent skills registry (discoverable signing capabilities) |
+
+See `docs/HOL_INTEGRATION_ANALYSIS.md` for full analysis and strategic rationale.
+
 ---
 
 ## Completed Improvements
