@@ -26,6 +26,7 @@ const EncryptedFileProvider = require('./keyManagement/EncryptedFileProvider');
 const WorkflowOrchestrator = require('./workflows/WorkflowOrchestrator');
 const InteractiveWorkflow = require('./workflows/InteractiveWorkflow');
 const OfflineWorkflow = require('./workflows/OfflineWorkflow');
+const ScheduledWorkflow = require('./workflows/ScheduledWorkflow');
 
 // UI Components
 const ProgressIndicator = require('./ui/ProgressIndicator');
@@ -74,6 +75,7 @@ module.exports = {
   WorkflowOrchestrator,
   InteractiveWorkflow,
   OfflineWorkflow,
+  ScheduledWorkflow,
 
   // UI Components
   ProgressIndicator,
