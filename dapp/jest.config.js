@@ -34,7 +34,8 @@ const config = {
   // Ignore patterns
   testPathIgnorePatterns: [
     '<rootDir>/node_modules/',
-    '<rootDir>/.next/'
+    '<rootDir>/.next/',
+    '<rootDir>/e2e/'
   ],
 
   // Transform TypeScript files
