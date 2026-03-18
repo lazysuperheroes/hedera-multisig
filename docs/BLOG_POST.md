@@ -44,27 +44,18 @@ This means:
 
 ---
 
-## The Three Workflows
+## Five Workflow Modes
 
-Every multi-sig operation falls into one of three patterns. Choose based on your security requirements and team distribution.
+Every multi-sig operation falls into one of five patterns. Choose based on your security requirements, team distribution, and timing needs.
 
 ### 1. Interactive Workflow (Real-Time)
 
 **Best for**: Teams in the same timezone, routine operations, time-sensitive transactions
 
 ```
-Coordinator creates session → Participants connect →
-Transaction injected → All sign within 120 seconds → Execute
+Coordinator creates session -> Participants connect ->
+Transaction injected -> All sign within 120 seconds -> Execute
 ```
-
-**Pros**:
-- Fast execution
-- Real-time coordination
-- Immediate feedback
-
-**Cons**:
-- Requires all signers available simultaneously
-- 120-second transaction validity window
 
 **When to use**: Daily operations, token transfers, routine contract calls
 
@@ -73,20 +64,10 @@ Transaction injected → All sign within 120 seconds → Execute
 **Best for**: High-security operations, geographically distributed teams, compliance requirements
 
 ```
-Freeze transaction → Export to file →
-Distribute to signers → Each signs on isolated machine →
-Collect signatures → Execute
+Freeze transaction -> Export to file ->
+Distribute to signers -> Each signs on isolated machine ->
+Collect signatures -> Execute
 ```
-
-**Pros**:
-- Maximum security (keys never online)
-- Perfect audit trail
-
-**Cons**:
-- Slower (tough to fit in the 120 second window)
-- Requires secure file distribution / secondary communication lines
-
-**Future**: Once Scheduled Transactions are supported this will be more meaningful.
 
 **When to use**: Treasury movements over $100K, key rotations, contract upgrades
 
@@ -95,21 +76,45 @@ Collect signatures → Execute
 **Best for**: Remote teams, mixed security environments, WalletConnect integration
 
 ```
-Server creates session → Participants connect via WebSocket →
-Load keys (never transmitted) → Transaction injected →
-Sign locally → Signatures collected → Execute
+Server creates session -> Participants connect via WebSocket ->
+Load keys (never transmitted) -> Transaction injected ->
+Sign locally -> Signatures collected -> Execute
 ```
 
-**Pros**:
-- Remote participation
-- Mixed CLI + browser signing
-- Hardware wallet support via WalletConnect
-
-**Cons**:
-- Requires network connectivity
-- Server infrastructure needed
-
 **When to use**: Distributed teams, hardware wallet users, web-based approval flows
+
+### 4. Scheduled Workflow (Async)
+
+**Best for**: Cross-timezone teams, non-urgent operations, governance votes
+
+```
+Coordinator creates ScheduleCreate transaction ->
+Signers submit ScheduleSign over hours or days ->
+Network executes automatically when threshold met
+```
+
+This mode bypasses the 120-second transaction validity window entirely. Signers don't need to be online at the same time.
+
+**When to use**: Multi-day approval processes, cross-timezone treasury management, governance
+
+### 5. Agent Workflow (Automated)
+
+**Best for**: Programmatic signing with policy controls, bot-to-bot coordination
+
+```
+Agent connects to session -> Receives transaction ->
+PolicyEngine evaluates rules (amount limits, allowed recipients,
+time windows, rate limits) -> Auto-signs if policy passes
+```
+
+Agents use composable policy rules:
+- **MaxAmountRule**: Reject transfers above a threshold
+- **AllowedRecipientsRule**: Only sign for approved accounts
+- **AllowedTransactionTypesRule**: Restrict to specific TX types
+- **TimeWindowRule**: Only sign during business hours
+- **RateLimitRule**: Cap signatures per time period
+
+**When to use**: Automated treasury operations, programmatic approvals, agent-to-agent coordination
 
 ---
 
@@ -132,28 +137,12 @@ Private keys should exist only in memory, only for the duration of signing, and 
 
 ### 2. Verify Before You Sign
 
-Every multi-sig participant should independently verify what they're signing. The transaction decoder should show:
+Every multi-sig participant should independently verify what they're signing. The dApp separates **verified data** (decoded from the frozen transaction bytes) from **unverified data** (coordinator-provided metadata):
 
-```
-═══════════════════════════════════════════════════════════════
-                    TRANSACTION REVIEW
-═══════════════════════════════════════════════════════════════
+- **Green section**: What the transaction actually does (cryptographically verified)
+- **Yellow section**: What the coordinator claims it does (could be fraudulent)
 
-VERIFIED DATA (from transaction bytes):
-  Type: CryptoTransfer
-  Transaction ID: 0.0.12345@1704067200.000000000
-  Transfers:
-    - 0.0.98765: -10,000 HBAR
-    - 0.0.11111: +10,000 HBAR
-  Valid Until: 2024-01-01 12:02:00 UTC
-
-⚠️  UNVERIFIED DATA (from coordinator):
-  Description: "Monthly payroll"
-
-═══════════════════════════════════════════════════════════════
-```
-
-The distinction between VERIFIED (cryptographically derived from transaction bytes) and UNVERIFIED (coordinator-provided metadata) is critical.
+If these don't match, the system warns you. Never sign based solely on what the coordinator tells you.
 
 ### 3. Use Appropriate Thresholds
 
@@ -233,14 +222,21 @@ const adminKey = new KeyList([
 // This creates: Security + 2-of-3 devs = 3 signatures minimum
 ```
 
-### Pattern 3: Escrow with Timeout
+### Pattern 3: Agent-Assisted Treasury
 
 ```javascript
-// Either: Both parties agree, OR timeout + arbiter
-const escrowKey = new KeyList([
-  new KeyList([buyer.publicKey, seller.publicKey], 2), // Both agree
-  new KeyList([arbiter.publicKey, timeout.publicKey], 2) // Or timeout + arbiter
-], 1);
+import { AgentSigningClient, PolicyEngine } from '@lazysuperheroes/hedera-multisig';
+
+// Agent that auto-signs transfers under $1,000 to approved recipients
+const agent = new AgentSigningClient({
+  approvalPolicy: PolicyEngine.treasury({
+    maxAmount: 1000,
+    allowedRecipients: ['0.0.98765', '0.0.11111'],
+  }),
+});
+
+await agent.connect(serverUrl, sessionId, pin);
+// Agent automatically evaluates and signs qualifying transactions
 ```
 
 ---
@@ -264,23 +260,13 @@ Using 2-of-3 for your $10M treasury *and* your test account is wrong. Scale your
 
 If you can't answer "who signed what, when, and why?" for every transaction, you don't have operational security.
 
-**Solution**: Implement structured logging:
-
-```javascript
-const logger = createLogger('MultiSig');
-logger.info('Signature submitted', {
-  sessionId,
-  publicKey: '...last8chars',
-  transactionType: 'CryptoTransfer',
-  timestamp: Date.now()
-});
-```
+**Solution**: Implement structured logging with the built-in audit logger.
 
 ### Mistake 4: Ignoring the 120-Second Window
 
 Hedera transactions are valid for 120 seconds. If your signing process takes longer, the transaction expires.
 
-**Solution**: Use the pre-session workflow—connect and load keys *before* the transaction is created.
+**Solution**: Use the pre-session workflow—connect and load keys *before* the transaction is created. Or use the Scheduled Workflow for async signing over hours or days.
 
 ### Mistake 5: Single Point of Infrastructure Failure
 
@@ -305,34 +291,35 @@ Before going live with multi-sig, verify:
 - [ ] **TLS Enabled**: WebSocket connections use WSS, not WS
 - [ ] **Rate Limiting**: Authentication attempts are rate-limited
 - [ ] **Timeout Handling**: Process handles 120-second transaction window
+- [ ] **Agent Policies**: Automated signers have appropriate policy constraints
 
 ---
 
 ## Getting Started
 
-Ready to implement production-grade multi-sig on Hedera? Here's how to start:
+Ready to implement production-grade multi-sig on Hedera?
 
 ```bash
 # Install the library
 npm install @lazysuperheroes/hedera-multisig
 
-# Initialize your project
-npx hedera-multisig init
-
 # Start the server for networked signing
-npx hedera-multisig server --threshold 2 --keys "key1,key2,key3"
+npx hedera-multisig server --threshold 2 --keys "key1,key2,key3" --port 3001
 
-# Join as a participant
-npx hedera-multisig participant --server wss://your-server.com
+# Join as a CLI participant
+npx hedera-multisig participant --connect hmsc:YOUR_CONNECTION_STRING
+
+# Or join via the browser dApp
+# Navigate to your-server.com/join and paste the connection string
 ```
 
 The library includes:
-- Complete CLI with Commander.js
-- WebSocket server with TLS support
-- WalletConnect dApp for browser signing
-- Hardware wallet support via HashPack/Blade
-- TypeScript definitions
-- 79+ unit tests
+- **CLI**: 8 command-line tools for server, participant, signing, transfers, tokens, sessions, and scheduling
+- **Server**: WebSocket server with TLS, rate limiting, coordinator tokens, and reconnection support
+- **dApp**: Next.js browser application with WalletConnect, transaction builder, QR codes, and dark mode
+- **Agent SDK**: Headless signing client with composable policy engine (5 rules, 2 presets)
+- **Scheduled TX**: Async signing via ScheduleCreate/ScheduleSign for cross-timezone teams
+- **129 unit tests** across 9 test suites with full CI pipeline
 
 ---
 
@@ -349,3 +336,5 @@ Start with a simple 2-of-3 for your test accounts. Graduate to 3-of-5 for produc
 *Built with care by [Lazy Superheroes](https://lazysuperheroes.com) for the Hedera community.*
 
 *Open source: [github.com/lazysuperheroes/hedera-multisig](https://github.com/lazysuperheroes/hedera-multisig)*
+
+*npm: [@lazysuperheroes/hedera-multisig](https://www.npmjs.com/package/@lazysuperheroes/hedera-multisig)*
