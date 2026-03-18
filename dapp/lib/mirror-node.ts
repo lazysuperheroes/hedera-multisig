@@ -223,6 +223,73 @@ export function getHashScanTransactionUrl(
   return `${baseUrl}/transactionsById/${formattedId}`;
 }
 
+// ---------------------------------------------------------------------------
+// Account balance (HBAR + tokens)
+// ---------------------------------------------------------------------------
+
+export interface AccountBalance {
+  hbarBalance: string; // formatted like "123.45 ℏ"
+  tokens: Array<{ tokenId: string; balance: string; decimals?: number }>;
+}
+
+/**
+ * Fetch account balance (HBAR + token balances) from the mirror node.
+ *
+ * @param accountId - Account ID in 0.0.XXXX format
+ * @param network   - Network to query (testnet or mainnet)
+ * @returns Balance info or null if the account was not found
+ */
+export async function fetchAccountBalance(
+  accountId: string,
+  network: string
+): Promise<AccountBalance | null> {
+  const net = (network === 'mainnet' ? 'mainnet' : 'testnet') as 'testnet' | 'mainnet';
+  const baseUrl = getMirrorNodeUrl(net);
+
+  try {
+    // 1. Fetch account (HBAR balance)
+    const accountRes = await fetch(`${baseUrl}/accounts/${accountId}`);
+    if (!accountRes.ok) {
+      if (accountRes.status === 404) return null;
+      throw new Error(`Mirror node returned ${accountRes.status}`);
+    }
+    const accountData: MirrorNodeAccountResponse = await accountRes.json();
+
+    const balanceTinybar = accountData.balance?.balance ?? 0;
+    const hbar = new Hbar(balanceTinybar, HbarUnit.Tinybar);
+    const hbarFormatted = `${Number(hbar.to(HbarUnit.Hbar)).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} \u210F`; // ℏ
+
+    // 2. Fetch token balances
+    const tokens: AccountBalance['tokens'] = [];
+    try {
+      const tokensRes = await fetch(`${baseUrl}/accounts/${accountId}/tokens`);
+      if (tokensRes.ok) {
+        const tokensData = await tokensRes.json();
+        if (Array.isArray(tokensData.tokens)) {
+          for (const t of tokensData.tokens) {
+            tokens.push({
+              tokenId: t.token_id,
+              balance: String(t.balance ?? 0),
+              decimals: t.decimals ?? undefined,
+            });
+          }
+        }
+      }
+    } catch {
+      // Token fetch failure is non-fatal
+      console.warn(`Could not fetch tokens for ${accountId}`);
+    }
+
+    return { hbarBalance: hbarFormatted, tokens };
+  } catch (error) {
+    console.error(`Failed to fetch balance for ${accountId}:`, error);
+    return null;
+  }
+}
+
 /**
  * Fetch transaction status from mirror node
  *

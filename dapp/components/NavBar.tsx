@@ -85,6 +85,41 @@ export function NavBar() {
               </div>
             </Link>
 
+            {/* Navigation Links */}
+            <div className="hidden sm:flex items-center gap-1">
+              <Link
+                href="/join"
+                className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                Join
+              </Link>
+              <Link
+                href="/create"
+                className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                Coordinator
+              </Link>
+              <Link
+                href="/history"
+                className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                History
+              </Link>
+            </div>
+
             {/* Right Side: Theme Toggle + Wallet Info + Connect Button */}
             <div className="flex items-center gap-4">
               {/* Theme Toggle */}

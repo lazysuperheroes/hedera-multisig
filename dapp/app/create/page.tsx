@@ -8,6 +8,8 @@ import { ToastContainer } from '../../components/Toast';
 import { CopyButton } from '../../components/CopyButton';
 import { QRCodeDisplay } from '../../components/QRCodeDisplay';
 import { DEFAULT_NETWORK } from '../../lib/walletconnect-config';
+import { fetchAccountBalance, AccountBalance } from '../../lib/mirror-node';
+import { saveTxHistoryEntry } from '../../hooks/useTxHistory';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { generateConnectionString } = require('../../../shared/connection-string');
@@ -87,6 +89,11 @@ export default function CreatePage() {
   const [isInjecting, setIsInjecting] = useState(false);
   const [injectError, setInjectError] = useState<string | null>(null);
 
+  // ---- Balance lookup for "From" field --------------------------------------
+  const [fromBalance, setFromBalance] = useState<AccountBalance | null>(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+
   // ---- Step 3: share panel ------------------------------------------------
   const [injectionDone, setInjectionDone] = useState(false);
 
@@ -98,6 +105,46 @@ export default function CreatePage() {
       }
     };
   }, []);
+
+  // =========================================================================
+  // Balance lookup on "From" field blur (transfer types only)
+  // =========================================================================
+
+  const isTransferType =
+    txType === 'hbar-transfer' ||
+    txType === 'token-transfer' ||
+    txType === 'nft-transfer';
+
+  const handleFromBlur = useCallback(async () => {
+    const accountId = txFields.from || wallet.accountId;
+    if (!accountId || !isTransferType) return;
+
+    // Basic format check
+    if (!/^0\.0\.\d+$/.test(accountId)) return;
+
+    setIsLoadingBalance(true);
+    setBalanceError(null);
+    setFromBalance(null);
+
+    try {
+      const balance = await fetchAccountBalance(accountId, DEFAULT_NETWORK);
+      if (balance) {
+        setFromBalance(balance);
+      } else {
+        setBalanceError('Account not found');
+      }
+    } catch {
+      setBalanceError('Failed to fetch balance');
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  }, [txFields.from, wallet.accountId, isTransferType]);
+
+  // Reset balance when transaction type changes
+  useEffect(() => {
+    setFromBalance(null);
+    setBalanceError(null);
+  }, [txType]);
 
   // =========================================================================
   // Step 1 -- Connect to existing session as coordinator
@@ -414,6 +461,24 @@ export default function CreatePage() {
         'Transaction Injected',
         'Transaction has been broadcast to participants.'
       );
+
+      // Save to local transaction history
+      const txTypeLabels: Record<TransactionType, string> = {
+        'hbar-transfer': 'TransferTransaction',
+        'token-transfer': 'TransferTransaction',
+        'nft-transfer': 'TransferTransaction',
+        'token-association': 'TokenAssociateTransaction',
+        'contract-call': 'ContractExecuteTransaction',
+      };
+      saveTxHistoryEntry({
+        timestamp: new Date().toISOString(),
+        transactionId: frozenTx.transactionId?.toString() || 'unknown',
+        transactionType: txTypeLabels[txType] || txType,
+        status: 'PENDING',
+        network: DEFAULT_NETWORK,
+        sessionId: sessionId || undefined,
+        details: { ...txFields, transactionType: txType },
+      });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Unknown error.';
@@ -535,6 +600,62 @@ export default function CreatePage() {
     );
   };
 
+  // ---- Balance display card ------------------------------------------------
+
+  const renderBalanceCard = () => {
+    if (isLoadingBalance) {
+      return (
+        <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg flex items-center gap-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            Fetching balance...
+          </span>
+        </div>
+      );
+    }
+
+    if (balanceError) {
+      return (
+        <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400">
+          {balanceError}
+        </div>
+      );
+    }
+
+    if (!fromBalance) return null;
+
+    return (
+      <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Balance:
+          </span>
+          <span className="text-sm font-semibold text-green-700 dark:text-green-300">
+            {fromBalance.hbarBalance}
+          </span>
+        </div>
+        {fromBalance.tokens.length > 0 && (
+          <div className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
+            <span className="font-medium">Tokens:</span>
+            <ul className="ml-3 space-y-0.5">
+              {fromBalance.tokens.slice(0, 5).map((t) => (
+                <li key={t.tokenId} className="font-mono">
+                  {t.tokenId}: {t.balance}
+                </li>
+              ))}
+              {fromBalance.tokens.length > 5 && (
+                <li className="italic">
+                  +{fromBalance.tokens.length - 5} more token
+                  {fromBalance.tokens.length - 5 !== 1 ? 's' : ''}
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ---- Transaction-type-specific fields -----------------------------------
 
   const renderTxFields = () => {
@@ -553,10 +674,12 @@ export default function CreatePage() {
                 placeholder={wallet.accountId || '0.0.xxxxx'}
                 value={txFields.from || ''}
                 onChange={(e) => setTxField('from', e.target.value)}
+                onBlur={handleFromBlur}
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Defaults to connected wallet if left blank.
               </p>
+              {renderBalanceCard()}
             </div>
             <div>
               <label htmlFor="tx-to" className={labelClass}>
@@ -619,10 +742,12 @@ export default function CreatePage() {
                 placeholder={wallet.accountId || '0.0.xxxxx'}
                 value={txFields.from || ''}
                 onChange={(e) => setTxField('from', e.target.value)}
+                onBlur={handleFromBlur}
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Defaults to connected wallet if left blank.
               </p>
+              {renderBalanceCard()}
             </div>
             <div>
               <label htmlFor="tx-to" className={labelClass}>
@@ -699,10 +824,12 @@ export default function CreatePage() {
                 placeholder={wallet.accountId || '0.0.xxxxx'}
                 value={txFields.from || ''}
                 onChange={(e) => setTxField('from', e.target.value)}
+                onBlur={handleFromBlur}
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Defaults to connected wallet if left blank.
               </p>
+              {renderBalanceCard()}
             </div>
             <div>
               <label htmlFor="tx-to" className={labelClass}>
