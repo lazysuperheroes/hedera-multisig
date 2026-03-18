@@ -116,7 +116,7 @@ class OfflineWorkflow {
         console.log('2. Signers should review the metadata file:');
         console.log(chalk.cyan(`   ${metadataFile}\n`));
         console.log('3. Signers can sign using:');
-        console.log(chalk.green(`   node lib/multiSig/cli/sign.js ${txFile}\n`));
+        console.log(chalk.green(`   hedera-multisig sign ${txFile}\n`));
         console.log('4. Collect signatures and proceed to Phase 2\n');
 
         HelpText.securityWarning('Share files via secure channels only. Never share private keys.');

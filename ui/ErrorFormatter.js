@@ -98,7 +98,7 @@ class ErrorFormatter {
           'Ensure the key is in DER-encoded hex format (starts with 302e for Ed25519, 3030 for ECDSA)',
           'Check for extra whitespace or newlines in the key string',
           'Verify the key was exported correctly from Hedera',
-          'Use the KeyValidator utility to test key format: node lib/multiSig/cli/testKeyFile.js'
+          'Use the KeyValidator utility to test key format: hedera-multisig keys test'
         ]
       };
     }

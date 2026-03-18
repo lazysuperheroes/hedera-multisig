@@ -106,7 +106,7 @@ class HelpText {
     console.log(chalk.bold('Phase 2: ') + chalk.cyan('Signers - Sign Offline'));
     console.log('  1. Receive frozen transaction file');
     console.log('  2. Review transaction details carefully');
-    console.log('  3. Sign using: node lib/multiSig/cli/sign.js <transaction-file>');
+    console.log('  3. Sign using: hedera-multisig sign <transaction-file>');
     console.log('  4. Return signature to initiator\n');
 
     console.log(chalk.bold('Phase 3: ') + chalk.cyan('Initiator - Collect & Execute'));
@@ -140,7 +140,7 @@ class HelpText {
     console.log(chalk.yellow('Tier 2: Encrypted File Provider') + chalk.gray(' (Balanced)'));
     console.log('  Security: AES-256-GCM encrypted, password-protected');
     console.log('  Use Case: Regular operations, repeated signing');
-    console.log('  Setup: node lib/multiSig/cli/createKeyFile.js');
+    console.log('  Setup: hedera-multisig keys create');
     console.log(chalk.cyan('  Usage: ') + 'new EncryptedFileProvider("path/to/keyfile.enc")\n');
 
     console.log(chalk.red('Tier 3: Environment Variable Provider') + chalk.gray(' (Convenience)'));
@@ -150,9 +150,9 @@ class HelpText {
     console.log(chalk.cyan('  Usage: ') + 'new EnvKeyProvider()\n');
 
     console.log(chalk.yellow('Key Management Tools:'));
-    console.log('  • Create encrypted key: node lib/multiSig/cli/createKeyFile.js');
-    console.log('  • Test key file: node lib/multiSig/cli/testKeyFile.js <file>');
-    console.log('  • Security audit: node lib/multiSig/cli/securityAudit.js\n');
+    console.log('  • Create encrypted key: hedera-multisig keys create');
+    console.log('  • Test key file: hedera-multisig keys test <file>');
+    console.log('  • Security audit: hedera-multisig audit\n');
 
     console.log(chalk.red.bold('NEVER:'));
     console.log(chalk.red('  ✗ Commit private keys to git'));
@@ -193,7 +193,7 @@ class HelpText {
     console.log('  Check: Verify threshold configuration is correct\n');
 
     console.log(chalk.cyan('For more help:'));
-    console.log('  • Run security audit: node lib/multiSig/cli/securityAudit.js');
+    console.log('  • Run security audit: hedera-multisig audit');
     console.log('  • Check audit logs in: logs/audit.log');
     console.log('  • Review documentation in: docs/MULTISIG_*.md\n');
   }
@@ -207,16 +207,16 @@ class HelpText {
     console.log(chalk.white.bold('Common Commands:\n'));
 
     console.log(chalk.cyan('Create Encrypted Key File:'));
-    console.log('  node lib/multiSig/cli/createKeyFile.js\n');
+    console.log('  hedera-multisig keys create\n');
 
     console.log(chalk.cyan('Test Key File:'));
-    console.log('  node lib/multiSig/cli/testKeyFile.js <keyfile>\n');
+    console.log('  hedera-multisig keys test <keyfile>\n');
 
     console.log(chalk.cyan('Sign Transaction (Offline):'));
-    console.log('  node lib/multiSig/cli/sign.js <transaction-file>\n');
+    console.log('  hedera-multisig sign <transaction-file>\n');
 
     console.log(chalk.cyan('Security Audit:'));
-    console.log('  node lib/multiSig/cli/securityAudit.js\n');
+    console.log('  hedera-multisig audit\n');
 
     console.log(chalk.cyan('Run Admin Script with Multi-sig:'));
     console.log('  node scripts/interactions/LazyLotto/admin/<script>.js --multisig\n');

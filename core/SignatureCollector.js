@@ -168,7 +168,7 @@ class SignatureCollector {
     console.log('📤 SHARE WITH SIGNERS:');
     console.log('  1. Send transaction bytes via secure channel (Signal, encrypted email)');
     console.log('  2. Include checksum for verification');
-    console.log('  3. Signers use: node lib/multiSig/cli/sign.js');
+    console.log('  3. Signers use: hedera-multisig sign');
     console.log('  4. Collect signature tuples (publicKey:signature)\n');
 
     const signatures = [];
@@ -315,7 +315,7 @@ class SignatureCollector {
     console.log(`   Checksum: ${SignatureVerifier.generateChecksum(frozenTx)}\n`);
 
     console.log('3. On your signing machine, run:');
-    console.log('   node lib/multiSig/cli/sign.js\n');
+    console.log('   hedera-multisig sign\n');
 
     console.log('4. When prompted:');
     console.log('   - Paste the transaction bytes');

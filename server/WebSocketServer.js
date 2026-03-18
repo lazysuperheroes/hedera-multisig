@@ -883,13 +883,15 @@ class MultiSigWebSocketServer {
       }
 
       // Broadcast to all participants (use serializableAbi instead of contractInterface)
+      // Include server timestamp so clients can compute clock offset for accurate countdown
       await this.broadcastToSession(sessionId, {
         type: 'TRANSACTION_RECEIVED',
         payload: {
           frozenTransaction,
           txDetails,
           metadata,
-          abi: serializableAbi
+          abi: serializableAbi,
+          serverTimestamp: Date.now()
         }
       });
 

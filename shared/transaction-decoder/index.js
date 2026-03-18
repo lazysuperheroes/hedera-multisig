@@ -36,7 +36,15 @@ const {
   ScheduleDeleteTransaction,
 } = require('@hashgraph/sdk');
 
-const { ethers } = require('ethers');
+// Lazy-load ethers — only needed when contractInterface/ABI is provided for
+// smart contract decoding. Avoids loading 1.2MB+ module for non-contract usage.
+let ethers = null;
+function getEthers() {
+  if (!ethers) {
+    ethers = require('ethers').ethers;
+  }
+  return ethers;
+}
 const { sha256, generateChecksum, bufferToHex } = require('./crypto');
 
 /**

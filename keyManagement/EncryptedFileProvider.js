@@ -77,7 +77,7 @@ class EncryptedFileProvider extends KeyProvider {
     if (!fs.existsSync(this.filePath)) {
       throw new Error(
         `Encrypted key file not found: ${this.filePath}\n` +
-        `Use 'node lib/multiSig/cli/createKeyFile.js' to create one.`
+        `Use 'hedera-multisig keys create' to create one.`
       );
     }
 

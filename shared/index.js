@@ -10,6 +10,7 @@ const connectionString = require('./connection-string');
 const protocol = require('./protocol');
 const cryptoUtils = require('./crypto-utils');
 const transactionUtils = require('./transaction-utils');
+const errors = require('./errors');
 const { createLogger } = require('./logger');
 const { TimerController, timerController } = require('./TimerController');
 
@@ -27,6 +28,9 @@ module.exports = {
 
   // Transaction utilities
   ...transactionUtils,
+
+  // Error classes
+  ...errors,
 
   // Logger
   createLogger,

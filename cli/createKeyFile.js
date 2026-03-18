@@ -245,7 +245,7 @@ async function main() {
 
     console.log('NEXT STEPS:\n');
     console.log('  1. Test decryption with:');
-    console.log(`     node lib/multiSig/cli/testKeyFile.js ${outputPath}\n`);
+    console.log(`     hedera-multisig keys test ${outputPath}\n`);
     console.log('  2. Backup this file securely');
     console.log('  3. Store passphrase in password manager');
     console.log('  4. Use with EncryptedFileProvider:\n');
