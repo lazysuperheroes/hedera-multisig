@@ -25,13 +25,26 @@ module.exports = function(program) {
   offline
     .command('freeze')
     .description('Freeze a transaction and output base64 for offline signing')
-    .requiredOption('-t, --type <type>', 'Transaction type (transfer, contract-execute)')
-    .option('-f, --from <accountId>', 'Source account ID (required for transfers)')
-    .option('-T, --to <accountId>', 'Destination account ID (required for transfers)')
-    .option('-a, --amount <hbar>', 'Amount in HBAR (required for transfers)')
+    .requiredOption('-t, --type <type>', 'Transaction type: transfer, token-transfer, nft-transfer, token-associate, token-dissociate, account-update, contract-execute, token-create, token-mint, token-burn')
+    .option('-f, --from <accountId>', 'Source account ID')
+    .option('-T, --to <accountId>', 'Destination account ID')
+    .option('-a, --amount <value>', 'Amount (HBAR for transfer, token units for token ops)')
+    .option('--token <tokenId>', 'Token ID (for token operations)')
+    .option('--tokens <tokenIds>', 'Comma-separated token IDs (for associate/dissociate)')
+    .option('--serial <number>', 'NFT serial number (for nft-transfer)')
+    .option('--account <accountId>', 'Target account ID (for associate/dissociate/account-update)')
+    .option('--new-key <publicKey>', 'New public key (for account-update)')
+    .option('--name <name>', 'Token name (for token-create)')
+    .option('--symbol <symbol>', 'Token symbol (for token-create)')
+    .option('--decimals <n>', 'Token decimals (for token-create)', '0')
+    .option('--initial-supply <n>', 'Initial supply (for token-create)', '0')
+    .option('--treasury <accountId>', 'Treasury account (for token-create)')
     .option('-c, --contract <contractId>', 'Contract ID (for contract-execute)')
     .option('-g, --gas <amount>', 'Gas limit (for contract-execute)', '100000')
     .option('-d, --data <hex>', 'Function call data in hex (for contract-execute)')
+    .option('--abi <file>', 'ABI JSON file for contract call encoding')
+    .option('--function <name>', 'Function name (used with --abi)')
+    .option('--args <values>', 'Comma-separated function arguments (used with --abi)')
     .option('-o, --output <file>', 'Output to file instead of stdout')
     .option('--raw', 'Output raw base64 only (for scripting)')
     .option('-j, --json', 'Output as JSON')
@@ -40,17 +53,23 @@ Freeze a transaction and output base64-encoded bytes for offline signing.
 The checksum helps signers verify transaction integrity.
 
 Examples:
-  # Freeze a transfer transaction
+  # HBAR transfer
   $ hedera-multisig offline freeze -t transfer -f 0.0.1234 -T 0.0.5678 -a 100
 
-  # Output raw base64 only (for piping/scripting)
-  $ hedera-multisig offline freeze -t transfer -f 0.0.1234 -T 0.0.5678 -a 100 --raw
+  # Token transfer
+  $ hedera-multisig offline freeze -t token-transfer --token 0.0.999 -f 0.0.1234 -T 0.0.5678 -a 1000
 
-  # Output as JSON
-  $ hedera-multisig offline freeze -t transfer -f 0.0.1234 -T 0.0.5678 -a 100 --json
+  # NFT transfer
+  $ hedera-multisig offline freeze -t nft-transfer --token 0.0.999 --serial 42 -f 0.0.1234 -T 0.0.5678
 
-  # Save to file
-  $ hedera-multisig offline freeze -t transfer -f 0.0.1234 -T 0.0.5678 -a 100 -o tx.txt
+  # Token association
+  $ hedera-multisig offline freeze -t token-associate --account 0.0.1234 --tokens 0.0.999,0.0.888
+
+  # Smart contract call with ABI
+  $ hedera-multisig offline freeze -t contract-execute -c 0.0.555 --abi ./token.json --function transfer --args "0.0.5678,1000"
+
+  # Account key update
+  $ hedera-multisig offline freeze -t account-update --account 0.0.1234 --new-key 302a300506...
 
 Environment Variables:
   OPERATOR_ID    - Hedera operator account ID
@@ -63,10 +82,18 @@ Environment Variables:
         Client,
         AccountId,
         PrivateKey,
+        PublicKey,
         TransferTransaction,
         ContractExecuteTransaction,
         ContractId,
         TransactionId,
+        TokenId,
+        TokenAssociateTransaction,
+        TokenDissociateTransaction,
+        AccountUpdateTransaction,
+        TokenCreateTransaction,
+        TokenMintTransaction,
+        TokenBurnTransaction,
         Hbar
       } = require('@hashgraph/sdk');
 
@@ -91,31 +118,130 @@ Environment Variables:
         // Build transaction based on type
         let transaction;
 
-        if (options.type === 'transfer') {
-          if (!options.from || !options.to || !options.amount) {
-            throw new Error('Transfer requires --from, --to, and --amount options');
+        switch (options.type) {
+          case 'transfer': {
+            if (!options.from || !options.to || !options.amount) {
+              throw new Error('Transfer requires --from, --to, and --amount options');
+            }
+            transaction = new TransferTransaction()
+              .addHbarTransfer(AccountId.fromString(options.from), new Hbar(-parseFloat(options.amount)))
+              .addHbarTransfer(AccountId.fromString(options.to), new Hbar(parseFloat(options.amount)));
+            break;
           }
 
-          transaction = new TransferTransaction()
-            .addHbarTransfer(AccountId.fromString(options.from), new Hbar(-parseFloat(options.amount)))
-            .addHbarTransfer(AccountId.fromString(options.to), new Hbar(parseFloat(options.amount)));
-
-        } else if (options.type === 'contract-execute') {
-          if (!options.contract) {
-            throw new Error('Contract execute requires --contract option');
+          case 'token-transfer': {
+            if (!options.token || !options.from || !options.to || !options.amount) {
+              throw new Error('Token transfer requires --token, --from, --to, and --amount');
+            }
+            transaction = new TransferTransaction()
+              .addTokenTransfer(TokenId.fromString(options.token), AccountId.fromString(options.from), -parseInt(options.amount))
+              .addTokenTransfer(TokenId.fromString(options.token), AccountId.fromString(options.to), parseInt(options.amount));
+            break;
           }
 
-          transaction = new ContractExecuteTransaction()
-            .setContractId(ContractId.fromString(options.contract))
-            .setGas(parseInt(options.gas));
-
-          if (options.data) {
-            const dataBytes = Buffer.from(options.data.replace(/^0x/, ''), 'hex');
-            transaction.setFunctionParameters(dataBytes);
+          case 'nft-transfer': {
+            if (!options.token || !options.serial || !options.from || !options.to) {
+              throw new Error('NFT transfer requires --token, --serial, --from, and --to');
+            }
+            transaction = new TransferTransaction()
+              .addNftTransfer(TokenId.fromString(options.token), parseInt(options.serial), AccountId.fromString(options.from), AccountId.fromString(options.to));
+            break;
           }
 
-        } else {
-          throw new Error(`Unsupported transaction type: ${options.type}. Supported: transfer, contract-execute`);
+          case 'token-associate': {
+            if (!options.account || !options.tokens) {
+              throw new Error('Token associate requires --account and --tokens (comma-separated)');
+            }
+            const tokenIds = options.tokens.split(',').map(t => TokenId.fromString(t.trim()));
+            transaction = new TokenAssociateTransaction()
+              .setAccountId(AccountId.fromString(options.account))
+              .setTokenIds(tokenIds);
+            break;
+          }
+
+          case 'token-dissociate': {
+            if (!options.account || !options.tokens) {
+              throw new Error('Token dissociate requires --account and --tokens (comma-separated)');
+            }
+            const dissocTokenIds = options.tokens.split(',').map(t => TokenId.fromString(t.trim()));
+            transaction = new TokenDissociateTransaction()
+              .setAccountId(AccountId.fromString(options.account))
+              .setTokenIds(dissocTokenIds);
+            break;
+          }
+
+          case 'account-update': {
+            if (!options.account) {
+              throw new Error('Account update requires --account');
+            }
+            transaction = new AccountUpdateTransaction()
+              .setAccountId(AccountId.fromString(options.account));
+            if (options.newKey) {
+              transaction.setKey(PublicKey.fromString(options.newKey));
+            }
+            break;
+          }
+
+          case 'token-create': {
+            if (!options.name || !options.symbol) {
+              throw new Error('Token create requires --name and --symbol');
+            }
+            transaction = new TokenCreateTransaction()
+              .setTokenName(options.name)
+              .setTokenSymbol(options.symbol)
+              .setDecimals(parseInt(options.decimals))
+              .setInitialSupply(parseInt(options.initialSupply));
+            if (options.treasury) {
+              transaction.setTreasuryAccountId(AccountId.fromString(options.treasury));
+            }
+            break;
+          }
+
+          case 'token-mint': {
+            if (!options.token || !options.amount) {
+              throw new Error('Token mint requires --token and --amount');
+            }
+            transaction = new TokenMintTransaction()
+              .setTokenId(TokenId.fromString(options.token))
+              .setAmount(parseInt(options.amount));
+            break;
+          }
+
+          case 'token-burn': {
+            if (!options.token || !options.amount) {
+              throw new Error('Token burn requires --token and --amount');
+            }
+            transaction = new TokenBurnTransaction()
+              .setTokenId(TokenId.fromString(options.token))
+              .setAmount(parseInt(options.amount));
+            break;
+          }
+
+          case 'contract-execute': {
+            if (!options.contract) {
+              throw new Error('Contract execute requires --contract option');
+            }
+            transaction = new ContractExecuteTransaction()
+              .setContractId(ContractId.fromString(options.contract))
+              .setGas(parseInt(options.gas));
+
+            // ABI-based encoding (--abi --function --args)
+            if (options.abi && options.function) {
+              const { Interface } = require('ethers');
+              const abiJson = JSON.parse(fs.readFileSync(path.resolve(options.abi), 'utf8'));
+              const iface = new Interface(abiJson);
+              const calldata = iface.encodeFunctionData(options.function, options.args ? options.args.split(',').map(a => a.trim()) : []);
+              const dataBytes = Buffer.from(calldata.replace(/^0x/, ''), 'hex');
+              transaction.setFunctionParameters(dataBytes);
+            } else if (options.data) {
+              const dataBytes = Buffer.from(options.data.replace(/^0x/, ''), 'hex');
+              transaction.setFunctionParameters(dataBytes);
+            }
+            break;
+          }
+
+          default:
+            throw new Error(`Unsupported transaction type: ${options.type}. Supported: transfer, token-transfer, nft-transfer, token-associate, token-dissociate, account-update, contract-execute, token-create, token-mint, token-burn`);
         }
 
         // Set transaction ID for multi-sig hash stability (required before freeze)
@@ -223,6 +349,7 @@ Environment Variables:
     .option('-b, --base64 <string>', 'Base64-encoded transaction bytes')
     .option('-f, --file <path>', 'Read base64 from file')
     .option('-c, --checksum <string>', 'Expected checksum for verification')
+    .option('--abi <file>', 'ABI JSON file for decoding smart contract function calls')
     .option('--verbose', 'Show raw bytes breakdown')
     .option('--raw', 'Output raw decoded JSON only')
     .option('-j, --json', 'Output as JSON')
@@ -268,6 +395,19 @@ Examples:
           if (!base64Input) {
             throw new Error('Could not find base64 transaction in file');
           }
+        } else if (!process.stdin.isTTY) {
+          // Piped input — read from stdin
+          const chunks = [];
+          for await (const chunk of process.stdin) {
+            chunks.push(chunk);
+          }
+          const input = Buffer.concat(chunks).toString('utf8').trim();
+          // Extract base64 (handle both raw and formatted input)
+          const lines = input.split('\n').filter(l => l && !l.startsWith('#') && !l.startsWith('BASE64:') && !l.startsWith('CHECKSUM:'));
+          base64Input = lines.find(l => l.length > 50 && !l.includes(':'))?.trim();
+          if (!base64Input) {
+            base64Input = input.trim(); // Fall back to raw input
+          }
         } else {
           // Interactive mode - prompt for input
           const readlineSync = require('readline-sync');
@@ -298,8 +438,20 @@ Examples:
         // Reconstruct the frozen transaction
         const frozenTx = TransactionFreezer.fromBase64(base64Input, Date.now());
 
+        // Load ABI for smart contract decoding if provided
+        let contractInterface = null;
+        if (options.abi) {
+          try {
+            const { Interface } = require('ethers');
+            const abiJson = JSON.parse(fs.readFileSync(path.resolve(options.abi), 'utf8'));
+            contractInterface = new Interface(abiJson);
+          } catch (e) {
+            console.warn(`Warning: Could not load ABI from ${options.abi}: ${e.message}`);
+          }
+        }
+
         // Decode transaction details
-        const txDetails = TransactionDecoder.decode(frozenTx.transaction);
+        const txDetails = TransactionDecoder.decode(frozenTx.transaction, contractInterface);
 
         // Add additional metadata
         const result = {

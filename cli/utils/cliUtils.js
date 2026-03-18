@@ -9,6 +9,12 @@ const chalk = require('chalk');
 const path = require('path');
 const logger = require('../../shared/logger');
 
+// Respect NO_COLOR environment variable (https://no-color.org/)
+// and disable colors when stdout is not a TTY (piped output)
+if (process.env.NO_COLOR || (process.stdout && !process.stdout.isTTY)) {
+  chalk.level = 0;
+}
+
 // Load version from package.json
 const packageJson = require(path.join(__dirname, '../../package.json'));
 const VERSION = packageJson.version;

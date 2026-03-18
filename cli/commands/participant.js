@@ -12,18 +12,21 @@ module.exports = function(program) {
   program
     .command('participant')
     .description('Join a session as a participant')
-    .requiredOption('-u, --url <url>', 'WebSocket server URL')
-    .requiredOption('-s, --session <id>', 'Session ID')
-    .requiredOption('-p, --pin <pin>', 'Session token')
+    .option('-c, --connect <connectionString>', 'Connection string (hmsc:...) — includes server URL, session ID, and PIN')
+    .option('-u, --url <url>', 'WebSocket server URL (alternative to --connect)')
+    .option('-s, --session <id>', 'Session ID (alternative to --connect)')
+    .option('-p, --pin <pin>', 'Session token (alternative to --connect)')
     .option('-f, --keyfile <path>', 'Load encrypted key file (RECOMMENDED)')
     .option('-k, --key <key>', 'Private key hex string (DEPRECATED: visible in process list, use --keyfile)')
     .option('-l, --label <label>', 'Participant label')
     .option('-y, --yes', 'Non-interactive mode (skip prompts)')
     .addHelpText('after', `
 Examples:
+  # Join using connection string (recommended)
+  $ hedera-multisig participant --connect hmsc:eyJz... -f keys.encrypted
+
+  # Join using individual parameters
   $ hedera-multisig participant -u ws://localhost:3000 -s abc123 -p TOKEN123 -f keys.encrypted
-  $ hedera-multisig participant -u ws://localhost:3000 -s abc123 -p TOKEN123
-  $ hedera-multisig participant -u ws://localhost:3000 -s abc123 -p TOKEN123 -k <privateKey>
     `)
     .action(async (options, command) => {
       const { PrivateKey } = require('@hashgraph/sdk');
@@ -40,6 +43,28 @@ Examples:
       const jsonOutput = new JsonOutput(globalOpts.json);
 
       try {
+        // Resolve connection parameters from --connect or --url/--session/--pin
+        let serverUrl = options.url;
+        let sessionId = options.session;
+        let pin = options.pin;
+
+        if (options.connect) {
+          const { parseConnectionString } = require('../../shared/connection-string');
+          const parsed = parseConnectionString(options.connect);
+          if (!parsed) {
+            exitWithError('Invalid connection string format. Expected hmsc:... format.', ExitCodes.INVALID_INPUT);
+            return;
+          }
+          serverUrl = parsed.serverUrl;
+          sessionId = parsed.sessionId;
+          pin = parsed.pin;
+        }
+
+        if (!serverUrl || !sessionId || !pin) {
+          exitWithError('Must provide either --connect <hmsc:...> or all of --url, --session, --pin', ExitCodes.INVALID_INPUT);
+          return;
+        }
+
         console.log(chalk.bold.cyan('\n👥 Hedera MultiSig Participant\n'));
         console.log(chalk.cyan('═'.repeat(60)));
 
@@ -52,9 +77,9 @@ Examples:
         // Connect to session
         console.log(chalk.white('Connecting to session...\n'));
         const connectionResult = await client.connect(
-          options.url,
-          options.session,
-          options.pin
+          serverUrl,
+          sessionId,
+          pin
         );
 
         // Load private key
