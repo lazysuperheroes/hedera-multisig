@@ -57,6 +57,16 @@ waiting -> transaction-received -> signing -> executing -> completed
 
 Terminal states: `completed`, `expired`, `cancelled`.
 
+### Coordination Transport Abstraction
+
+The system has a `CoordinationTransport` interface (`shared/CoordinationTransport.js`) that decouples coordination from transport:
+
+- **`WebSocketTransport`** — wraps the existing WebSocket server (current default)
+- **`FloraTransport`** — stub for future HCS-16 on-chain coordination via HCS topics
+- **Factory**: `createTransport('websocket' | 'flora', options)`
+
+The `SigningSessionManager` is already transport-agnostic — it manages state through method calls and event handlers with no WebSocket coupling. The `AgentSigningClient` accepts a `transportType` option.
+
 ---
 
 ## 3. Key Files
@@ -75,8 +85,11 @@ Terminal states: `completed`, `expired`, `cancelled`.
 | Agent client | `client/AgentSigningClient.js` |
 | Policy engine | `client/PolicyEngine.js` |
 | Protocol constants | `shared/protocol.js` (message types, session states, error codes) |
+| Error classes | `shared/errors.js` (MultiSigError hierarchy with error codes) |
 | Timer management | `shared/TimerController.js` |
 | Crypto utilities | `shared/crypto-utils.js` (timing-safe compare, ID generation) |
+| Transport abstraction | `shared/CoordinationTransport.js` (WebSocket + Flora stub) |
+| Mirror node client | `shared/mirror-node-client.js` (exchange rates, token info, schedules) |
 | Logger | `shared/logger.js` |
 | CLI entry point | `cli/index.js` |
 | CLI utilities | `cli/utils/cliUtils.js` (ExitCodes, JsonOutput) |
@@ -316,6 +329,14 @@ DEBUG=* npx mocha test/sessionStore.test.js --timeout 120000
 2. Required methods: `createSession`, `getSession`, `updateSession`, `deleteSession`, `getActiveSessions`, `cleanup`
 3. Export it from `server/stores/index.js`
 4. Add tests following the pattern in `test/sessionStore.test.js`
+
+### How to Add a New Coordination Transport
+
+1. Create a class extending `CoordinationTransport` from `shared/CoordinationTransport.js`
+2. Implement: `start()`, `stop()`, `broadcast()`, `sendTo()`, `sendToCoordinator()`, `getType()`
+3. Use `_emitMessage()`, `_emitConnect()`, `_emitDisconnect()` to dispatch events to handlers
+4. Register the type in `TRANSPORT_TYPES` and the `createTransport` factory
+5. See `FloraTransport` stub for documented method-by-method specification
 
 ### How to Add a New WebSocket Message Type
 

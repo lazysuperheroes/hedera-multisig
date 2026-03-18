@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Hedera MultiSig is a production-grade multi-signature transaction management library for Hedera blockchain. It provides M-of-N threshold signing with three workflow modes: Interactive (real-time), Offline (air-gapped), and Networked (WebSocket-based).
+Hedera MultiSig is a production-grade multi-signature transaction management library for Hedera blockchain. It provides M-of-N threshold signing with five workflow modes: Interactive (real-time), Offline (air-gapped), Networked (WebSocket-based), Scheduled (async via ScheduleCreate), and Flora (on-chain via HCS-16, architectural prep complete).
+
+See `SKILLS.md` for comprehensive AI agent onboarding guide.
 
 ## Build, Test, and Run Commands
 
@@ -41,11 +43,11 @@ npm run multisig-client -- --server ws://localhost:3001 --session SESSION_ID --p
 ```
 ├── core/           # Transaction freezer, decoder, signature collection/verification
 ├── server/         # WebSocket server, SigningSessionManager, SessionStore (Redis/memory)
-├── client/         # Node.js SigningClient for joining signing sessions
-├── cli/            # Commander.js CLI entry point and command modules
-├── workflows/      # WorkflowOrchestrator, InteractiveWorkflow, OfflineWorkflow
-├── keyManagement/  # KeyProvider implementations (Prompt, EncryptedFile, Env)
-├── shared/         # Logger, TimerController, transaction-decoder, connection-string
+├── client/         # SigningClient, AgentSigningClient, PolicyEngine
+├── cli/            # Commander.js CLI (server, participant, sign, offline, schedule, transfer, token, session)
+├── workflows/      # WorkflowOrchestrator, InteractiveWorkflow, OfflineWorkflow, ScheduledWorkflow
+├── keyManagement/  # KeyProvider (sign() + canExposeKeys()), Prompt, EncryptedFile, Env
+├── shared/         # protocol, errors, crypto-utils, transaction-decoder, CoordinationTransport, mirror-node-client, logger, TimerController
 ├── ui/             # ProgressIndicator, ErrorFormatter, TransactionDisplay
 ├── dapp/           # Next.js WalletConnect browser dApp
 ├── scripts/        # Account management utilities (generate-keys, create-account, etc.)
@@ -55,12 +57,16 @@ npm run multisig-client -- --server ws://localhost:3001 --session SESSION_ID --p
 ### Key Components
 
 - **TransactionFreezer** (`core/`): Freezes Hedera SDK transactions for offline signing
-- **TransactionDecoder** (`core/`): Decodes frozen transaction bytes to readable format
+- **TransactionDecoder** (`core/`): Decodes frozen transaction bytes to readable format (20+ types)
 - **SignatureCollector** (`core/`): Collects signatures from multiple key providers
 - **WorkflowOrchestrator** (`workflows/`): Coordinates signing workflows
+- **ScheduledWorkflow** (`workflows/`): Async signing via Hedera ScheduleCreate/ScheduleSign
 - **WebSocketServer** (`server/`): TLS/WSS server with tunnel support (ngrok/localtunnel)
-- **SigningSessionManager** (`server/`): Session lifecycle and state machine
-- **KeyProvider** (`keyManagement/`): Abstract interface for key handling (3 security tiers)
+- **SigningSessionManager** (`server/`): Session lifecycle and state machine (async API)
+- **AgentSigningClient** (`client/`): Headless agent with policy-based auto-signing
+- **PolicyEngine** (`client/`): Composable rules for automated transaction approval
+- **KeyProvider** (`keyManagement/`): Abstract interface with `sign()` method (3 security tiers)
+- **CoordinationTransport** (`shared/`): Abstract transport layer (WebSocket + Flora stub)
 
 ### Security Model
 

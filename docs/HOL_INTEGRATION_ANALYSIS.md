@@ -1,20 +1,28 @@
 # HOL Standards Integration Analysis
 
-> **Analysis of how Hedera MultiSig can integrate with HCS-10, HCS-15, and HCS-16 standards from the Hashgraph Online Library (HOL).**
+> **Analysis of how Hedera MultiSig integrates with HOL (Hashgraph Online Library) standards.**
 >
-> Date: 2026-03-18
+> Date: 2026-03-18 | Updated: 2026-03-18
 
 ## Executive Summary
 
-Three HOL standards have direct relevance to Hedera MultiSig:
+Eight HOL standards have direct or supporting relevance to Hedera MultiSig:
 
-| Standard | Name | Relevance |
-|----------|------|-----------|
-| **HCS-10** | OpenConvAI | Agent-to-agent communication protocol on HCS — enables our AgentSigningClient to discover and communicate with other agents natively on Hedera |
-| **HCS-15** | Petals | Multi-account identity with shared keys — maps to how treasury teams manage multiple signing accounts |
-| **HCS-16** | Flora | Multi-signature coordination accounts — **directly overlaps** with our core functionality and represents an on-chain standardization of what we do via WebSocket |
+| Standard | Name | Relevance | Priority |
+|----------|------|-----------|----------|
+| **HCS-16** | Flora Coordination | On-chain multi-sig groups — **directly overlaps** with our core functionality | High |
+| **HCS-10** | OpenConvAI | Agent-to-agent communication — enables discovery and messaging for our AgentSigningClient | High |
+| **HCS-15** | Petals | Multi-account identity — maps to treasury teams managing multiple signing accounts | Medium |
+| **HCS-17** | State Hash | Tamper-evident state verification for Flora groups | Medium (with Flora) |
+| **HCS-18** | Flora Discovery | Decentralized group formation for autonomous agents | Medium (with Flora) |
+| **HCS-26** | Agent Skills Registry | Discoverable signing capabilities for agent marketplace | Low |
+| **HCS-11** | Profile Metadata | Identity standard used by HCS-10/15/16 for agent/account profiles | Supporting |
+| **HCS-1** | File Management | Large message storage used by HCS-10 for data > topic message limits | Supporting |
+| **HCS-8/9** | Poll Topics | Decentralized voting — future governance within Flora groups | Future |
 
-**Key insight**: HCS-16 Flora is essentially a standardized, on-chain version of our multi-sig coordination. Rather than competing, we should **implement HCS-16 as a backend** — our tooling (CLI, dApp, Agent SDK) becomes the user interface for creating and managing Flora accounts.
+**Strategic position**: HCS-16 Flora standardizes on-chain multi-sig coordination. Rather than competing, we offer Flora as a **fifth coordination mode** alongside our existing WebSocket, Offline, Networked, and Scheduled modes. Our tooling (CLI, dApp, Agent SDK) becomes the reference implementation for managing Flora accounts on Hedera.
+
+**Current status**: Architectural prep complete (CoordinationTransport abstraction, FloraTransport stub, transport-agnostic AgentSigningClient). Full build planned for when HCS-16 stabilizes (est. Q3/Q4 2026).
 
 ---
 
@@ -161,22 +169,26 @@ Rather than replacing our stack, we should **add HCS-16 as a backend option**:
 
 ---
 
-## Recommended Roadmap Addition
+## Implementation Roadmap
 
-### Near-term (v2.x)
-1. **HCS-16 awareness** in the transaction decoder — recognize Flora-related transactions
-2. **HCS-10 agent registration** for `AgentSigningClient`
-3. **Documentation** on how Hedera MultiSig relates to HCS-16
+### Completed (v2.0 — March 2026)
+1. **CoordinationTransport abstraction** — `shared/CoordinationTransport.js` with base class, WebSocket adapter, Flora stub, factory
+2. **Transport-agnostic AgentSigningClient** — accepts `transportType` option
+3. **ScheduleCreate/ScheduleSign decoders** — transaction decoder handles Flora-relevant types
+4. **This analysis document** and roadmap updates
 
-### Medium-term (v3.0)
-4. **Flora management CLI** — create, join, propose, sign, status
-5. **FloraWorkflow** — on-chain coordination as alternative to WebSocket
-6. **HCS-10 transport adapter** for agent communication
+### When HCS-16 Stabilizes (est. v3.0 — Q3/Q4 2026)
+5. **FloraWorkflow** — on-chain coordination via HCS topics (1-2 weeks with prep in place)
+6. **Flora CLI** — `hedera-multisig flora create/join/propose/sign/status`
+7. **HCS-17 state hash** verification for Flora groups
+8. **HCS-10 agent registration** for AgentSigningClient
 
-### Long-term (v4.0)
-7. **Full Flora dApp** — visual Flora management
-8. **HCS-15 Petal integration** — multi-account treasury management
-9. **HCS-10 marketplace** — agent discovery and service monetization
+### Future (v4.0+)
+9. **HCS-18 Flora discovery** — autonomous agent group formation
+10. **HCS-26 skills registry** — register signing capabilities
+11. **Flora dApp** — visual Flora management page
+12. **HCS-15 Petal integration** — multi-account treasury management
+13. **HCS-8/9 governance** — voting within Flora groups
 
 ---
 

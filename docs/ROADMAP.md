@@ -4,21 +4,21 @@
 >
 > This document tracks planned features, architectural decisions, and future considerations.
 
-## Current Status (v1.2.2)
+## Current Status (v2.0)
 
-**Released**: January 2026
+**Backend Complete**: March 2026
 
-The project completed a comprehensive 9-agent review (January 2026) and implemented all initial P0-P3 priorities:
+Following two comprehensive 9-agent reviews and a full implementation session, all backend phases (0-4) are complete plus Flora architectural prep (Phase 6):
 
-- **Security**: TLS/WSS, signature verification, timing-safe PIN, 8-char alphanumeric tokens
-- **CLI**: Commander.js migration, unified entry point, shell completions, offline signing
-- **Testing**: 116+ unit tests, Playwright E2E in CI
-- **Documentation**: CONTRIBUTING.md, API docs, TypeScript declarations
-- **Deployment**: npm published, Vercel production (mainnet + testnet)
+- **Security**: 20+ bug fixes, coordinator tokens, reconnection tokens, PIN bias fix, rate limiting, origin validation
+- **CLI**: 10 transaction types, connection strings, non-interactive sign, ABI support, transfer/token/session/schedule subcommands
+- **Agent SDK**: AgentSigningClient, PolicyEngine (5 rules, 2 presets), API key auth, agent protocol role
+- **Scheduled TX**: ScheduledWorkflow, scheduled session mode, schedule CLI
+- **Architecture**: Shared protocol, error hierarchy, async SessionStore, CoordinationTransport abstraction
+- **Testing**: 219 tests across 9 test files, c8 coverage tooling
+- **Documentation**: SKILLS.md, AGENT_INTEGRATION.md, HOL_INTEGRATION_ANALYSIS.md, TypeScript declarations rewritten
 
-### March 2026 Review
-
-A second 9-agent deep review (architect, security, CLI-master, debt-hunter, backend/Hedera, refactorer, QA, code-critic, product) identified critical bugs, architectural gaps, and feature requirements for three target use cases. This roadmap reflects those findings.
+**Next**: Phase 5 (Coordinator Panel & Product Polish — frontend dApp work)
 
 ---
 
@@ -48,7 +48,7 @@ Hedera's `ScheduleCreateTransaction` / `ScheduleSignTransaction` enables async s
 
 ### Phase 0: Critical Bug Fixes
 
-**Status**: Planned | **Target**: v1.3.0
+**Status**: Complete | **Released**: v1.3.0
 
 Critical bugs discovered in the March 2026 review that must be fixed before any new feature work:
 
@@ -64,7 +64,7 @@ Critical bugs discovered in the March 2026 review that must be fixed before any 
 
 ### Phase 1: Foundation Improvements
 
-**Status**: Planned | **Target**: v1.4.0
+**Status**: Complete | **Released**: v1.4.0 / v1.5.0
 
 Architectural cleanup that enables the three target use cases:
 
@@ -77,11 +77,11 @@ Architectural cleanup that enables the three target use cases:
 
 ### Phase 2: Treasury Management CLI
 
-**Status**: Planned | **Target**: v1.5.0
+**Status**: Complete | **Released**: v1.6.0
 
 Complete CLI coverage for all treasury operations:
 
-- Expand `offline freeze` from 2 to 12+ transaction types
+- Expand `offline freeze` from 2 to 10 transaction types
 - Add `--abi` support for smart contract calldata encoding/decoding
 - Add `--connect <connection-string>` to participant command
 - Make `sign` command non-interactive for scripting
@@ -90,7 +90,7 @@ Complete CLI coverage for all treasury operations:
 
 ### Phase 3: Agent Signing SDK
 
-**Status**: Planned | **Target**: v2.0.0
+**Status**: Complete | **Released**: v2.0.0
 
 Programmatic signing interface for automated agents:
 
@@ -102,7 +102,7 @@ Programmatic signing interface for automated agents:
 
 ### Phase 4: Scheduled Transactions
 
-**Status**: Planned | **Target**: v2.1.0
+**Status**: Complete | **Released**: v2.1.0
 
 Async signing via Hedera's scheduled transaction feature:
 
