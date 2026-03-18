@@ -51,12 +51,18 @@ export default function Home() {
         </div>
 
         {/* CTA */}
-        <div className="pt-4">
+        <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
             href="/join"
             className="inline-block px-8 py-4 bg-blue-600 text-white font-semibold rounded-lg shadow-lg hover:bg-blue-700 transition-colors"
           >
             Join Signing Session
+          </Link>
+          <Link
+            href="/create"
+            className="inline-block px-8 py-4 bg-gray-700 dark:bg-gray-600 text-white font-semibold rounded-lg shadow-lg hover:bg-gray-800 dark:hover:bg-gray-500 transition-colors"
+          >
+            Coordinator Panel
           </Link>
         </div>
 

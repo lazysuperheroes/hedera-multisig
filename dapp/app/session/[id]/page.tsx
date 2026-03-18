@@ -39,7 +39,8 @@ import { DEFAULT_NETWORK } from '../../../lib/walletconnect-config';
 interface SessionInfo {
   serverUrl: string;
   sessionId: string;
-  pin: string;
+  pin?: string;
+  reconnectionToken?: string;
 }
 
 interface PageProps {
@@ -117,7 +118,7 @@ export default function SessionPage({ params }: PageProps) {
       setSessionInfo({
         serverUrl: sessionRecovery.savedSession.serverUrl,
         sessionId: sessionRecovery.savedSession.sessionId,
-        pin: sessionRecovery.savedSession.pin,
+        reconnectionToken: sessionRecovery.savedSession.reconnectionToken,
       });
 
       // Check if session is still fresh
@@ -291,7 +292,7 @@ export default function SessionPage({ params }: PageProps) {
       const result = await signingSession.connect(
         sessionInfo.serverUrl,
         sessionInfo.sessionId,
-        sessionInfo.pin,
+        sessionInfo.pin || '',
         publicKey
       );
 
@@ -504,7 +505,7 @@ export default function SessionPage({ params }: PageProps) {
           onClose={() => setShowShareDialog(false)}
           serverUrl={sessionInfo.serverUrl}
           sessionId={sessionInfo.sessionId}
-          pin={sessionInfo.pin}
+          pin={sessionInfo.pin || ''}
         />
       )}
 
