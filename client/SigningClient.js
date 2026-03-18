@@ -141,18 +141,30 @@ class SigningClient {
       this.status = 'reviewing';
       this._log('\n🔔 Transaction received for review!', 'info');
 
-      const { frozenTransaction, txDetails, metadata, contractInterface } = payload;
+      const { frozenTransaction, txDetails, metadata, abi, contractInterface } = payload;
+
+      // Reconstruct ethers Interface from ABI if provided (ABI is JSON-serializable,
+      // contractInterface objects don't survive JSON.stringify over WebSocket)
+      let resolvedInterface = contractInterface || null;
+      if (abi && !resolvedInterface) {
+        try {
+          const { Interface } = require('ethers');
+          resolvedInterface = new Interface(abi);
+        } catch (e) {
+          this._log(`Warning: Could not reconstruct contract interface from ABI: ${e.message}`, 'warning');
+        }
+      }
 
       // Decode transaction from bytes
       const decodedTx = TransactionReviewer.decode(
         frozenTransaction.base64,
-        contractInterface
+        resolvedInterface
       );
 
       // Display transaction for approval
       const display = TransactionReviewer.displayForApproval(decodedTx, {
         metadata,
-        contractInterface
+        contractInterface: resolvedInterface
       });
 
       console.log(display);

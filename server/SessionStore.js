@@ -7,12 +7,15 @@
 
 const crypto = require('crypto');
 const { timerController } = require('../shared/TimerController');
+const { timingSafeCompare, generateSessionId, generateParticipantId, sanitizePublicKey } = require('../shared/crypto-utils');
+const { isValidTransition, ACTIVE_SESSION_STATES, AUTH_VALID_STATES } = require('../shared/protocol');
 
 class SessionStore {
   constructor(options = {}) {
     this.sessions = new Map();
     this.defaultTimeout = options.defaultTimeout || 1800000; // 30 minutes
     this.cleanupInterval = options.cleanupInterval || 60000; // 1 minute
+    this.maxSessions = options.maxSessions || 100; // SEC-13: prevent memory exhaustion
     this.cleanupTimerId = null;
 
     // Start automatic cleanup
@@ -26,6 +29,11 @@ class SessionStore {
    * @returns {Object} Created session
    */
   async createSession(sessionData) {
+    // Enforce maximum session count to prevent memory exhaustion (SEC-13)
+    if (this.maxSessions && this.sessions.size >= this.maxSessions) {
+      throw new Error(`Maximum session limit (${this.maxSessions}) reached. Please wait for existing sessions to expire.`);
+    }
+
     const sessionId = this._generateSessionId();
     const now = Date.now();
 
@@ -104,8 +112,8 @@ class SessionStore {
       return false;
     }
 
-    // Allow authentication for waiting, transaction-received, and signing states
-    const validStates = ['waiting', 'transaction-received', 'signing'];
+    // Allow authentication for active session states
+    const validStates = AUTH_VALID_STATES;
     if (!validStates.includes(session.status)) {
       return false;
     }
@@ -123,6 +131,15 @@ class SessionStore {
   async updateStatus(sessionId, status) {
     const session = this.sessions.get(sessionId);
     if (session) {
+      // Validate state transition (warn but don't block for backward compat)
+      if (!isValidTransition(session.status, status)) {
+        // Map legacy 'active' status to 'signing' for backward compatibility
+        if (status === 'active') {
+          status = 'signing';
+        } else {
+          console.warn(`Warning: Invalid state transition ${session.status} → ${status} for session ${sessionId}`);
+        }
+      }
       session.status = status;
     }
   }
@@ -301,7 +318,7 @@ class SessionStore {
   async listActiveSessions() {
     const active = [];
 
-    const activeStatuses = ['waiting', 'transaction-received', 'signing'];
+    const activeStatuses = ACTIVE_SESSION_STATES;
     for (const [sessionId, session] of this.sessions) {
       if (activeStatuses.includes(session.status)) {
         active.push({
@@ -408,48 +425,29 @@ class SessionStore {
   }
 
   /**
-   * Timing-safe string comparison to prevent timing attacks
-   * @private
+   * Timing-safe string comparison (delegates to shared/crypto-utils)
    * @param {string} a - First string
    * @param {string} b - Second string
    * @returns {boolean} True if strings are equal
    */
   _timingSafeCompare(a, b) {
-    // Handle null/undefined
-    if (!a || !b) {
-      return false;
-    }
-
-    // Convert to buffers - pad shorter to match longer to avoid length-based timing leaks
-    const bufA = Buffer.from(a, 'utf8');
-    const bufB = Buffer.from(b, 'utf8');
-
-    // If lengths differ, still compare but return false
-    // Use max length buffer comparison to avoid timing leak
-    if (bufA.length !== bufB.length) {
-      // Compare against a dummy to maintain constant time, then return false
-      const dummy = Buffer.alloc(bufA.length, 0);
-      crypto.timingSafeEqual(bufA, dummy);
-      return false;
-    }
-
-    return crypto.timingSafeEqual(bufA, bufB);
+    return timingSafeCompare(a, b);
   }
 
   /**
-   * Generate unique session ID
+   * Generate unique session ID (delegates to shared/crypto-utils)
    * @private
    */
   _generateSessionId() {
-    return crypto.randomBytes(16).toString('hex');
+    return generateSessionId();
   }
 
   /**
-   * Generate unique participant ID
+   * Generate unique participant ID (delegates to shared/crypto-utils)
    * @private
    */
   _generateParticipantId() {
-    return crypto.randomBytes(8).toString('hex');
+    return generateParticipantId();
   }
 
   /**

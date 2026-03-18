@@ -47,10 +47,23 @@ class MultiSigWebSocketServer {
     // Rate limiting for AUTH attempts (prevents PIN brute force and griefing)
     this.authAttempts = new Map(); // IP -> { count, resetTime, blocked }
     this.authRateLimit = options.authRateLimit || {
-      maxAttempts: 5,      // Max failed attempts
+      maxAttempts: 5,      // Max failed attempts per IP
       windowMs: 60000,     // 1 minute window
       blockDurationMs: 300000  // 5 minute block after too many failures
     };
+
+    // Per-session rate limiting (SEC-11: prevents distributed brute force against a single session)
+    this.sessionAuthAttempts = new Map(); // sessionId -> { count, resetTime }
+    this.sessionRateLimit = options.sessionRateLimit || {
+      maxAttempts: 20,     // Max failed attempts per session from all IPs
+      windowMs: 300000     // 5 minute window
+    };
+
+    // Maximum concurrent sessions to prevent memory exhaustion (SEC-13)
+    this.maxSessions = options.maxSessions || 100;
+
+    // Allowed origins for WebSocket connections (SEC-12)
+    this.allowedOrigins = options.allowedOrigins || null; // null = allow all (dev mode)
 
     // Heartbeat configuration for detecting dead connections
     this.heartbeatConfig = {
@@ -95,8 +108,16 @@ class MultiSigWebSocketServer {
           this.server = http.createServer(requestHandler);
         }
 
-        // Create WebSocket server
-        this.wss = new WebSocket.Server({ server: this.server });
+        // Create WebSocket server with optional origin validation (SEC-12)
+        const wsOptions = { server: this.server };
+        if (this.allowedOrigins) {
+          wsOptions.verifyClient = (info) => {
+            const origin = info.origin || info.req.headers.origin;
+            if (!origin) return true; // Allow non-browser clients (CLI, agents)
+            return this.allowedOrigins.includes(origin);
+          };
+        }
+        this.wss = new WebSocket.Server(wsOptions);
 
         // Handle connections
         this.wss.on('connection', (ws, req) => {
@@ -453,7 +474,7 @@ class MultiSigWebSocketServer {
    * Record failed AUTH attempt
    * @private
    */
-  _recordFailedAuth(clientIp, attempts) {
+  _recordFailedAuth(clientIp, attempts, sessionId = null) {
     const now = Date.now();
     attempts.count++;
 
@@ -470,6 +491,16 @@ class MultiSigWebSocketServer {
     }
 
     this.authAttempts.set(clientIp, attempts);
+
+    // Track per-session failures (SEC-11)
+    if (sessionId) {
+      const sessionAttempts = this.sessionAuthAttempts.get(sessionId) || {
+        count: 0,
+        resetTime: now + this.sessionRateLimit.windowMs
+      };
+      sessionAttempts.count++;
+      this.sessionAuthAttempts.set(sessionId, sessionAttempts);
+    }
   }
 
   /**
@@ -502,9 +533,25 @@ class MultiSigWebSocketServer {
       return;
     }
 
+    // Check per-session rate limiting (SEC-11)
+    if (sessionId && !reconnectionToken) {
+      const sessionAttempts = this.sessionAuthAttempts.get(sessionId);
+      if (sessionAttempts) {
+        if (sessionAttempts.resetTime < Date.now()) {
+          this.sessionAuthAttempts.delete(sessionId);
+        } else if (sessionAttempts.count >= this.sessionRateLimit.maxAttempts) {
+          ws.send(JSON.stringify({
+            type: 'AUTH_FAILED',
+            payload: { message: 'Too many failed authentication attempts for this session', rateLimited: true }
+          }));
+          return;
+        }
+      }
+    }
+
     // Validate required fields (PIN or reconnection token required)
     if (!sessionId || (!pin && !reconnectionToken)) {
-      this._recordFailedAuth(clientIp, rateLimitAttempts);
+      this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
         payload: { message: 'Missing sessionId or authentication credentials' }
@@ -530,7 +577,7 @@ class MultiSigWebSocketServer {
     }
 
     if (!authenticated) {
-      this._recordFailedAuth(clientIp, rateLimitAttempts);
+      this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
         payload: { message: isCoordinator ? 'Invalid credentials or coordinator token' : 'Invalid session ID or PIN' }
@@ -546,7 +593,7 @@ class MultiSigWebSocketServer {
         const isEligible = isKeyEligible(publicKey, sessionInfo.eligiblePublicKeys);
 
         if (!isEligible) {
-          this._recordFailedAuth(clientIp, rateLimitAttempts);
+          this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
           ws.send(JSON.stringify({
             type: 'AUTH_FAILED',
             payload: {
@@ -767,7 +814,26 @@ class MultiSigWebSocketServer {
    */
   async _handleTransactionInject(sessionId, message) {
     try {
-      const { frozenTransaction, txDetails, metadata, contractInterface } = message.payload;
+      const { frozenTransaction, txDetails, metadata, contractInterface, abi } = message.payload;
+
+      // Ensure ABI is JSON-serializable for transmission to participants.
+      // ethers.js Interface objects do not survive JSON.stringify, so we extract
+      // the ABI array for wire transmission. Recipients reconstruct the Interface.
+      let serializableAbi = abi || null;
+      if (!serializableAbi && contractInterface) {
+        // Try to extract ABI fragments from ethers Interface object
+        try {
+          if (contractInterface.fragments) {
+            serializableAbi = contractInterface.fragments.map(f =>
+              typeof f.format === 'function' ? f.format('json') : JSON.stringify(f)
+            );
+          } else if (Array.isArray(contractInterface)) {
+            serializableAbi = contractInterface;
+          }
+        } catch (e) {
+          // Interface extraction failed — send without ABI
+        }
+      }
 
       // Normalize frozen transaction format at ingestion (PERF-03)
       const normalizedTx = this._normalizeFrozenTransaction(frozenTransaction);
@@ -816,14 +882,14 @@ class MultiSigWebSocketServer {
         }
       }
 
-      // Broadcast to all participants
+      // Broadcast to all participants (use serializableAbi instead of contractInterface)
       await this.broadcastToSession(sessionId, {
         type: 'TRANSACTION_RECEIVED',
         payload: {
           frozenTransaction,
           txDetails,
           metadata,
-          contractInterface
+          abi: serializableAbi
         }
       });
 
