@@ -187,6 +187,7 @@ Examples:
         const sessionData = {
           sessionId: session.sessionId,
           pin: session.pin,
+          coordinatorToken: session.coordinatorToken,
           serverUrl: shareUrl,
           localUrl: serverInfo.url,
           publicUrl: serverInfo.publicUrl || null,
@@ -211,6 +212,8 @@ Examples:
           console.log(chalk.cyan('═'.repeat(60)));
           console.log(chalk.white('Session ID: ') + chalk.yellow(session.sessionId));
           console.log(chalk.white('PIN: ') + chalk.bold.yellow(session.pin));
+          console.log(chalk.white('Coordinator Token: ') + chalk.bold.red(session.coordinatorToken));
+          console.log(chalk.gray('  (Keep this secret — required to authenticate as coordinator)'));
 
           if (serverInfo.publicUrl) {
             console.log(chalk.white('Public URL: ') + chalk.yellow(serverInfo.publicUrl));

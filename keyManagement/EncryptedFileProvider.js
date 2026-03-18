@@ -397,11 +397,18 @@ class EncryptedFileProvider extends KeyProvider {
    */
   static generatePassphrase(length = 20) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
-    const randomBytes = crypto.randomBytes(length);
-    let passphrase = '';
+    const charCount = chars.length;
+    const maxUnbiased = Math.floor(256 / charCount) * charCount;
 
-    for (let i = 0; i < length; i++) {
-      passphrase += chars[randomBytes[i] % chars.length];
+    let passphrase = '';
+    while (passphrase.length < length) {
+      const randomBytes = crypto.randomBytes(length - passphrase.length);
+      for (let i = 0; i < randomBytes.length && passphrase.length < length; i++) {
+        // Rejection sampling: discard bytes >= maxUnbiased to eliminate modulo bias
+        if (randomBytes[i] < maxUnbiased) {
+          passphrase += chars[randomBytes[i] % charCount];
+        }
+      }
     }
 
     return passphrase;

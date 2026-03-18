@@ -842,7 +842,7 @@ class MultiSigWebSocketServer {
       }
 
       // Store in session via SessionStore
-      const session = this.sessionManager.store.getSession(sessionId);
+      const session = await this.sessionManager.store.getSession(sessionId);
       if (session) {
         // Clear any existing expiration timeout via TimerController
         if (session.expirationTimerId) {

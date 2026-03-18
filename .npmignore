@@ -16,7 +16,10 @@ docs/MULTISIG_PRODUCTION_READINESS.md
 .github/
 .vscode/
 .idea/
+.claude/
 node_modules/
+AGENT_ANALYSIS.MD
+docs/DEVELOPMENT_PLAN_v2.md
 
 # Examples and temp files
 examples/

@@ -305,16 +305,22 @@ class RedisSessionStore {
     }
 
     const participant = session.participants[participantId];
-    if (participant && participant.status !== 'signed') {
-      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
-        session.stats.participantsReady--;
-      }
+    if (!participant) {
+      await this._saveSession(session);
+      return;
+    }
+
+    // Decrement ready count if participant was ready or had been ready before signing
+    const wasReady = participant.status === 'ready' || participant.status === 'signed';
+    if (wasReady && session.stats.participantsReady > 0) {
+      session.stats.participantsReady--;
+    }
+
+    if (participant.status !== 'signed') {
       delete session.participants[participantId];
       session.stats.participantsConnected--;
-    } else if (participant) {
-      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
-        session.stats.participantsReady--;
-      }
+    } else {
+      // Mark as disconnected but keep if signed
       participant.status = 'disconnected';
     }
 
