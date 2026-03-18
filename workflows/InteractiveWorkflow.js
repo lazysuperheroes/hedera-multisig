@@ -212,22 +212,21 @@ class InteractiveWorkflow {
         }
 
         try {
-          // Get keys from the key provider and sign
-          const keys = await keyProvider.getKeys();
-          if (!keys || keys.length === 0) {
-            this.progress.warning(`No keys available from ${label}`);
+          // Sign using the key provider's sign() method
+          // Works with both key-exposing providers and opaque signers (HSM, MPC, Agent)
+          const txBytes = frozenTransaction.toBytes();
+          const sigResults = await keyProvider.sign(txBytes);
+
+          if (!sigResults || sigResults.length === 0) {
+            this.progress.warning(`No signatures produced by ${label}`);
             continue;
           }
 
-          const privateKey = keys[0]; // Use first key from provider
-          const sigResult = SignatureCollector._signWithPrivateKey(
-            { bytes: frozenTransaction.toBytes() },
-            privateKey
-          );
+          const sigResult = sigResults[0]; // Use first signature from provider
 
           // Verify signature immediately
           const verifyStatus = await SignatureVerifier.verifySingle(
-            { bytes: frozenTransaction.toBytes() },
+            { bytes: txBytes },
             { publicKey: sigResult.publicKey, signature: sigResult.signature }
           );
 
@@ -237,7 +236,8 @@ class InteractiveWorkflow {
           }
 
           // Add signature to transaction
-          const pubKey = privateKey.publicKey;
+          const { PublicKey } = require('@hashgraph/sdk');
+          const pubKey = PublicKey.fromString(sigResult.publicKey);
           const sigBytes = Buffer.from(sigResult.signature, 'base64');
           signedTx = await signedTx.addSignature(pubKey, sigBytes);
 

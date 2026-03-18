@@ -145,6 +145,28 @@ class SessionStore {
   }
 
   /**
+   * Rejoin an existing participant by public key (identity preservation on reconnect).
+   * If a participant with this public key already exists, returns their existing participantId.
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string} publicKey - Public key to match
+   * @returns {string|null} Existing participantId, or null if not found
+   */
+  async rejoinParticipant(sessionId, publicKey) {
+    const session = this.sessions.get(sessionId);
+    if (!session || !publicKey) return null;
+
+    for (const [participantId, participant] of session.participants) {
+      if (participant.publicKey === publicKey && participant.status === 'disconnected') {
+        participant.status = 'connected';
+        participant.connectedAt = Date.now();
+        return participantId;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Add participant to session
    *
    * @param {string} sessionId - Session identifier

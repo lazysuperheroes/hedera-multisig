@@ -13,6 +13,7 @@ const chalk = require('chalk');
 const { normalizePublicKey, isKeyEligible } = require('./utils/keyUtils');
 const { createLogger } = require('../shared/logger');
 const { timerController } = require('../shared/TimerController');
+const { ERROR_CODES } = require('../shared/protocol');
 
 class MultiSigWebSocketServer {
   constructor(sessionManager, options = {}) {
@@ -528,7 +529,7 @@ class MultiSigWebSocketServer {
     } catch (error) {
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
-        payload: { message: error.message, rateLimited: true }
+        payload: { message: error.message, code: ERROR_CODES.AUTH_RATE_LIMITED, rateLimited: true }
       }));
       return;
     }
@@ -542,7 +543,7 @@ class MultiSigWebSocketServer {
         } else if (sessionAttempts.count >= this.sessionRateLimit.maxAttempts) {
           ws.send(JSON.stringify({
             type: 'AUTH_FAILED',
-            payload: { message: 'Too many failed authentication attempts for this session', rateLimited: true }
+            payload: { message: 'Too many failed authentication attempts for this session', code: ERROR_CODES.AUTH_RATE_LIMITED, rateLimited: true }
           }));
           return;
         }
@@ -554,7 +555,7 @@ class MultiSigWebSocketServer {
       this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
-        payload: { message: 'Missing sessionId or authentication credentials' }
+        payload: { message: 'Missing sessionId or authentication credentials', code: ERROR_CODES.AUTH_INVALID_CREDENTIALS }
       }));
       return;
     }
@@ -580,7 +581,10 @@ class MultiSigWebSocketServer {
       this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
-        payload: { message: isCoordinator ? 'Invalid credentials or coordinator token' : 'Invalid session ID or PIN' }
+        payload: {
+          message: isCoordinator ? 'Invalid credentials or coordinator token' : 'Invalid session ID or PIN',
+          code: isCoordinator ? ERROR_CODES.AUTH_COORDINATOR_TOKEN_INVALID : ERROR_CODES.AUTH_INVALID_CREDENTIALS
+        }
       }));
       return;
     }
@@ -598,6 +602,7 @@ class MultiSigWebSocketServer {
             type: 'AUTH_FAILED',
             payload: {
               message: 'Public key is not eligible to sign this transaction. Please verify you are using the correct key.',
+              code: ERROR_CODES.AUTH_KEY_NOT_ELIGIBLE,
               publicKeyRejected: true
             }
           }));
@@ -775,7 +780,7 @@ class MultiSigWebSocketServer {
     } catch (error) {
       this.sendToParticipant(participantId, {
         type: 'SIGNATURE_REJECTED',
-        payload: { message: error.message }
+        payload: { message: error.message, code: error.code || ERROR_CODES.SIGNATURE_INVALID }
       });
     }
   }
@@ -902,7 +907,7 @@ class MultiSigWebSocketServer {
     } catch (error) {
       this.sendToCoordinator(sessionId, {
         type: 'INJECTION_FAILED',
-        payload: { message: error.message }
+        payload: { message: error.message, code: error.code || ERROR_CODES.TRANSACTION_INJECTION_FAILED }
       });
     }
   }
@@ -1003,7 +1008,7 @@ class MultiSigWebSocketServer {
     } catch (error) {
       this.sendToCoordinator(sessionId, {
         type: 'EXECUTION_FAILED',
-        payload: { message: error.message }
+        payload: { message: error.message, code: error.code || ERROR_CODES.TRANSACTION_EXECUTION_FAILED }
       });
     }
   }

@@ -14,6 +14,10 @@
  *   npm run multisig-server -- --threshold 2 --keys "key1,key2,key3"
  */
 
+// DEPRECATED: Use `hedera-multisig server` (Commander.js CLI) instead of this standalone script.
+// This file will be removed in a future version.
+console.warn('\x1b[33m⚠️  Deprecation: Use `npx hedera-multisig server` instead of `node cli/server.js`\x1b[0m\n');
+
 // Load environment variables from .env file
 require('dotenv').config();
 

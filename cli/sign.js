@@ -11,6 +11,9 @@
  *   node sign.js --quick  (skip detailed display)
  */
 
+// DEPRECATED: Use `hedera-multisig sign` (Commander.js CLI) instead of this standalone script.
+console.warn('\x1b[33m⚠️  Deprecation: Use `npx hedera-multisig sign` instead of `node cli/sign.js`\x1b[0m\n');
+
 const readlineSync = require('readline-sync');
 const { PrivateKey } = require('@hashgraph/sdk');
 const TransactionFreezer = require('../core/TransactionFreezer');

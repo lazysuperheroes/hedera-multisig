@@ -16,7 +16,7 @@ module.exports = function(program) {
     .requiredOption('-s, --session <id>', 'Session ID')
     .requiredOption('-p, --pin <pin>', 'Session token')
     .option('-f, --keyfile <path>', 'Load encrypted key file (RECOMMENDED)')
-    .option('-k, --key <key>', 'Private key hex string (for testing)')
+    .option('-k, --key <key>', 'Private key hex string (DEPRECATED: visible in process list, use --keyfile)')
     .option('-l, --label <label>', 'Participant label')
     .option('-y, --yes', 'Non-interactive mode (skip prompts)')
     .addHelpText('after', `
@@ -74,8 +74,9 @@ Examples:
           console.log(chalk.green('✅ Key loaded successfully from encrypted file\n'));
 
         } else if (options.key) {
-          // Option 2: Inline key
-          console.log(chalk.yellow('⚠️  Using plaintext hex key (not recommended for production)\n'));
+          // Option 2: Inline key (DEPRECATED — visible in process lists and shell history)
+          console.log(chalk.yellow('⚠️  DEPRECATED: --key flag exposes your private key in process lists and shell history.'));
+          console.log(chalk.yellow('   Use --keyfile instead for production. --key will be removed in a future version.\n'));
           privateKey = options.key;
 
         } else if (options.yes || globalOpts.yes) {
