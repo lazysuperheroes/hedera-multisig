@@ -67,24 +67,24 @@ export function SessionCountdown({ expiresAt, onExpired }: SessionCountdownProps
 
   const styles = {
     normal: {
-      container: 'bg-gray-100 text-gray-700',
-      icon: 'text-gray-500',
-      time: 'text-gray-800',
+      container: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+      icon: 'text-gray-500 dark:text-gray-400',
+      time: 'text-gray-800 dark:text-gray-200',
     },
     warning: {
-      container: 'bg-yellow-100 text-yellow-800',
-      icon: 'text-yellow-600',
-      time: 'text-yellow-900',
+      container: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200',
+      icon: 'text-yellow-600 dark:text-yellow-400',
+      time: 'text-yellow-900 dark:text-yellow-200',
     },
     critical: {
-      container: 'bg-red-100 text-red-800 animate-pulse',
-      icon: 'text-red-600',
-      time: 'text-red-900',
+      container: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 animate-pulse',
+      icon: 'text-red-600 dark:text-red-400',
+      time: 'text-red-900 dark:text-red-200',
     },
     expired: {
-      container: 'bg-red-200 text-red-900',
-      icon: 'text-red-700',
-      time: 'text-red-900',
+      container: 'bg-red-200 dark:bg-red-900/40 text-red-900 dark:text-red-200',
+      icon: 'text-red-700 dark:text-red-400',
+      time: 'text-red-900 dark:text-red-200',
     },
   };
 
@@ -97,6 +97,7 @@ export function SessionCountdown({ expiresAt, onExpired }: SessionCountdownProps
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
+        aria-hidden="true"
       >
         <path
           strokeLinecap="round"
@@ -106,7 +107,7 @@ export function SessionCountdown({ expiresAt, onExpired }: SessionCountdownProps
         />
       </svg>
       <span className="text-xs font-medium">Session:</span>
-      <span className={`font-mono font-bold ${currentStyle.time}`}>
+      <span className={`font-mono font-bold tabular-nums ${currentStyle.time}`}>
         {formatDuration(secondsRemaining)}
       </span>
     </div>

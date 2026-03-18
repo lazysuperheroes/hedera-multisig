@@ -2,39 +2,55 @@
  * TypeScript declarations for @lazysuperheroes/hedera-multisig
  *
  * Production-grade multi-signature transaction management for Hedera blockchain.
+ * Updated to match actual API as of v1.3.0+.
  */
 
 import { Transaction, Client, PrivateKey, PublicKey, AccountId } from '@hashgraph/sdk';
-import { WebSocket } from 'ws';
 
 // ============================================================================
-// Core Components
+// Core Components (all static methods)
 // ============================================================================
 
-export interface FreezeOptions {
-  client?: Client;
-  nodeAccountIds?: AccountId[];
-}
-
-export interface DecodedTransaction {
-  type: string;
-  transactionId: string;
-  memo?: string;
-  maxTransactionFee?: string;
-  validDuration?: number;
-  nodeAccountIds?: string[];
-  [key: string]: unknown;
+export interface FrozenTransactionData {
+  transaction: Transaction;
+  base64: string;
+  bytes: Uint8Array;
+  txDetails: TransactionDetails;
+  frozenAt: Date;
+  expiresAt: Date;
+  hash: string;
 }
 
 export class TransactionFreezer {
-  constructor(client: Client);
-  freeze(transaction: Transaction, options?: FreezeOptions): Promise<Transaction>;
-  static freeze(transaction: Transaction, client: Client, options?: FreezeOptions): Promise<Transaction>;
+  static freeze(transaction: Transaction, client: Client, options?: {
+    contractInterface?: unknown;
+  }): Promise<FrozenTransactionData>;
+  static formatTimeRemaining(frozenTx: FrozenTransactionData): string;
+  static validateNotExpired(frozenTx: FrozenTransactionData): void;
+}
+
+export interface TransactionDetails {
+  type: string;
+  transactionId?: string;
+  transactionType?: string;
+  transfers?: Array<{ accountId: string; amount: string }>;
+  tokenTransfers?: Array<{ tokenId: string; transfers: Array<{ accountId: string; amount: string }> }>;
+  nftTransfers?: Array<{ tokenId: string; transfers: Array<{ senderAccountId: string; receiverAccountId: string; serialNumber: number }> }>;
+  tokenIds?: string[];
+  accountId?: string;
+  contractId?: string;
+  gas?: number;
+  functionName?: string;
+  functionParams?: Record<string, unknown>;
+  selectorVerified?: boolean;
+  amount?: string;
+  [key: string]: unknown;
 }
 
 export class TransactionDecoder {
-  static decode(transaction: Transaction, contractInterface?: unknown): DecodedTransaction;
-  static getTransactionType(transaction: Transaction): string;
+  /** @deprecated Use SharedTransactionDecoder instead */
+  static decode(transaction: Transaction, contractInterface?: unknown): TransactionDetails;
+  static display(txDetails: TransactionDetails, options?: { verbose?: boolean; compact?: boolean }): void;
 }
 
 export interface SignatureData {
@@ -43,222 +59,133 @@ export interface SignatureData {
 }
 
 export class SignatureCollector {
-  constructor();
-  addSignature(publicKey: string | PublicKey, signature: Uint8Array | string): void;
-  getSignatures(): SignatureData[];
-  hasSignature(publicKey: string | PublicKey): boolean;
-  clear(): void;
-  get count(): number;
+  static collectInteractive(frozenTx: FrozenTransactionData, requiredSignatures: number, options?: {
+    timeout?: number;
+    localKeys?: PrivateKey[];
+    verbose?: boolean;
+  }): Promise<SignatureData[]>;
+  static collectOffline(frozenTx: FrozenTransactionData, requiredSignatures: number, options?: {
+    localKeys?: PrivateKey[];
+    verbose?: boolean;
+  }): Promise<SignatureData[]>;
+  static generateSignatures(frozenTx: FrozenTransactionData, privateKeys: PrivateKey[]): SignatureData[];
 }
 
 export interface VerificationResult {
   valid: boolean;
-  message?: string;
-  publicKey?: string;
+  validCount: number;
+  totalCount: number;
+  details: Array<{ publicKey: string; valid: boolean; error: string | null }>;
+  errors: string[];
 }
 
 export class SignatureVerifier {
-  constructor(client?: Client);
-  verify(
-    transaction: Transaction,
-    publicKey: string | PublicKey,
-    signature: Uint8Array | string
-  ): Promise<VerificationResult>;
-  static verify(
-    transaction: Transaction,
-    publicKey: string | PublicKey,
-    signature: Uint8Array | string,
-    client?: Client
-  ): Promise<VerificationResult>;
+  static verify(frozenTx: { bytes: Uint8Array }, signatures: SignatureData[], options?: {
+    expectedPublicKeys?: string[];
+    threshold?: number;
+  }): Promise<VerificationResult>;
+  static verifySingle(frozenTx: { bytes: Uint8Array }, sigTuple: SignatureData): Promise<{ publicKey: string; valid: boolean; error: string | null }>;
+  static checkThreshold(threshold: number, providedCount: number): boolean;
+  static parseSignatureTuple(input: string): SignatureData | null;
+  static generateChecksum(input: { bytes: Uint8Array } | Uint8Array): string;
 }
 
 export interface ExecutionResult {
   success: boolean;
   transactionId?: string;
   receipt?: unknown;
+  status?: string;
+  executionTimeMs?: number;
   error?: string;
 }
 
 export class TransactionExecutor {
-  constructor(client: Client);
-  execute(transaction: Transaction, signatures?: SignatureData[]): Promise<ExecutionResult>;
+  static execute(frozenTx: FrozenTransactionData, signatures: SignatureData[], client: Client, options?: {
+    skipAuditLog?: boolean;
+    auditLogPath?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<ExecutionResult>;
 }
 
 // ============================================================================
 // Key Management
 // ============================================================================
 
-export interface KeyInfo {
-  privateKey: string;
-  publicKey: string;
-  type?: string;
-}
-
 export abstract class KeyProvider {
-  abstract get name(): string;
-  abstract get securityLevel(): 'low' | 'medium' | 'high';
-  abstract getKeys(): Promise<KeyInfo[]>;
-  abstract isAvailable(): Promise<boolean>;
-}
-
-export interface ValidationResult {
-  valid: boolean;
-  format?: string;
-  type?: string;
-  errors?: string[];
-}
-
-export class KeyValidator {
-  static validatePrivateKey(key: string): ValidationResult;
-  static validatePublicKey(key: string): ValidationResult;
-  static validateSignature(signature: string): ValidationResult;
-  static validateThreshold(threshold: number, totalKeys: number): ValidationResult;
-}
-
-export interface EnvKeyProviderOptions {
-  prefix?: string;
-  envFile?: string;
+  abstract getKeys(): Promise<PrivateKey[]>;
+  abstract getName(): string;
+  getSecurityLevel(): string;
+  canExposeKeys(): boolean;
+  sign(transactionBytes: Uint8Array): Promise<SignatureData[]>;
 }
 
 export class EnvKeyProvider extends KeyProvider {
-  constructor(options?: EnvKeyProviderOptions);
-  get name(): string;
-  get securityLevel(): 'medium';
-  getKeys(): Promise<KeyInfo[]>;
-  isAvailable(): Promise<boolean>;
-  checkEnvSecurity(): { secure: boolean; warnings: string[] };
+  constructor(options?: { prefix?: string; envFile?: string });
+  getKeys(): Promise<PrivateKey[]>;
+  getName(): string;
+  getSecurityLevel(): 'medium';
 }
 
 export class PromptKeyProvider extends KeyProvider {
   constructor();
-  get name(): string;
-  get securityLevel(): 'medium';
-  getKeys(): Promise<KeyInfo[]>;
-  isAvailable(): Promise<boolean>;
-}
-
-export interface EncryptedFileMetadata {
-  version: number;
-  algorithm: string;
-  keyCount: number;
-  createdAt: string;
+  getKeys(): Promise<PrivateKey[]>;
+  getName(): string;
+  getSecurityLevel(): 'high';
 }
 
 export class EncryptedFileProvider extends KeyProvider {
   constructor(filePath: string);
-  get name(): string;
-  get securityLevel(): 'high';
-  getKeys(): Promise<KeyInfo[]>;
-  isAvailable(): Promise<boolean>;
-  getMetadata(): EncryptedFileMetadata;
-  static createEncryptedFile(
-    filePath: string,
-    privateKeys: string[],
-    passphrase: string
-  ): Promise<void>;
+  getKeys(): Promise<PrivateKey[]>;
+  getName(): string;
+  getSecurityLevel(): 'high';
+  static createEncryptedFile(filePath: string, privateKeys: string[], passphrase: string): Promise<void>;
   static generatePassphrase(length?: number): string;
+}
+
+export class KeyValidator {
+  static validatePrivateKey(key: string): { valid: boolean; format?: string; type?: string; errors?: string[] };
+  static validatePublicKey(key: string): { valid: boolean; format?: string; errors?: string[] };
 }
 
 // ============================================================================
 // Workflows
 // ============================================================================
 
-export interface WorkflowConfig {
-  threshold: number;
-  signers: Array<{ publicKey: string; name?: string }>;
-  client?: Client;
-  timeout?: number;
-}
-
 export interface WorkflowResult {
   success: boolean;
-  transaction?: Transaction;
-  signatures?: SignatureData[];
+  receipt?: unknown;
+  transactionId?: string;
   error?: string;
 }
 
 export class WorkflowOrchestrator {
-  constructor(config: WorkflowConfig);
-  execute(transaction: Transaction): Promise<WorkflowResult>;
+  constructor(client: Client, options?: Record<string, unknown>);
+  executeWithSession(transaction: Transaction, options?: Record<string, unknown>): Promise<WorkflowResult>;
 }
 
 export class InteractiveWorkflow {
-  constructor(config: WorkflowConfig);
-  run(transaction: Transaction): Promise<WorkflowResult>;
-}
-
-export interface OfflineWorkflowExport {
-  transaction: string;
-  transactionId: string;
-  requiredSignatures: number;
-  signers: string[];
-  createdAt: string;
+  constructor(client: Client, options?: { auditLogPath?: string; verbose?: boolean; contractInterface?: unknown });
+  run(transaction: Transaction, keyProviders: KeyProvider[], options?: {
+    threshold?: number;
+    signerLabels?: string[];
+    metadata?: Record<string, unknown>;
+  }): Promise<WorkflowResult>;
+  cleanup(): void;
 }
 
 export class OfflineWorkflow {
-  constructor(config: WorkflowConfig);
-  export(transaction: Transaction): OfflineWorkflowExport;
-  import(data: OfflineWorkflowExport): Transaction;
-  addSignature(publicKey: string, signature: string): void;
-  isComplete(): boolean;
-}
-
-// ============================================================================
-// UI Components
-// ============================================================================
-
-export class ProgressIndicator {
-  constructor(options?: { total?: number; format?: string });
-  update(current: number, message?: string): void;
-  complete(message?: string): void;
-}
-
-export class ErrorFormatter {
-  static format(error: Error | string): string;
-  static formatWithContext(error: Error | string, context: Record<string, unknown>): string;
-}
-
-export class HelpText {
-  static show(command?: string): void;
-  static getCommands(): string[];
-}
-
-export class TransactionDisplay {
-  static show(transaction: DecodedTransaction): void;
-  static showCompact(transaction: DecodedTransaction): string;
+  constructor(client: Client, options?: { exportDir?: string; auditLogPath?: string; verbose?: boolean });
+  freezeAndExport(transaction: Transaction, metadata?: Record<string, unknown>): Promise<WorkflowResult & { transactionFile?: string; metadataFile?: string }>;
+  collectSignatures(frozenTransaction: Transaction, signatureFiles: Array<string | SignatureData>, threshold?: number): Promise<{ success: boolean; signatures: SignatureData[]; count: number }>;
+  executeTransaction(frozenTransaction: Transaction, signatures: SignatureData[]): Promise<WorkflowResult>;
+  run(transaction: Transaction, signatureFiles: Array<string | SignatureData>, options?: { threshold?: number }): Promise<WorkflowResult>;
 }
 
 // ============================================================================
 // Server Components
 // ============================================================================
 
-export interface SessionStoreOptions {
-  defaultTimeout?: number;
-  cleanupInterval?: number;
-}
-
-export interface Session {
-  sessionId: string;
-  pin: string;
-  status: 'waiting' | 'transaction-received' | 'signing' | 'executing' | 'completed' | 'expired' | 'cancelled';
-  threshold: number;
-  eligiblePublicKeys: string[];
-  frozenTransaction?: string;
-  txDetails?: DecodedTransaction;
-  participants: Map<string, ParticipantData>;
-  signatures: Map<string, SignatureData>;
-  stats: SessionStats;
-  createdAt: number;
-  expiresAt: number;
-}
-
-export interface ParticipantData {
-  participantId: string;
-  status: 'connected' | 'ready' | 'reviewing' | 'signing' | 'signed' | 'rejected' | 'disconnected';
-  publicKey?: string;
-  label?: string;
-  connectedAt: number;
-}
+export type SessionStatus = 'waiting' | 'transaction-received' | 'signing' | 'executing' | 'completed' | 'transaction-expired' | 'expired' | 'cancelled';
 
 export interface SessionStats {
   participantsConnected: number;
@@ -268,41 +195,56 @@ export interface SessionStats {
   signaturesRequired: number;
 }
 
-export class SessionStore {
-  constructor(options?: SessionStoreOptions);
-  createSession(sessionData: Partial<Session>): Session;
-  getSession(sessionId: string): Session | null;
-  authenticate(sessionId: string, pin: string): boolean;
-  updateStatus(sessionId: string, status: Session['status']): void;
-  addParticipant(sessionId: string, participant: Partial<ParticipantData>): string;
-  addSignature(sessionId: string, participantId: string, signature: SignatureData): void;
-  isThresholdMet(sessionId: string): boolean;
-  getSignatures(sessionId: string): SignatureData[];
-  deleteSession(sessionId: string): void;
-  shutdown(): void;
+export interface Session {
+  sessionId: string;
+  pin: string;
+  coordinatorToken: string | null;
+  status: SessionStatus;
+  threshold: number;
+  eligiblePublicKeys: string[];
+  frozenTransaction?: unknown;
+  txDetails?: TransactionDetails;
+  participants: Map<string, { participantId: string; status: string; publicKey?: string; label?: string }>;
+  signatures: Map<string, SignatureData>;
+  stats: SessionStats;
+  createdAt: number;
+  expiresAt: number;
 }
 
-export interface SigningSessionManagerOptions {
-  defaultTimeout?: number;
-  autoExecute?: boolean;
-  auditLogPath?: string;
-  verbose?: boolean;
-  store?: SessionStore;
+export class SessionStore {
+  constructor(options?: { defaultTimeout?: number; cleanupInterval?: number; maxSessions?: number });
+  createSession(sessionData: Partial<Session>): Promise<Session>;
+  getSession(sessionId: string): Promise<Session | null>;
+  authenticate(sessionId: string, pin: string): Promise<boolean>;
+  updateStatus(sessionId: string, status: SessionStatus): Promise<void>;
+  addParticipant(sessionId: string, participant: { label?: string }): Promise<string>;
+  addSignature(sessionId: string, participantId: string, signature: SignatureData): Promise<void>;
+  isThresholdMet(sessionId: string): Promise<boolean>;
+  getSignatures(sessionId: string): Promise<SignatureData[]>;
+  getStats(sessionId: string): Promise<SessionStats | null>;
+  listActiveSessions(): Promise<Array<{ sessionId: string; createdAt: number; expiresAt: number; stats: SessionStats }>>;
+  shutdown(): void;
 }
 
 export interface SessionInfo {
   sessionId: string;
   pin: string;
+  coordinatorToken: string;
   threshold: number;
   eligiblePublicKeys: string[];
   expectedParticipants: number;
-  status: Session['status'];
+  status: SessionStatus;
   createdAt: number;
   expiresAt: number;
 }
 
 export class SigningSessionManager {
-  constructor(client: Client, options?: SigningSessionManagerOptions);
+  constructor(client: Client, options?: {
+    defaultTimeout?: number;
+    autoExecute?: boolean;
+    store?: SessionStore;
+    verbose?: boolean;
+  });
   createSession(transaction: Transaction | null, config: {
     pin?: string;
     threshold?: number;
@@ -310,115 +252,94 @@ export class SigningSessionManager {
     expectedParticipants?: number;
     timeout?: number;
   }): Promise<SessionInfo>;
-  getSessionInfo(sessionId: string): SessionInfo | null;
-  injectTransaction(sessionId: string, transaction: Transaction): Promise<Session>;
-  addParticipant(sessionId: string, participant: Partial<ParticipantData>): { participantId: string };
-  submitSignature(
-    sessionId: string,
-    participantId: string,
-    signature: { publicKey: string; signature: string }
-  ): Promise<{
+  getSessionInfo(sessionId: string): Promise<SessionInfo | null>;
+  authenticate(sessionId: string, pin: string): Promise<boolean>;
+  authenticateCoordinator(sessionId: string, pin: string, coordinatorToken: string): Promise<boolean>;
+  addParticipant(sessionId: string, participant: { label?: string }): Promise<{ participantId: string }>;
+  submitSignature(sessionId: string, participantId: string, signature: SignatureData): Promise<{
+    success: boolean;
+    thresholdMet: boolean;
     signaturesCollected: number;
     signaturesRequired: number;
-    thresholdMet: boolean;
   }>;
   executeTransaction(sessionId: string): Promise<ExecutionResult>;
-}
-
-export interface WebSocketServerOptions {
-  port?: number;
-  host?: string;
-  verbose?: boolean;
-  tunnel?: {
-    enabled: boolean;
-    provider?: 'ngrok' | 'localtunnel';
-  };
-  tls?: {
-    enabled: boolean;
-    cert: string;
-    key: string;
-    ca?: string;
-    passphrase?: string;
-  };
-}
-
-export interface ServerStartResult {
-  url: string;
-  port: number;
-  tunnelUrl?: string;
+  injectTransaction(sessionId: string, transaction: Transaction, options?: Record<string, unknown>): Promise<unknown>;
+  generateReconnectionToken(sessionId: string, participantId: string): Promise<string>;
+  shutdown(): void;
 }
 
 export class WebSocketServer {
-  constructor(sessionManager: SigningSessionManager, options?: WebSocketServerOptions);
-  start(): Promise<ServerStartResult>;
+  constructor(sessionManager: SigningSessionManager, options?: {
+    port?: number;
+    host?: string;
+    verbose?: boolean;
+    allowedOrigins?: string[] | null;
+    maxSessions?: number;
+    tunnel?: { enabled: boolean; provider?: 'ngrok' | 'localtunnel' };
+    tls?: { enabled: boolean; cert: string; key: string; ca?: string; passphrase?: string };
+  });
+  start(): Promise<{ url: string; port: number; publicUrl?: string }>;
   stop(): Promise<void>;
-  broadcastToSession(sessionId: string, message: unknown): void;
+  broadcastToSession(sessionId: string, message: unknown): Promise<void>;
   sendToParticipant(participantId: string, message: unknown): void;
+  sendToCoordinator(sessionId: string, message: unknown): void;
 }
 
 // ============================================================================
 // Client Components
 // ============================================================================
 
-export interface SigningClientOptions {
-  serverUrl: string;
-  sessionId: string;
-  pin: string;
-  label?: string;
-  autoSign?: boolean;
-}
-
-export interface SigningClientEvents {
-  connected: () => void;
-  authenticated: (data: { participantId: string; sessionInfo: SessionInfo }) => void;
-  transactionReceived: (data: { transaction: string; txDetails: DecodedTransaction }) => void;
-  signatureRequested: (data: { transaction: string }) => void;
-  thresholdMet: () => void;
-  transactionExecuted: (data: ExecutionResult) => void;
-  error: (error: Error) => void;
-  disconnected: () => void;
-}
-
 export class SigningClient {
-  constructor(options: SigningClientOptions);
-  connect(): Promise<void>;
-  disconnect(): void;
-  signTransaction(privateKey: string | PrivateKey): Promise<void>;
-  rejectTransaction(reason?: string): void;
+  constructor(options?: { verbose?: boolean; label?: string; maxReconnectAttempts?: number; reconnectInterval?: number });
+  connect(serverUrl: string, sessionId: string, pin: string): Promise<{
+    participantId: string;
+    sessionInfo: SessionInfo;
+  }>;
   loadKeys(privateKey: string | PrivateKey): { publicKey: string };
-  on<K extends keyof SigningClientEvents>(event: K, handler: SigningClientEvents[K]): void;
-  off<K extends keyof SigningClientEvents>(event: K, handler: SigningClientEvents[K]): void;
-}
-
-export interface ReviewResult {
-  approved: boolean;
-  transaction?: DecodedTransaction;
-  warnings?: string[];
-}
-
-export class TransactionReviewer {
-  constructor();
-  review(transactionBytes: string): Promise<ReviewResult>;
-  decode(transactionBytes: string): Promise<DecodedTransaction>;
+  setReady(): Promise<{ success: boolean }>;
+  signTransaction(): Promise<SignatureData>;
+  rejectTransaction(reason?: string): void;
+  disconnect(): void;
+  on(event: string, handler: (...args: unknown[]) => void): void;
+  off(event: string, handler: (...args: unknown[]) => void): void;
 }
 
 // ============================================================================
 // Shared Components
 // ============================================================================
 
-export interface SharedDecoderOptions {
-  contractInterface?: unknown;
+export function getTransactionTypeName(transaction: Transaction): string;
+
+export function generateConnectionString(serverUrl: string, sessionId: string, pin: string): string;
+export function parseConnectionString(connectionString: string): { serverUrl: string; sessionId: string; pin: string } | null;
+export function isValidConnectionString(connectionString: string): boolean;
+
+export function timingSafeCompare(a: string, b: string): boolean;
+export function generateSessionId(): string;
+export function generateParticipantId(): string;
+export function sanitizePublicKey(publicKey: string): string;
+export function normalizeFrozenTransaction(frozenTransaction: unknown): { bytes: Buffer; base64: string; transaction?: Transaction } | null;
+
+// Error classes
+export class MultiSigError extends Error {
+  code: string;
 }
+export class TransactionExpiredError extends MultiSigError {}
+export class InvalidSignatureError extends MultiSigError {}
+export class InsufficientSignaturesError extends MultiSigError {}
+export class SessionNotFoundError extends MultiSigError {}
+export class AuthenticationError extends MultiSigError {}
+export class RateLimitError extends AuthenticationError {}
+export class InvalidSessionStateError extends MultiSigError {}
+export class KeyNotEligibleError extends MultiSigError {}
+export class NoTransactionError extends MultiSigError {}
 
-export const SharedTransactionDecoder: {
-  decode(transaction: Transaction, options?: SharedDecoderOptions): Promise<DecodedTransaction>;
-  getTransactionTypeName(transaction: Transaction): string;
-  extractAmount(transaction: Transaction): { amount: string; unit: string } | null;
-  extractAccounts(transaction: Transaction): { from?: string; to?: string };
-};
-
-// ============================================================================
-// Module Exports
-// ============================================================================
+// Protocol constants
+export const MESSAGE_TYPES: Record<string, string>;
+export const SESSION_STATES: Record<string, string>;
+export const ERROR_CODES: Record<string, string>;
+export const PARTICIPANT_STATES: Record<string, string>;
+export const ROLES: Record<string, string>;
+export function isValidTransition(currentState: string, nextState: string): boolean;
 
 export const version: string;

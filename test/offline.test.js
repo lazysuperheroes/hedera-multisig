@@ -7,6 +7,7 @@
 
 const { expect } = require('chai');
 const crypto = require('crypto');
+const SignatureVerifier = require('../core/SignatureVerifier');
 
 describe('Offline CLI Commands', function() {
 
@@ -56,23 +57,10 @@ describe('Offline CLI Commands', function() {
     });
   });
 
-  describe('Signature Tuple Parsing', function() {
+  describe('Signature Tuple Parsing (SignatureVerifier.parseSignatureTuple)', function() {
 
-    function parseSignatureTuple(tuple) {
-      const colonIndex = tuple.lastIndexOf(':');
-      if (colonIndex === -1) {
-        throw new Error('Invalid format (missing colon separator)');
-      }
-
-      const publicKey = tuple.substring(0, colonIndex);
-      const signature = tuple.substring(colonIndex + 1);
-
-      if (!publicKey || !signature) {
-        throw new Error('Invalid format (empty key or signature)');
-      }
-
-      return { publicKey, signature };
-    }
+    // Use the actual parseSignatureTuple from core/SignatureVerifier
+    const parseSignatureTuple = SignatureVerifier.parseSignatureTuple.bind(SignatureVerifier);
 
     it('correctly parses valid signature tuple', function() {
       const publicKey = '302a300506032b6570032100abc123def456789';
@@ -81,33 +69,30 @@ describe('Offline CLI Commands', function() {
 
       const parsed = parseSignatureTuple(tuple);
 
+      expect(parsed).to.not.equal(null);
       expect(parsed.publicKey).to.equal(publicKey);
       expect(parsed.signature).to.equal(signature);
     });
 
-    it('handles signatures containing colons in base64', function() {
-      // Base64 can contain + and / but not colons
-      // However, the key format might have colons, so use lastIndexOf
-      const publicKey = '302a300506032b6570032100abc:123def456789';
-      const signature = 'Sg7m2xKl9pQr8sT0uV1wX2yZ3a4b5c6d';
-      const tuple = `${publicKey}:${signature}`;
-
-      const parsed = parseSignatureTuple(tuple);
-
-      expect(parsed.publicKey).to.equal(publicKey);
-      expect(parsed.signature).to.equal(signature);
+    it('returns null on missing separator', function() {
+      const result = parseSignatureTuple('noseparator');
+      expect(result).to.equal(null);
     });
 
-    it('throws on missing separator', function() {
-      expect(() => parseSignatureTuple('noseparator')).to.throw('missing colon separator');
+    it('returns null on empty key', function() {
+      const result = parseSignatureTuple(':signature');
+      expect(result).to.equal(null);
     });
 
-    it('throws on empty key', function() {
-      expect(() => parseSignatureTuple(':signature')).to.throw('empty key or signature');
+    it('returns null on empty signature', function() {
+      const result = parseSignatureTuple('publickey:');
+      expect(result).to.equal(null);
     });
 
-    it('throws on empty signature', function() {
-      expect(() => parseSignatureTuple('publickey:')).to.throw('empty key or signature');
+    it('returns null for null or non-string input', function() {
+      expect(parseSignatureTuple(null)).to.equal(null);
+      expect(parseSignatureTuple(undefined)).to.equal(null);
+      expect(parseSignatureTuple(42)).to.equal(null);
     });
   });
 
@@ -254,44 +239,34 @@ describe('Offline CLI Commands', function() {
     });
   });
 
-  describe('Threshold Validation', function() {
+  describe('Threshold Validation (SignatureVerifier.checkThreshold)', function() {
 
-    function validateThreshold(signatures, threshold) {
-      if (!Array.isArray(signatures)) {
-        return { valid: false, error: 'Signatures must be an array' };
-      }
-      if (typeof threshold !== 'number' || threshold < 1) {
-        return { valid: false, error: 'Threshold must be a positive number' };
-      }
-      if (signatures.length < threshold) {
-        return {
-          valid: false,
-          error: `Insufficient signatures: ${signatures.length} provided, ${threshold} required`
-        };
-      }
-      return { valid: true };
-    }
+    // Use the actual checkThreshold from core/SignatureVerifier
+    const checkThreshold = SignatureVerifier.checkThreshold.bind(SignatureVerifier);
 
     it('passes when signature count meets threshold', function() {
-      const result = validateThreshold(['sig1', 'sig2', 'sig3'], 2);
-      expect(result.valid).to.be.true;
+      const result = checkThreshold(2, 3);
+      expect(result).to.equal(true);
+    });
+
+    it('passes when signature count equals threshold', function() {
+      const result = checkThreshold(2, 2);
+      expect(result).to.equal(true);
     });
 
     it('passes when signature count exceeds threshold', function() {
-      const result = validateThreshold(['sig1', 'sig2', 'sig3'], 2);
-      expect(result.valid).to.be.true;
+      const result = checkThreshold(2, 5);
+      expect(result).to.equal(true);
     });
 
-    it('fails when signature count below threshold', function() {
-      const result = validateThreshold(['sig1'], 2);
-      expect(result.valid).to.be.false;
-      expect(result.error).to.include('Insufficient signatures');
+    it('fails when signature count is below threshold', function() {
+      const result = checkThreshold(3, 1);
+      expect(result).to.equal(false);
     });
 
-    it('fails with invalid threshold', function() {
-      const result = validateThreshold(['sig1'], 0);
-      expect(result.valid).to.be.false;
-      expect(result.error).to.include('Threshold must be a positive number');
+    it('fails when no signatures provided', function() {
+      const result = checkThreshold(2, 0);
+      expect(result).to.equal(false);
     });
   });
 

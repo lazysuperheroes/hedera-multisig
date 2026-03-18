@@ -90,8 +90,10 @@ export function useWallet(): UseWalletReturn {
     if (!isInitialized) return;
 
     const interval = setInterval(() => {
+      // Pause polling when tab is not visible to save CPU/battery
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       updateExtensions();
-    }, 1000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [isInitialized, updateExtensions]);
@@ -101,6 +103,9 @@ export function useWallet(): UseWalletReturn {
     if (!isInitialized) return;
 
     const interval = setInterval(() => {
+      // Pause polling when tab is not visible to save CPU/battery
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
       const connected = checkIsConnected();
       setIsConnected(connected);
 
@@ -135,7 +140,7 @@ export function useWallet(): UseWalletReturn {
         setEvmAddress(null);
         setBalance(null);
       }
-    }, 1000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [isInitialized]);

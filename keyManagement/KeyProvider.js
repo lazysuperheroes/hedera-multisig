@@ -47,6 +47,48 @@ class KeyProvider {
   }
 
   /**
+   * Whether this provider can expose raw private keys via getKeys().
+   *
+   * Returns true for providers that hold keys in memory (Env, Prompt, EncryptedFile).
+   * Returns false for providers that sign without exposing keys (HSM, MPC, Agent, WalletConnect).
+   * When false, callers must use sign() instead of getKeys().
+   *
+   * @returns {boolean} True if getKeys() returns raw PrivateKey objects
+   */
+  canExposeKeys() {
+    return true;
+  }
+
+  /**
+   * Sign transaction bytes without exposing the private key.
+   *
+   * Default implementation uses getKeys() to get the key and signs directly.
+   * Providers that cannot expose keys (HSM, MPC, Agent) must override this
+   * to sign through their own mechanism.
+   *
+   * @param {Uint8Array} transactionBytes - Raw transaction bytes to sign
+   * @returns {Promise<Array<{publicKey: string, signature: string}>>} Signatures (base64-encoded)
+   */
+  async sign(transactionBytes) {
+    if (!this.canExposeKeys()) {
+      throw new Error(`${this.getName()} does not support getKeys() and must override sign()`);
+    }
+
+    const keys = await this.getKeys();
+    const signatures = [];
+
+    for (const privateKey of keys) {
+      const signatureBytes = privateKey.sign(transactionBytes);
+      signatures.push({
+        publicKey: privateKey.publicKey.toString(),
+        signature: Buffer.from(signatureBytes).toString('base64'),
+      });
+    }
+
+    return signatures;
+  }
+
+  /**
    * Validate a private key string
    *
    * Checks if a string is a valid Hedera private key format

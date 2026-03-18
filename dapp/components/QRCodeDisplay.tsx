@@ -90,13 +90,13 @@ export function QRCodeDisplay({
   return (
     <div className={`flex flex-col items-center ${className}`}>
       {title && (
-        <h3 className="text-lg font-semibold text-gray-800 mb-3">{title}</h3>
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">{title}</h3>
       )}
 
       {/* QR Code Container */}
       <div
         ref={qrRef}
-        className="bg-white p-4 rounded-lg shadow-sm border border-gray-200"
+        className="bg-white dark:bg-gray-900 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
         style={{ backgroundColor: bgColor }}
       >
         <QRCodeSVG
@@ -110,7 +110,7 @@ export function QRCodeDisplay({
       </div>
 
       {description && (
-        <p className="text-sm text-gray-600 mt-3 text-center max-w-xs">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-3 text-center max-w-xs">
           {description}
         </p>
       )}
@@ -118,9 +118,9 @@ export function QRCodeDisplay({
       {showDownload && (
         <button
           onClick={handleDownload}
-          className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm"
+          className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg transition-colors text-sm"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"

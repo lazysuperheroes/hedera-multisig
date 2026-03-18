@@ -1,6 +1,7 @@
-const { Transaction, TransactionReceipt, Status } = require('@hashgraph/sdk');
+const { Transaction, TransactionReceipt, Status, PublicKey } = require('@hashgraph/sdk');
 const fs = require('fs');
 const path = require('path');
+const log = require('../shared/logger').createLogger('TransactionExecutor');
 
 /**
  * TransactionExecutor - Execute multi-sig transactions with audit logging
@@ -49,7 +50,7 @@ class TransactionExecutor {
     };
 
     try {
-      console.log('\n🚀 Executing multi-sig transaction...\n');
+      log.info('Executing multi-sig transaction...');
 
       // Reconstruct transaction from bytes
       let transaction;
@@ -63,7 +64,6 @@ class TransactionExecutor {
 
       // Add all signatures to the transaction
       for (const sigTuple of signatures) {
-        const { PublicKey } = require('@hashgraph/sdk');
         const publicKey = PublicKey.fromString(sigTuple.publicKey);
 
         // Parse signature (support both base64 and hex)
@@ -77,16 +77,16 @@ class TransactionExecutor {
         transaction.addSignature(publicKey, signatureBytes);
       }
 
-      console.log(`✅ Added ${signatures.length} signature(s) to transaction`);
+      log.info('Added %d signature(s) to transaction', signatures.length);
 
       // Execute the transaction
-      console.log('⏳ Submitting to Hedera network...\n');
+      log.info('Submitting to Hedera network...');
 
       const txResponse = await transaction.execute(client);
       result.transactionId = txResponse.transactionId.toString();
 
-      console.log(`Transaction ID: ${result.transactionId}`);
-      console.log('⏳ Waiting for consensus...\n');
+      log.info('Transaction ID: %s', result.transactionId);
+      log.info('Waiting for consensus...');
 
       // Get receipt
       const receipt = await txResponse.getReceipt(client);
@@ -100,12 +100,9 @@ class TransactionExecutor {
       result.executionTimeMs = executionTime;
 
       if (result.success) {
-        console.log(`✅ Transaction succeeded!`);
-        console.log(`   Status: ${result.status}`);
-        console.log(`   Execution Time: ${executionTime}ms\n`);
+        log.info('Transaction succeeded', { status: result.status, executionTimeMs: executionTime });
       } else {
-        console.log(`❌ Transaction failed!`);
-        console.log(`   Status: ${result.status}\n`);
+        log.error('Transaction failed', { status: result.status });
         result.error = `Transaction failed with status: ${result.status}`;
       }
 
@@ -128,7 +125,7 @@ class TransactionExecutor {
       result.error = error.message;
       result.executionTimeMs = Date.now() - startTime;
 
-      console.error(`\n❌ Execution failed: ${error.message}\n`);
+      log.error('Execution failed: %s', error.message);
 
       // Log failure to audit trail
       if (!options.skipAuditLog) {
@@ -180,8 +177,8 @@ class TransactionExecutor {
       receiptStatus: result.status,
       error: result.error || null,
 
-      // Metadata
-      ...metadata
+      // Metadata (namespaced to prevent overwriting critical fields)
+      metadata: metadata || {}
     };
 
     return entry;
@@ -204,8 +201,19 @@ class TransactionExecutor {
    */
   static _appendAuditLog(entry, customPath = null) {
     try {
-      // Determine log path
-      const logPath = customPath || path.join(process.cwd(), 'logs', 'multisig-audit.jsonl');
+      // Determine log path with path traversal protection
+      const defaultPath = path.join(process.cwd(), 'logs', 'multisig-audit.jsonl');
+      let logPath = customPath || defaultPath;
+
+      // Validate custom path stays within allowed directory
+      if (customPath) {
+        const resolvedPath = path.resolve(customPath);
+        const allowedBase = path.resolve(process.cwd());
+        if (!resolvedPath.startsWith(allowedBase)) {
+          log.warn('Audit log path outside project directory rejected: %s', customPath);
+          logPath = defaultPath;
+        }
+      }
 
       // Ensure logs directory exists
       const logDir = path.dirname(logPath);
@@ -217,9 +225,9 @@ class TransactionExecutor {
       const jsonLine = JSON.stringify(entry) + '\n';
       fs.appendFileSync(logPath, jsonLine, 'utf8');
 
-      console.log(`📝 Audit log updated: ${logPath}\n`);
+      log.info('Audit log updated: %s', logPath);
     } catch (error) {
-      console.error(`⚠️  Warning: Failed to write audit log: ${error.message}`);
+      log.warn('Failed to write audit log: %s', error.message);
       // Don't throw - audit log failure shouldn't break execution
     }
   }
@@ -261,7 +269,7 @@ class TransactionExecutor {
 
       return entries;
     } catch (error) {
-      console.error(`Error reading audit log: ${error.message}`);
+      log.error('Error reading audit log: %s', error.message);
       return [];
     }
   }
@@ -277,37 +285,28 @@ class TransactionExecutor {
     const entries = this.readAuditLog({ limit: recentCount });
 
     if (entries.length === 0) {
-      console.log('\n📝 No audit log entries found\n');
+      log.info('No audit log entries found');
       return;
     }
-
-    console.log('\n╔═══════════════════════════════════════════════════════╗');
-    console.log('║          MULTI-SIG AUDIT LOG SUMMARY                  ║');
-    console.log('╚═══════════════════════════════════════════════════════╝\n');
 
     const successCount = entries.filter(e => e.status === 'SUCCESS').length;
     const failureCount = entries.filter(e => e.status === 'FAILURE').length;
 
-    console.log(`Total Entries: ${entries.length}`);
-    console.log(`Successes: ${successCount}`);
-    console.log(`Failures: ${failureCount}\n`);
-
-    console.log(`Recent ${Math.min(recentCount, entries.length)} Transactions:\n`);
+    log.info('Audit log summary', {
+      totalEntries: entries.length,
+      successes: successCount,
+      failures: failureCount
+    });
 
     entries.reverse().forEach((entry, i) => {
-      const status = entry.status === 'SUCCESS' ? '✅' : '❌';
       const time = new Date(entry.timestamp).toLocaleString();
       const txId = entry.transactionId || 'N/A';
       const func = entry.function || entry.txType || 'Unknown';
 
-      console.log(`${i + 1}. ${status} ${time}`);
-      console.log(`   Transaction: ${txId}`);
-      console.log(`   Function: ${func}`);
-      console.log(`   Signers: ${entry.threshold}`);
-      if (entry.error) {
-        console.log(`   Error: ${entry.error}`);
-      }
-      console.log('');
+      log.info('Transaction %d: %s at %s (ID: %s, Function: %s, Signers: %d%s)',
+        i + 1, entry.status, time, txId, func, entry.threshold,
+        entry.error ? `, Error: ${entry.error}` : ''
+      );
     });
   }
 

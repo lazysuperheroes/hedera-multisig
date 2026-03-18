@@ -37,6 +37,7 @@ export function useTransactionReview(options: UseTransactionReviewOptions | null
     loading: false,
     error: null,
   });
+  const [refreshCounter, setRefreshCounter] = useState(0);
 
   useEffect(() => {
     if (!options) {
@@ -95,13 +96,13 @@ export function useTransactionReview(options: UseTransactionReviewOptions | null
     }
 
     decodeTransaction();
-  }, [options?.frozenTransactionBase64, options?.metadata, options?.contractInterface]);
+  }, [options?.frozenTransactionBase64, options?.metadata, options?.contractInterface, refreshCounter]);
 
   const refresh = useCallback(() => {
     if (!options) return;
 
-    // Re-run decode by toggling loading
-    setState((prev) => ({ ...prev, loading: true }));
+    // Trigger re-decode by incrementing counter (included in useEffect deps)
+    setRefreshCounter((c) => c + 1);
   }, [options]);
 
   return {

@@ -30,6 +30,7 @@ const {
   ContractExecuteTransaction,
   FileCreateTransaction,
   FileAppendTransaction,
+  TransactionId,
   Hbar,
   PrivateKey,
   AccountId
@@ -202,6 +203,7 @@ async function smartContractExample() {
       .setBytecodeFileId(bytecodeFileId)
       .setGas(100000)
       .setConstructorParameters(new ContractFunctionParameters())
+      .setTransactionId(TransactionId.generate(AccountId.fromString(operatorId)))
       .freezeWith(client);
 
     console.log(chalk.green('✅ Contract deployment transaction created\n'));
@@ -254,6 +256,7 @@ async function smartContractExample() {
         'set',
         new ContractFunctionParameters().addUint256(valueToStore)
       )
+      .setTransactionId(TransactionId.generate(AccountId.fromString(operatorId)))
       .freezeWith(client);
 
     console.log(chalk.green(`✅ Contract call transaction created (set value to ${valueToStore})\n`));

@@ -49,6 +49,10 @@ require('./commands/keys')(program);
 require('./commands/audit')(program);
 require('./commands/completions')(program);
 require('./commands/offline')(program);
+require('./commands/schedule')(program);
+require('./commands/transfer')(program);
+require('./commands/token')(program);
+require('./commands/session')(program);
 
 // Add init command (project setup wizard)
 program

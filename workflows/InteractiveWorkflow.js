@@ -35,9 +35,6 @@ class InteractiveWorkflow {
     };
 
     this.progress = new ProgressIndicator();
-    this.collector = new SignatureCollector({ mode: 'interactive' });
-    this.verifier = new SignatureVerifier();
-    this.executor = new TransactionExecutor(client, { auditLogPath: this.options.auditLogPath });
 
     this.isExpired = false;
     this.expirationTimer = null;
@@ -215,35 +212,34 @@ class InteractiveWorkflow {
         }
 
         try {
-          // Collect signature using the key provider
-          const sigResult = await this.collector.collectSignature(
-            frozenTransaction,
-            keyProvider,
-            { signerLabel: label }
-          );
+          // Sign using the key provider's sign() method
+          // Works with both key-exposing providers and opaque signers (HSM, MPC, Agent)
+          const txBytes = frozenTransaction.toBytes();
+          const sigResults = await keyProvider.sign(txBytes);
 
-          if (!sigResult.success) {
-            this.progress.warning(`Failed to collect signature from ${label}: ${sigResult.error}`);
+          if (!sigResults || sigResults.length === 0) {
+            this.progress.warning(`No signatures produced by ${label}`);
             continue;
           }
 
+          const sigResult = sigResults[0]; // Use first signature from provider
+
           // Verify signature immediately
-          const isValid = await this.verifier.verify(
-            frozenTransaction,
-            sigResult.signature,
-            sigResult.publicKey
+          const verifyStatus = await SignatureVerifier.verifySingle(
+            { bytes: txBytes },
+            { publicKey: sigResult.publicKey, signature: sigResult.signature }
           );
 
-          if (!isValid) {
-            this.progress.error(`Invalid signature from ${label}`);
+          if (!verifyStatus.valid) {
+            this.progress.error(`Invalid signature from ${label}: ${verifyStatus.error}`);
             continue;
           }
 
           // Add signature to transaction
-          signedTx = await signedTx.addSignature(
-            sigResult.publicKey,
-            Buffer.from(sigResult.signature, 'hex')
-          );
+          const { PublicKey } = require('@hashgraph/sdk');
+          const pubKey = PublicKey.fromString(sigResult.publicKey);
+          const sigBytes = Buffer.from(sigResult.signature, 'base64');
+          signedTx = await signedTx.addSignature(pubKey, sigBytes);
 
           signatures.push({
             ...sigResult,
@@ -314,7 +310,12 @@ class InteractiveWorkflow {
       }
 
       this.progress.startSpinner('Submitting transaction to Hedera network');
-      const result = await this.executor.execute(signedTransaction);
+      const result = await TransactionExecutor.execute(
+        { bytes: signedTransaction.toBytes(), transaction: signedTransaction },
+        [], // signatures already added to the transaction
+        this.client,
+        { auditLogPath: this.options.auditLogPath }
+      );
       this.progress.stopSpinner();
 
       if (result.success) {

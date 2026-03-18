@@ -2,6 +2,7 @@ const readlineSync = require('readline-sync');
 const TransactionFreezer = require('./TransactionFreezer');
 const TransactionDecoder = require('./TransactionDecoder');
 const SignatureVerifier = require('./SignatureVerifier');
+const log = require('../shared/logger').createLogger('SignatureCollector');
 
 /**
  * SignatureCollector - Collect signatures from multiple signers
@@ -36,9 +37,7 @@ class SignatureCollector {
     const localKeys = options.localKeys || [];
     const verbose = options.verbose || false;
 
-    console.log('\n╔═══════════════════════════════════════════════════════╗');
-    console.log('║     MULTI-SIGNATURE COLLECTION (Real-Time Mode)       ║');
-    console.log('╚═══════════════════════════════════════════════════════╝\n');
+    log.info('MULTI-SIGNATURE COLLECTION (Real-Time Mode)');
 
     // Display transaction details
     if (frozenTx.txDetails) {
@@ -46,39 +45,35 @@ class SignatureCollector {
     }
 
     // Display transaction bytes and checksum
-    console.log('TRANSACTION BYTES (for signing):');
-    console.log(frozenTx.base64);
-    console.log('');
-    console.log(`Checksum: ${SignatureVerifier.generateChecksum(frozenTx)}`);
-    console.log('');
-
-    console.log(`⏱️  Time Limit: ${timeout}s`);
-    console.log(`🔑  Required Signatures: ${requiredSignatures}\n`);
+    log.info('TRANSACTION BYTES (for signing):');
+    log.info(frozenTx.base64);
+    log.info('Checksum: %s', SignatureVerifier.generateChecksum(frozenTx));
+    log.info('Time Limit: %ds, Required Signatures: %d', timeout, requiredSignatures);
 
     const signatures = [];
 
     // Sign with local keys if provided
     if (localKeys.length > 0) {
-      console.log(`🔐 Signing with ${localKeys.length} local key(s)...\n`);
+      log.info('Signing with %d local key(s)...', localKeys.length);
 
       for (const privateKey of localKeys) {
         const signature = this._signWithPrivateKey(frozenTx, privateKey);
         signatures.push(signature);
-        console.log(`✅ Local signature ${signatures.length}/${requiredSignatures}`);
+        log.info('Local signature %d/%d', signatures.length, requiredSignatures);
       }
-
-      console.log('');
     }
 
     // Collect remaining signatures if needed
     const remaining = requiredSignatures - signatures.length;
 
     if (remaining > 0) {
-      console.log(`📝 Collecting ${remaining} additional signature(s)...\n`);
+      log.info('Collecting %d additional signature(s)...', remaining);
 
       // Start countdown timer
       const startTime = Date.now();
       let countdownInterval = null;
+
+      let expired = false;
 
       try {
         countdownInterval = setInterval(() => {
@@ -87,24 +82,30 @@ class SignatureCollector {
 
           if (timeLeft <= 0) {
             clearInterval(countdownInterval);
-            throw new Error('Timeout! Transaction validity window expired.');
+            countdownInterval = null;
+            expired = true;
+            log.warn('TIMEOUT: Transaction validity window expired.');
           }
 
           // Warning at 20 seconds
           if (timeLeft === 20) {
-            console.log('\n⚠️  WARNING: Only 20 seconds remaining!\n');
+            log.warn('WARNING: Only 20 seconds remaining!');
           }
         }, 1000);
 
         // Collect signatures
         for (let i = 0; i < remaining; i++) {
+          if (expired) {
+            throw new Error('Timeout! Transaction validity window expired.');
+          }
+
           const timeLeft = timeout - Math.floor((Date.now() - startTime) / 1000);
-          console.log(`⏳ Remaining: ${timeLeft}s`);
+          log.info('Remaining: %ds', timeLeft);
 
           const sigTuple = this._promptForSignature(i + localKeys.length + 1, requiredSignatures);
           signatures.push(sigTuple);
 
-          console.log(`✅ Signature ${signatures.length}/${requiredSignatures} received\n`);
+          log.info('Signature %d/%d received', signatures.length, requiredSignatures);
         }
 
         clearInterval(countdownInterval);
@@ -114,7 +115,7 @@ class SignatureCollector {
       }
     }
 
-    console.log('✅ All signatures collected!\n');
+    log.info('All signatures collected!');
     return signatures;
   }
 
@@ -136,9 +137,7 @@ class SignatureCollector {
     const localKeys = options.localKeys || [];
     const verbose = options.verbose || false;
 
-    console.log('\n╔═══════════════════════════════════════════════════════╗');
-    console.log('║     MULTI-SIGNATURE COLLECTION (Offline Mode)         ║');
-    console.log('╚═══════════════════════════════════════════════════════╝\n');
+    log.info('MULTI-SIGNATURE COLLECTION (Offline Mode)');
 
     // Display transaction details
     if (frozenTx.txDetails) {
@@ -146,50 +145,38 @@ class SignatureCollector {
     }
 
     // Display transaction bytes for sharing
-    console.log('TRANSACTION BYTES (share with signers):');
-    console.log('─────────────────────────────────────────────────────────');
-    console.log(frozenTx.base64);
-    console.log('─────────────────────────────────────────────────────────');
-    console.log('');
-    console.log(`Checksum: ${SignatureVerifier.generateChecksum(frozenTx)}`);
-    console.log('');
-    console.log(`Frozen at: ${frozenTx.frozenAt.toISOString()}`);
-    console.log(`Expires at: ${frozenTx.expiresAt.toISOString()}`);
-    console.log(`Time remaining: ${TransactionFreezer.formatTimeRemaining(frozenTx)}\n`);
+    log.info('TRANSACTION BYTES (share with signers):');
+    log.info(frozenTx.base64);
+    log.info('Checksum: %s', SignatureVerifier.generateChecksum(frozenTx));
+    log.info('Frozen at: %s', frozenTx.frozenAt.toISOString());
+    log.info('Expires at: %s', frozenTx.expiresAt.toISOString());
+    log.info('Time remaining: %s', TransactionFreezer.formatTimeRemaining(frozenTx));
 
-    console.log('📤 SHARE WITH SIGNERS:');
-    console.log('  1. Send transaction bytes via secure channel (Signal, encrypted email)');
-    console.log('  2. Include checksum for verification');
-    console.log('  3. Signers use: node lib/multiSig/cli/sign.js');
-    console.log('  4. Collect signature tuples (publicKey:signature)\n');
+    log.info('SHARE WITH SIGNERS: 1) Send transaction bytes via secure channel 2) Include checksum 3) Signers use: hedera-multisig sign 4) Collect signature tuples');
 
     const signatures = [];
 
     // Sign with local keys if provided
     if (localKeys.length > 0) {
-      console.log(`🔐 Signing with ${localKeys.length} local key(s)...\n`);
+      log.info('Signing with %d local key(s)...', localKeys.length);
 
       for (const privateKey of localKeys) {
         const signature = this._signWithPrivateKey(frozenTx, privateKey);
         signatures.push(signature);
-        console.log(`✅ Local signature ${signatures.length}/${requiredSignatures}`);
+        log.info('Local signature %d/%d', signatures.length, requiredSignatures);
       }
-
-      console.log('');
     }
 
     // Collect remaining signatures if needed
     const remaining = requiredSignatures - signatures.length;
 
     if (remaining > 0) {
-      console.log(`📝 Waiting for ${remaining} signature(s) from other signers...\n`);
+      log.info('Waiting for %d signature(s) from other signers...', remaining);
 
       const proceed = readlineSync.keyInYN('Have you collected all signatures? ');
       if (!proceed) {
         throw new Error('Signature collection cancelled by user');
       }
-
-      console.log('');
 
       const count = readlineSync.questionInt(`How many signatures did you collect? (need ${remaining}): `);
 
@@ -197,13 +184,11 @@ class SignatureCollector {
         throw new Error(`Insufficient signatures: collected ${count}, need ${remaining}`);
       }
 
-      console.log('');
-
       // Collect signature tuples
       for (let i = 0; i < count; i++) {
         const sigTuple = this._promptForSignature(i + localKeys.length + 1, requiredSignatures);
         signatures.push(sigTuple);
-        console.log(`✅ Signature ${signatures.length}/${requiredSignatures} received\n`);
+        log.info('Signature %d/%d received', signatures.length, requiredSignatures);
       }
     }
 
@@ -211,12 +196,11 @@ class SignatureCollector {
     try {
       TransactionFreezer.validateNotExpired(frozenTx);
     } catch (error) {
-      console.error('\n❌ ERROR: Transaction has expired!');
-      console.error('   You must restart the multi-sig process with a fresh transaction.\n');
+      log.error('Transaction has expired! You must restart the multi-sig process with a fresh transaction.');
       throw error;
     }
 
-    console.log('✅ All signatures collected!\n');
+    log.info('All signatures collected!');
     return signatures;
   }
 
@@ -247,9 +231,7 @@ class SignatureCollector {
     const parsed = SignatureVerifier.parseSignatureTuple(input);
 
     if (!parsed) {
-      console.error('\n❌ Invalid signature format!');
-      console.error('   Expected: publicKey:signatureBase64');
-      console.error('   Example: 302a300506032b6570...e92d:AQIDBA...xyz\n');
+      log.error('Invalid signature format! Expected: publicKey:signatureBase64 (Example: 302a300506032b6570...e92d:AQIDBA...xyz)');
       throw new Error('Invalid signature format');
     }
 
@@ -292,36 +274,15 @@ class SignatureCollector {
    * @param {FrozenTransaction} frozenTx - Frozen transaction
    */
   static displayOfflineSignerInstructions(frozenTx) {
-    console.log('\n╔═══════════════════════════════════════════════════════╗');
-    console.log('║          INSTRUCTIONS FOR OFFLINE SIGNERS             ║');
-    console.log('╚═══════════════════════════════════════════════════════╝\n');
-
-    console.log('📋 STEPS FOR SIGNING:\n');
-
-    console.log('1. Save these transaction bytes to a file or copy to clipboard:');
-    console.log('   ─────────────────────────────────────────────────────');
-    console.log(`   ${frozenTx.base64}`);
-    console.log('   ─────────────────────────────────────────────────────\n');
-
-    console.log('2. Verify the checksum matches:');
-    console.log(`   Checksum: ${SignatureVerifier.generateChecksum(frozenTx)}\n`);
-
-    console.log('3. On your signing machine, run:');
-    console.log('   node lib/multiSig/cli/sign.js\n');
-
-    console.log('4. When prompted:');
-    console.log('   - Paste the transaction bytes');
-    console.log('   - Verify the transaction details');
-    console.log('   - Enter your private key');
-    console.log('   - Copy the signature tuple output\n');
-
-    console.log('5. Send the signature tuple back via secure channel\n');
-
-    console.log('⏰ IMPORTANT:');
-    console.log(`   - Transaction frozen at: ${frozenTx.frozenAt.toISOString()}`);
-    console.log(`   - Transaction expires at: ${frozenTx.expiresAt.toISOString()}`);
-    console.log(`   - Time remaining: ${TransactionFreezer.formatTimeRemaining(frozenTx)}`);
-    console.log('   - All signatures must be collected before expiration\n');
+    log.info('INSTRUCTIONS FOR OFFLINE SIGNERS');
+    log.info('Transaction bytes: %s', frozenTx.base64);
+    log.info('Checksum: %s', SignatureVerifier.generateChecksum(frozenTx));
+    log.info('Steps: 1) Save transaction bytes 2) Verify checksum 3) Run: hedera-multisig sign 4) Paste bytes, verify, enter key, copy output 5) Send signature back via secure channel');
+    log.info('Transaction frozen at: %s, expires at: %s, time remaining: %s',
+      frozenTx.frozenAt.toISOString(),
+      frozenTx.expiresAt.toISOString(),
+      TransactionFreezer.formatTimeRemaining(frozenTx)
+    );
   }
 
   /**
@@ -335,12 +296,9 @@ class SignatureCollector {
     const percentage = Math.floor((collected / required) * 100);
     const timeRemaining = TransactionFreezer.formatTimeRemaining(frozenTx);
 
-    console.log('\n═══════════════════════════════════════════════════════');
-    console.log('SIGNATURE COLLECTION PROGRESS');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log(`Collected: ${collected}/${required} (${percentage}%)`);
-    console.log(`Time Remaining: ${timeRemaining}`);
-    console.log('═══════════════════════════════════════════════════════\n');
+    log.info('SIGNATURE COLLECTION PROGRESS: Collected %d/%d (%d%%), Time Remaining: %s',
+      collected, required, percentage, timeRemaining
+    );
   }
 }
 

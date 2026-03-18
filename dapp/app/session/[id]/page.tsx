@@ -34,12 +34,14 @@ import { CopyButton } from '../../../components/CopyButton';
 import { SessionCountdown } from '../../../components/SessionCountdown';
 import { ShareSessionDialog } from '../../../components/ShareSessionDialog';
 import { ParticipantList } from '../../../components/ParticipantList';
+import { StepProgress } from '../../../components/StepProgress';
 import { DEFAULT_NETWORK } from '../../../lib/walletconnect-config';
 
 interface SessionInfo {
   serverUrl: string;
   sessionId: string;
-  pin: string;
+  pin?: string;
+  reconnectionToken?: string;
 }
 
 interface PageProps {
@@ -117,7 +119,7 @@ export default function SessionPage({ params }: PageProps) {
       setSessionInfo({
         serverUrl: sessionRecovery.savedSession.serverUrl,
         sessionId: sessionRecovery.savedSession.sessionId,
-        pin: sessionRecovery.savedSession.pin,
+        reconnectionToken: sessionRecovery.savedSession.reconnectionToken,
       });
 
       // Check if session is still fresh
@@ -174,13 +176,11 @@ export default function SessionPage({ params }: PageProps) {
 
     // Prevent infinite reconnection loops
     if (hasAutoConnectedRef.current) {
-      console.log('Skipping auto-connect - already attempted in this session');
       return;
     }
 
     // Check connection attempt limit
     if (connectionAttemptRef.current >= maxConnectionAttempts) {
-      console.log('Max connection attempts reached, stopping auto-reconnect');
       setErrorMessage('Failed to connect after multiple attempts. Please try refreshing the page.');
       setCurrentStep('error');
       return;
@@ -188,7 +188,6 @@ export default function SessionPage({ params }: PageProps) {
 
     hasAutoConnectedRef.current = true;
     connectionAttemptRef.current += 1;
-    console.log(`Wallet already connected via NavBar, auto-advancing to session connection (attempt ${connectionAttemptRef.current})`);
 
     // Set step first to prevent re-triggering
     setCurrentStep('session-connect');
@@ -213,7 +212,6 @@ export default function SessionPage({ params }: PageProps) {
     // Handle StrictMode remount: if we're at wallet-connect but session is already connected
     // This can happen when useState resets currentStep but the WebSocket connection persists
     if (currentStep === 'wallet-connect' && isConnectedToSession) {
-      console.log('State sync: Already connected to session, advancing UI step');
       if (sessionStatus === 'ready' || sessionStatus === 'waiting') {
         setCurrentStep('waiting');
       } else if (sessionStatus === 'connected') {
@@ -251,7 +249,7 @@ export default function SessionPage({ params }: PageProps) {
       // Only clear if not completed (if completed, already cleared above)
       if (currentStep !== 'completed' && currentStep !== 'error') {
         // Keep session for recovery if user accidentally navigates away
-        console.log('Component unmounting - session saved for recovery');
+        // Session saved for recovery
       }
     };
   }, [currentStep]);
@@ -291,11 +289,10 @@ export default function SessionPage({ params }: PageProps) {
       const result = await signingSession.connect(
         sessionInfo.serverUrl,
         sessionInfo.sessionId,
-        sessionInfo.pin,
+        sessionInfo.pin || '',
         publicKey
       );
 
-      console.log('Session connected, sending PARTICIPANT_READY...');
       toast.success('Session Joined', 'You are now ready to sign transactions');
 
       // Save participant ID to session recovery
@@ -329,8 +326,6 @@ export default function SessionPage({ params }: PageProps) {
       setCurrentStep('signing');
       setErrorMessage(null);
       toast.info('Signing Transaction', 'Please approve in your wallet app');
-
-      console.log('Signing transaction with WalletConnect...');
 
       // Import signing function
       const { signTransaction } = await import('../../../lib/walletconnect');
@@ -396,13 +391,11 @@ export default function SessionPage({ params }: PageProps) {
       const signatureData = allSignatures.length === 1 ? allSignatures[0] : allSignatures;
       const publicKey = wallet.publicKey!;
 
-      console.log(`Transaction signed (${allSignatures.length} node signatures), submitting...`);
       toast.success('Signature Created', 'Submitting to coordinator...');
 
       // Submit signature(s)
       signingSession.submitSignature(publicKey, signatureData);
 
-      console.log('Signature submitted successfully');
       toast.success('Signature Submitted', 'Checking network status...');
     } catch (error) {
       console.error('Signing failed:', error);
@@ -415,7 +408,6 @@ export default function SessionPage({ params }: PageProps) {
 
   // Handle transaction rejection
   const handleReject = (reason: string) => {
-    console.log('Transaction rejected:', reason);
     signingSession.rejectTransaction(reason);
     toast.warning('Transaction Rejected', reason || 'You rejected the transaction');
     setCurrentStep('waiting');
@@ -480,13 +472,40 @@ export default function SessionPage({ params }: PageProps) {
     );
   }
 
-  // Render loading state
+  // Render loading state — skeleton mimics the session header + step indicator
   if (currentStep === 'loading') {
     return (
-      <main className="min-h-screen flex items-center justify-center p-8 bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading session information...</p>
+      <main className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900" aria-busy="true" aria-label="Loading session">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Skeleton: session header card */}
+          <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-700 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="skeleton h-6 w-56 rounded"></div>
+                <div className="skeleton h-4 w-36 rounded"></div>
+              </div>
+              <div className="skeleton h-9 w-24 rounded-lg"></div>
+            </div>
+            {/* Skeleton: step indicator */}
+            <div className="mt-6 flex items-center gap-1">
+              {[1,2,3,4,5].map((i) => (
+                <div key={i} className="flex items-center flex-1">
+                  <div className="flex flex-col items-center min-w-[56px]">
+                    <div className="skeleton w-10 h-10 rounded-full"></div>
+                    <div className="skeleton h-3 w-12 mt-1.5 rounded"></div>
+                  </div>
+                  {i < 5 && <div className="skeleton flex-1 h-1.5 rounded-full mx-1"></div>}
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Skeleton: content area */}
+          <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-700 rounded-lg p-6 space-y-4">
+            <div className="skeleton h-5 w-40 rounded"></div>
+            <div className="skeleton h-4 w-full rounded"></div>
+            <div className="skeleton h-4 w-3/4 rounded"></div>
+            <div className="skeleton h-12 w-full rounded-lg mt-4"></div>
+          </div>
         </div>
       </main>
     );
@@ -504,7 +523,7 @@ export default function SessionPage({ params }: PageProps) {
           onClose={() => setShowShareDialog(false)}
           serverUrl={sessionInfo.serverUrl}
           sessionId={sessionInfo.sessionId}
-          pin={sessionInfo.pin}
+          pin={sessionInfo.pin || ''}
         />
       )}
 
@@ -558,95 +577,22 @@ export default function SessionPage({ params }: PageProps) {
 
           {/* Step Indicator */}
           <div className="mt-6">
-            <div className="flex items-center space-x-1">
-              {/* Step 1: Connect Wallet */}
-              <StepIndicator
-                step={1}
-                label="Wallet"
-                active={currentStep === 'wallet-connect'}
-                completed={
-                  currentStep === 'session-connect' ||
-                  currentStep === 'ready' ||
-                  currentStep === 'waiting' ||
-                  currentStep === 'reviewing' ||
-                  currentStep === 'signing' ||
-                  currentStep === 'signed' ||
-                  currentStep === 'completed'
-                }
-              />
-              <StepConnector
-                completed={
-                  currentStep === 'session-connect' ||
-                  currentStep === 'ready' ||
-                  currentStep === 'waiting' ||
-                  currentStep === 'reviewing' ||
-                  currentStep === 'signing' ||
-                  currentStep === 'signed' ||
-                  currentStep === 'completed'
-                }
-              />
-
-              {/* Step 2: Join Session */}
-              <StepIndicator
-                step={2}
-                label="Join"
-                active={currentStep === 'session-connect' || currentStep === 'ready'}
-                completed={
-                  currentStep === 'waiting' ||
-                  currentStep === 'reviewing' ||
-                  currentStep === 'signing' ||
-                  currentStep === 'signed' ||
-                  currentStep === 'completed'
-                }
-              />
-              <StepConnector
-                completed={
-                  currentStep === 'waiting' ||
-                  currentStep === 'reviewing' ||
-                  currentStep === 'signing' ||
-                  currentStep === 'signed' ||
-                  currentStep === 'completed'
-                }
-              />
-
-              {/* Step 3: Waiting for Transaction */}
-              <StepIndicator
-                step={3}
-                label="Waiting"
-                active={currentStep === 'waiting'}
-                completed={
-                  currentStep === 'reviewing' ||
-                  currentStep === 'signing' ||
-                  currentStep === 'signed' ||
-                  currentStep === 'completed'
-                }
-              />
-              <StepConnector
-                completed={
-                  currentStep === 'reviewing' ||
-                  currentStep === 'signing' ||
-                  currentStep === 'signed' ||
-                  currentStep === 'completed'
-                }
-              />
-
-              {/* Step 4: Review & Sign */}
-              <StepIndicator
-                step={4}
-                label="Sign"
-                active={currentStep === 'reviewing' || currentStep === 'signing'}
-                completed={currentStep === 'signed' || currentStep === 'completed'}
-              />
-              <StepConnector completed={currentStep === 'signed' || currentStep === 'completed'} />
-
-              {/* Step 5: Complete */}
-              <StepIndicator
-                step={5}
-                label="Complete"
-                active={currentStep === 'signed' || currentStep === 'completed'}
-                completed={currentStep === 'completed'}
-              />
-            </div>
+            <StepProgress
+              steps={[
+                { key: 'wallet', label: 'Wallet' },
+                { key: 'join', label: 'Join' },
+                { key: 'waiting', label: 'Waiting' },
+                { key: 'sign', label: 'Sign' },
+                { key: 'complete', label: 'Complete' },
+              ]}
+              currentIndex={
+                currentStep === 'wallet-connect' ? 0 :
+                currentStep === 'session-connect' || currentStep === 'ready' ? 1 :
+                currentStep === 'waiting' ? 2 :
+                currentStep === 'reviewing' || currentStep === 'signing' ? 3 :
+                currentStep === 'signed' || currentStep === 'completed' ? 4 : 0
+              }
+            />
           </div>
         </div>
 
@@ -663,7 +609,7 @@ export default function SessionPage({ params }: PageProps) {
                 />
               </svg>
               <div>
-                <h3 className="font-semibold text-red-800 dark:text-red-300">Error</h3>
+                <h2 className="font-semibold text-red-800 dark:text-red-300">Error</h2>
                 <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
               </div>
             </div>
@@ -696,8 +642,8 @@ export default function SessionPage({ params }: PageProps) {
 
             {/* Session Status */}
             <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Session Status</h3>
-              <div className="space-y-3">
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Session Status</h2>
+              <dl className="space-y-3">
                 <StatusItem
                   label="WebSocket Connection"
                   status={signingSession.state.connected ? 'connected' : 'disconnected'}
@@ -712,7 +658,7 @@ export default function SessionPage({ params }: PageProps) {
                     <StatusItem label="Threshold" status={`${signingSession.state.sessionInfo.threshold} signatures required`} />
                   </>
                 )}
-              </div>
+              </dl>
             </div>
 
             {/* Signature Progress */}
@@ -843,50 +789,11 @@ export default function SessionPage({ params }: PageProps) {
 
 // Helper Components
 
-function StepIndicator({
-  step,
-  label,
-  active,
-  completed,
-}: {
-  step: number;
-  label: string;
-  active: boolean;
-  completed: boolean;
-}) {
-  return (
-    <div className="flex flex-col items-center min-w-[50px]">
-      <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
-          completed
-            ? 'bg-green-500 text-white'
-            : active
-            ? 'bg-blue-500 text-white'
-            : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-        }`}
-      >
-        {completed ? '✓' : step}
-      </div>
-      <div className={`text-xs mt-1 text-center ${active ? 'text-blue-600 dark:text-blue-400 font-semibold' : completed ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function StepConnector({ completed }: { completed: boolean }) {
-  return (
-    <div className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 min-w-[20px]">
-      <div className={`h-full transition-all ${completed ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
-    </div>
-  );
-}
-
 function StatusItem({ label, status }: { label: string; status: string }) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-700">
-      <span className="text-sm text-gray-600 dark:text-gray-400">{label}:</span>
-      <span className="text-sm font-mono font-semibold text-gray-800 dark:text-gray-200">{status}</span>
+      <dt className="text-sm text-gray-600 dark:text-gray-400">{label}</dt>
+      <dd className="text-sm font-mono font-semibold text-gray-800 dark:text-gray-200">{status}</dd>
     </div>
   );
 }

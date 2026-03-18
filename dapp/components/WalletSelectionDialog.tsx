@@ -35,7 +35,6 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
   // Trigger extension discovery when dialog opens
   useEffect(() => {
     if (open && isInitialized && !isMobile) {
-      console.log('Wallet dialog opened, triggering extension discovery...');
       refreshExtensions();
     }
   }, [open, isInitialized, isMobile, refreshExtensions]);
@@ -65,7 +64,6 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
 
   // Handle URI callback for QR code display
   const handleUriGenerated = useCallback((uri: string) => {
-    console.log('📱 WalletConnect URI received for QR display');
     setWalletConnectUri(uri);
   }, []);
 
@@ -98,18 +96,19 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="wallet-dialog-title">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          <h2 id="wallet-dialog-title" className="text-xl font-semibold text-gray-900 dark:text-white">
             Connect Wallet
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close dialog"
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -138,7 +137,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
                 onClick={handleBackToOptions}
                 className="mb-4 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
                 Back to options
@@ -157,7 +156,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
                   <p className="text-sm text-gray-600 dark:text-gray-400">
                     Scan this QR code with your mobile wallet app
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Works with HashPack, Blade, and other WalletConnect-compatible wallets
                   </p>
                 </div>
@@ -174,7 +173,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
             // Loading initialization
             <div className="text-center py-8">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="mt-2 text-sm text-gray-500">Initializing...</p>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Initializing...</p>
             </div>
           ) : isWaitingForExtensions ? (
             // Waiting for extensions
@@ -183,7 +182,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                 Detecting wallet extensions...
               </p>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Make sure your wallet extension is installed and unlocked
               </p>
             </div>
@@ -210,7 +209,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
                   onClick={() => refreshExtensions()}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors text-sm"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   Refresh Extensions
@@ -223,7 +222,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
                 disabled={isConnecting}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
               >
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M5.54 7.09c3.65-3.58 9.59-3.58 13.24 0l.44.43c.18.18.18.47 0 .65l-1.5 1.47c-.09.09-.24.09-.33 0l-.6-.59c-2.55-2.5-6.68-2.5-9.23 0l-.64.63c-.09.09-.24.09-.33 0L5.1 8.22c-.18-.18-.18-.47 0-.65l.44-.48zm16.33 3.04l1.34 1.31c.18.18.18.47 0 .65l-6.03 5.91c-.18.18-.47.18-.65 0L12 13.73c-.05-.05-.12-.05-.17 0L7.3 17.99c-.18.18-.47.18-.65 0L.62 12.08c-.18-.18-.18-.47 0-.65l1.34-1.31c.18-.18.47-.18.65 0l4.54 4.45c.05.05.12.05.17 0l4.54-4.45c.18-.18.47-.18.65 0l4.54 4.45c.05.05.12.05.17 0l4.54-4.45c.18-.18.47-.18.65 0z"/>
                 </svg>
                 <span className="font-medium">WalletConnect QR Code</span>
@@ -258,7 +257,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
                 disabled={isConnecting}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
               >
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M5.54 7.09c3.65-3.58 9.59-3.58 13.24 0l.44.43c.18.18.18.47 0 .65l-1.5 1.47c-.09.09-.24.09-.33 0l-.6-.59c-2.55-2.5-6.68-2.5-9.23 0l-.64.63c-.09.09-.24.09-.33 0L5.1 8.22c-.18-.18-.18-.47 0-.65l.44-.48zm16.33 3.04l1.34 1.31c.18.18.18.47 0 .65l-6.03 5.91c-.18.18-.47.18-.65 0L12 13.73c-.05-.05-.12-.05-.17 0L7.3 17.99c-.18.18-.47.18-.65 0L.62 12.08c-.18-.18-.18-.47 0-.65l1.34-1.31c.18-.18.47-.18.65 0l4.54 4.45c.05.05.12.05.17 0l4.54-4.45c.18-.18.47-.18.65 0l4.54 4.45c.05.05.12.05.17 0l4.54-4.45c.18-.18.47-.18.65 0z"/>
                 </svg>
                 <span className="font-medium">WalletConnect</span>

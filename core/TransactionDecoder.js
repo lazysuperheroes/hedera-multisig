@@ -1,3 +1,10 @@
+// =============================================================================
+// DEPRECATED: This module is deprecated. Use shared/transaction-decoder instead.
+// This file is retained for backward compatibility only and will be removed
+// in a future major version. All new code should import from
+// require('../shared/transaction-decoder') or require('./shared/transaction-decoder').
+// =============================================================================
+
 const { AccountId, ContractId } = require('@hashgraph/sdk');
 const {
   TransactionDecoder: SharedDecoder,
@@ -11,11 +18,15 @@ const {
  * Critical for user trust - users should never blindly sign transactions.
  *
  * This module provides terminal display functionality on top of the shared decoder.
+ *
+ * @deprecated Use shared/transaction-decoder instead. This module is retained for
+ * backward compatibility and will be removed in a future major version.
  */
 class TransactionDecoder {
   /**
    * Decode a Hedera transaction into human-readable details
    *
+   * @deprecated Use shared/transaction-decoder's TransactionDecoder.decode() instead.
    * @param {Transaction} transaction - Hedera SDK transaction
    * @param {Interface} contractInterface - ethers.js Interface for ABI decoding (optional)
    * @returns {TransactionDetails} Decoded transaction details
@@ -86,7 +97,7 @@ class TransactionDecoder {
       details.gas.limit = transaction._gas.toNumber();
       // Estimate cost (rough estimate: gas * 0.0000001 HBAR)
       const estimatedHbar = (details.gas.limit * 0.0000001).toFixed(4);
-      details.gas.estimatedCost = `~${estimatedHbar} HBAR (~$${(estimatedHbar * 0.10).toFixed(2)} USD)`;
+      details.gas.estimatedCost = `~${estimatedHbar} HBAR`;
     }
 
     // Extract payable amount (HBAR transfer)
@@ -149,7 +160,7 @@ class TransactionDecoder {
     if (transaction._gas) {
       details.gas.limit = transaction._gas.toNumber();
       const estimatedHbar = (details.gas.limit * 0.0000001).toFixed(4);
-      details.gas.estimatedCost = `~${estimatedHbar} HBAR (~$${(estimatedHbar * 0.10).toFixed(2)} USD)`;
+      details.gas.estimatedCost = `~${estimatedHbar} HBAR`;
     }
 
     if (transaction._initialBalance && transaction._initialBalance.toTinybars() > 0) {
@@ -170,14 +181,18 @@ class TransactionDecoder {
   static _decodeTransfer(transaction, details) {
     details.function = 'Transfer';
 
-    // Extract HBAR transfers
-    if (transaction._hbarTransfers && transaction._hbarTransfers.size > 0) {
+    // Extract HBAR transfers (SDK uses an Array of Transfer objects, not a Map)
+    const hbarTransfers = transaction._hbarTransfers;
+    if (hbarTransfers && (Array.isArray(hbarTransfers) ? hbarTransfers.length > 0 : hbarTransfers.size > 0)) {
       const transfers = [];
-      transaction._hbarTransfers.forEach((amount, accountId) => {
-        const hbar = amount.toBigNumber().toString();
-        const hbarFormatted = (parseInt(hbar) / 100000000).toFixed(2);
-        transfers.push(`${hbarFormatted} HBAR ${parseInt(hbar) > 0 ? 'to' : 'from'} ${accountId.toString()}`);
-      });
+      const transferList = Array.isArray(hbarTransfers) ? hbarTransfers : Array.from(hbarTransfers.entries()).map(([accountId, amount]) => ({ accountId, amount }));
+      for (const transfer of transferList) {
+        const accountId = transfer.accountId;
+        const amount = transfer.amount;
+        const tinybars = typeof amount.toTinybars === 'function' ? amount.toTinybars().toString() : amount.toString();
+        const hbarFormatted = (parseInt(tinybars) / 100000000).toFixed(2);
+        transfers.push(`${hbarFormatted} HBAR ${parseInt(tinybars) > 0 ? 'to' : 'from'} ${accountId.toString()}`);
+      }
       details.transfers.hbar = transfers.join(', ');
     }
 

@@ -34,9 +34,21 @@ const {
   ScheduleCreateTransaction,
   ScheduleSignTransaction,
   ScheduleDeleteTransaction,
+  AccountAllowanceApproveTransaction,
+  AccountAllowanceDeleteTransaction,
+  TokenFreezeTransaction,
+  TokenUnfreezeTransaction,
 } = require('@hashgraph/sdk');
 
-const { ethers } = require('ethers');
+// Lazy-load ethers — only needed when contractInterface/ABI is provided for
+// smart contract decoding. Avoids loading 1.2MB+ module for non-contract usage.
+let ethers = null;
+function getEthers() {
+  if (!ethers) {
+    ethers = require('ethers').ethers;
+  }
+  return ethers;
+}
 const { sha256, generateChecksum, bufferToHex } = require('./crypto');
 
 /**
@@ -116,6 +128,14 @@ function getTransactionTypeName(transaction) {
   if (transaction instanceof ScheduleCreateTransaction) return 'ScheduleCreateTransaction';
   if (transaction instanceof ScheduleSignTransaction) return 'ScheduleSignTransaction';
   if (transaction instanceof ScheduleDeleteTransaction) return 'ScheduleDeleteTransaction';
+
+  // Allowance types
+  if (transaction instanceof AccountAllowanceApproveTransaction) return 'AccountAllowanceApproveTransaction';
+  if (transaction instanceof AccountAllowanceDeleteTransaction) return 'AccountAllowanceDeleteTransaction';
+
+  // Token freeze/unfreeze types
+  if (transaction instanceof TokenFreezeTransaction) return 'TokenFreezeTransaction';
+  if (transaction instanceof TokenUnfreezeTransaction) return 'TokenUnfreezeTransaction';
 
   // Fallback - try constructor.name
   const constructorName = transaction.constructor.name;
@@ -228,8 +248,34 @@ class TransactionDecoder {
       this._decodeAccountCreateTransaction(transaction, details);
     } else if (transaction instanceof AccountUpdateTransaction) {
       this._decodeAccountUpdateTransaction(transaction, details);
+    } else if (transaction instanceof AccountDeleteTransaction) {
+      this._decodeAccountDeleteTransaction(transaction, details);
+    } else if (transaction instanceof TokenCreateTransaction) {
+      this._decodeTokenCreateTransaction(transaction, details);
+    } else if (transaction instanceof TokenMintTransaction) {
+      this._decodeTokenMintTransaction(transaction, details);
+    } else if (transaction instanceof TokenBurnTransaction) {
+      this._decodeTokenBurnTransaction(transaction, details);
+    } else if (transaction instanceof TokenUpdateTransaction) {
+      this._decodeTokenUpdateTransaction(transaction, details);
+    } else if (transaction instanceof TokenDeleteTransaction) {
+      this._decodeTokenDeleteTransaction(transaction, details);
+    } else if (transaction instanceof ContractDeleteTransaction) {
+      this._decodeContractDeleteTransaction(transaction, details);
+    } else if (transaction instanceof ScheduleCreateTransaction) {
+      this._decodeScheduleCreateTransaction(transaction, details, contractInterface);
+    } else if (transaction instanceof ScheduleSignTransaction) {
+      this._decodeScheduleSignTransaction(transaction, details);
+    } else if (transaction instanceof AccountAllowanceApproveTransaction) {
+      this._decodeAccountAllowanceApproveTransaction(transaction, details);
+    } else if (transaction instanceof AccountAllowanceDeleteTransaction) {
+      this._decodeAccountAllowanceDeleteTransaction(transaction, details);
+    } else if (transaction instanceof TokenFreezeTransaction) {
+      this._decodeTokenFreezeTransaction(transaction, details);
+    } else if (transaction instanceof TokenUnfreezeTransaction) {
+      this._decodeTokenUnfreezeTransaction(transaction, details);
     }
-    // Add more transaction types as needed
+    // Topic and File types are identified but not decoded in detail
 
     return details;
   }
@@ -373,6 +419,206 @@ class TransactionDecoder {
     if (tx._key) {
       details.hasKey = true;
     }
+  }
+
+  /**
+   * Decode AccountDeleteTransaction
+   * @private
+   */
+  static _decodeAccountDeleteTransaction(tx, details) {
+    details.accountId = tx._accountId?.toString();
+    details.transferAccountId = tx._transferAccountId?.toString();
+  }
+
+  /**
+   * Decode TokenCreateTransaction
+   * @private
+   */
+  static _decodeTokenCreateTransaction(tx, details) {
+    details.tokenName = tx._tokenName || null;
+    details.tokenSymbol = tx._tokenSymbol || null;
+    details.decimals = tx._decimals != null ? tx._decimals : null;
+    details.initialSupply = tx._initialSupply?.toString() || '0';
+    details.treasuryAccountId = tx._treasuryAccountId?.toString();
+    details.hasAdminKey = !!tx._adminKey;
+    details.hasSupplyKey = !!tx._supplyKey;
+    details.hasFreezeKey = !!tx._freezeKey;
+    details.hasWipeKey = !!tx._wipeKey;
+    details.hasPauseKey = !!tx._pauseKey;
+    details.hasFeeScheduleKey = !!tx._feeScheduleKey;
+  }
+
+  /**
+   * Decode TokenMintTransaction
+   * @private
+   */
+  static _decodeTokenMintTransaction(tx, details) {
+    details.tokenId = tx._tokenId?.toString();
+    details.amount = tx._amount?.toString() || '0';
+    // NFT metadata for non-fungible minting
+    if (tx._metadata && tx._metadata.length > 0) {
+      details.nftMetadataCount = tx._metadata.length;
+    }
+  }
+
+  /**
+   * Decode TokenBurnTransaction
+   * @private
+   */
+  static _decodeTokenBurnTransaction(tx, details) {
+    details.tokenId = tx._tokenId?.toString();
+    details.amount = tx._amount?.toString() || '0';
+    if (tx._serials && tx._serials.length > 0) {
+      details.serialNumbers = tx._serials.map(s =>
+        typeof s?.toNumber === 'function' ? s.toNumber() : Number(s)
+      );
+    }
+  }
+
+  /**
+   * Decode TokenUpdateTransaction
+   * @private
+   */
+  static _decodeTokenUpdateTransaction(tx, details) {
+    details.tokenId = tx._tokenId?.toString();
+    details.tokenName = tx._tokenName || null;
+    details.tokenSymbol = tx._tokenSymbol || null;
+    details.treasuryAccountId = tx._treasuryAccountId?.toString() || null;
+    details.hasAdminKey = !!tx._adminKey;
+  }
+
+  /**
+   * Decode TokenDeleteTransaction
+   * @private
+   */
+  static _decodeTokenDeleteTransaction(tx, details) {
+    details.tokenId = tx._tokenId?.toString();
+  }
+
+  /**
+   * Decode ContractDeleteTransaction
+   * @private
+   */
+  static _decodeContractDeleteTransaction(tx, details) {
+    details.contractId = tx._contractId?.toString();
+    details.transferAccountId = tx._transferAccountId?.toString() || null;
+    details.transferContractId = tx._transferContractId?.toString() || null;
+  }
+
+  /**
+   * Decode ScheduleCreateTransaction
+   * @private
+   */
+  static _decodeScheduleCreateTransaction(tx, details, contractInterface) {
+    details.payerAccountId = tx._payerAccountId?.toString() || null;
+    details.scheduleMemo = tx._scheduleMemo || null;
+    details.hasAdminKey = !!tx._adminKey;
+    details.expirationTime = tx._expirationTime?.seconds?.toNumber?.() || null;
+
+    // Recursively decode the inner (scheduled) transaction
+    if (tx._scheduledTransaction) {
+      const innerType = getTransactionTypeName(tx._scheduledTransaction);
+      details.scheduledTransactionType = innerType;
+      details.scheduledTransaction = {};
+      this.extractTransactionDetails(tx._scheduledTransaction, details.scheduledTransaction, contractInterface);
+      details.scheduledTransaction.type = innerType;
+    }
+  }
+
+  /**
+   * Decode ScheduleSignTransaction
+   * @private
+   */
+  static _decodeScheduleSignTransaction(tx, details) {
+    details.scheduleId = tx._scheduleId?.toString();
+  }
+
+  /**
+   * Decode AccountAllowanceApproveTransaction
+   * @private
+   */
+  static _decodeAccountAllowanceApproveTransaction(tx, details) {
+    details.hbarApprovals = [];
+    details.tokenApprovals = [];
+    details.nftApprovals = [];
+
+    // Hbar allowances
+    if (tx._hbarApprovals && tx._hbarApprovals.length > 0) {
+      for (const approval of tx._hbarApprovals) {
+        details.hbarApprovals.push({
+          ownerAccountId: approval.ownerAccountId?.toString() || null,
+          spenderAccountId: approval.spenderAccountId?.toString() || null,
+          amount: approval.amount?.toString() || '0',
+        });
+      }
+    }
+
+    // Token allowances
+    if (tx._tokenApprovals && tx._tokenApprovals.length > 0) {
+      for (const approval of tx._tokenApprovals) {
+        details.tokenApprovals.push({
+          tokenId: approval.tokenId?.toString() || null,
+          ownerAccountId: approval.ownerAccountId?.toString() || null,
+          spenderAccountId: approval.spenderAccountId?.toString() || null,
+          amount: approval.amount?.toString() || '0',
+        });
+      }
+    }
+
+    // NFT allowances
+    if (tx._nftApprovals && tx._nftApprovals.length > 0) {
+      for (const approval of tx._nftApprovals) {
+        details.nftApprovals.push({
+          tokenId: approval.tokenId?.toString() || null,
+          ownerAccountId: approval.ownerAccountId?.toString() || null,
+          spenderAccountId: approval.spenderAccountId?.toString() || null,
+          serialNumbers: approval.serialNumbers?.map(s =>
+            typeof s?.toNumber === 'function' ? s.toNumber() : Number(s)
+          ) || [],
+          allSerials: approval.allSerials || false,
+        });
+      }
+    }
+  }
+
+  /**
+   * Decode AccountAllowanceDeleteTransaction
+   * @private
+   */
+  static _decodeAccountAllowanceDeleteTransaction(tx, details) {
+    details.nftAllowanceDeletions = [];
+
+    // NFT allowance deletions
+    if (tx._nftAllowanceDeletions && tx._nftAllowanceDeletions.length > 0) {
+      for (const deletion of tx._nftAllowanceDeletions) {
+        details.nftAllowanceDeletions.push({
+          tokenId: deletion.tokenId?.toString() || null,
+          ownerAccountId: deletion.ownerAccountId?.toString() || null,
+          serialNumbers: deletion.serialNumbers?.map(s =>
+            typeof s?.toNumber === 'function' ? s.toNumber() : Number(s)
+          ) || [],
+          allSerials: deletion.allSerials || false,
+        });
+      }
+    }
+  }
+
+  /**
+   * Decode TokenFreezeTransaction
+   * @private
+   */
+  static _decodeTokenFreezeTransaction(tx, details) {
+    details.tokenId = tx._tokenId?.toString() || null;
+    details.accountId = tx._accountId?.toString() || null;
+  }
+
+  /**
+   * Decode TokenUnfreezeTransaction
+   * @private
+   */
+  static _decodeTokenUnfreezeTransaction(tx, details) {
+    details.tokenId = tx._tokenId?.toString() || null;
+    details.accountId = tx._accountId?.toString() || null;
   }
 
   /**

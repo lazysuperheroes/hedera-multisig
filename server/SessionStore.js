@@ -7,12 +7,15 @@
 
 const crypto = require('crypto');
 const { timerController } = require('../shared/TimerController');
+const { timingSafeCompare, generateSessionId, generateParticipantId, sanitizePublicKey } = require('../shared/crypto-utils');
+const { isValidTransition, ACTIVE_SESSION_STATES, AUTH_VALID_STATES } = require('../shared/protocol');
 
 class SessionStore {
   constructor(options = {}) {
     this.sessions = new Map();
     this.defaultTimeout = options.defaultTimeout || 1800000; // 30 minutes
     this.cleanupInterval = options.cleanupInterval || 60000; // 1 minute
+    this.maxSessions = options.maxSessions || 100; // SEC-13: prevent memory exhaustion
     this.cleanupTimerId = null;
 
     // Start automatic cleanup
@@ -25,7 +28,12 @@ class SessionStore {
    * @param {Object} sessionData - Session configuration
    * @returns {Object} Created session
    */
-  createSession(sessionData) {
+  async createSession(sessionData) {
+    // Enforce maximum session count to prevent memory exhaustion (SEC-13)
+    if (this.maxSessions && this.sessions.size >= this.maxSessions) {
+      throw new Error(`Maximum session limit (${this.maxSessions}) reached. Please wait for existing sessions to expire.`);
+    }
+
     const sessionId = this._generateSessionId();
     const now = Date.now();
 
@@ -47,8 +55,16 @@ class SessionStore {
       participants: new Map(), // participantId -> participant data
       signatures: new Map(), // publicKey -> signature data
 
+      // Session mode (realtime or scheduled)
+      mode: sessionData.mode || 'realtime',
+
       // Coordinator info
       coordinatorClient: null, // WebSocket connection
+      coordinatorToken: sessionData.coordinatorToken || null, // Separate auth for coordinator role
+      agentApiKey: sessionData.agentApiKey || null, // API key for agent authentication
+
+      // Reconnection tokens (participantId -> token)
+      reconnectionTokens: new Map(),
 
       // Statistics
       stats: {
@@ -56,7 +72,8 @@ class SessionStore {
         participantsReady: 0,
         participantsExpected: sessionData.expectedParticipants || sessionData.eligiblePublicKeys?.length || 0,
         signaturesCollected: 0,
-        signaturesRequired: sessionData.threshold
+        signaturesRequired: sessionData.threshold,
+        agentsConnected: 0
       }
     };
 
@@ -70,7 +87,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {Object|null} Session or null if not found
    */
-  getSession(sessionId) {
+  async getSession(sessionId) {
     const session = this.sessions.get(sessionId);
 
     if (!session) {
@@ -93,15 +110,15 @@ class SessionStore {
    * @param {string} pin - PIN code
    * @returns {boolean} True if authenticated
    */
-  authenticate(sessionId, pin) {
-    const session = this.getSession(sessionId);
+  async authenticate(sessionId, pin) {
+    const session = await this.getSession(sessionId);
 
     if (!session) {
       return false;
     }
 
-    // Allow authentication for waiting, transaction-received, and signing states
-    const validStates = ['waiting', 'transaction-received', 'signing'];
+    // Allow authentication for active session states
+    const validStates = AUTH_VALID_STATES;
     if (!validStates.includes(session.status)) {
       return false;
     }
@@ -116,11 +133,42 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @param {string} status - New status
    */
-  updateStatus(sessionId, status) {
+  async updateStatus(sessionId, status) {
     const session = this.sessions.get(sessionId);
     if (session) {
+      // Validate state transition (warn but don't block for backward compat)
+      if (!isValidTransition(session.status, status)) {
+        // Map legacy 'active' status to 'signing' for backward compatibility
+        if (status === 'active') {
+          status = 'signing';
+        } else {
+          console.warn(`Warning: Invalid state transition ${session.status} → ${status} for session ${sessionId}`);
+        }
+      }
       session.status = status;
     }
+  }
+
+  /**
+   * Rejoin an existing participant by public key (identity preservation on reconnect).
+   * If a participant with this public key already exists, returns their existing participantId.
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string} publicKey - Public key to match
+   * @returns {string|null} Existing participantId, or null if not found
+   */
+  async rejoinParticipant(sessionId, publicKey) {
+    const session = this.sessions.get(sessionId);
+    if (!session || !publicKey) return null;
+
+    for (const [participantId, participant] of session.participants) {
+      if (participant.publicKey === publicKey && participant.status === 'disconnected') {
+        participant.status = 'connected';
+        participant.connectedAt = Date.now();
+        return participantId;
+      }
+    }
+    return null;
   }
 
   /**
@@ -130,13 +178,15 @@ class SessionStore {
    * @param {Object} participant - Participant data
    * @returns {string} Participant ID
    */
-  addParticipant(sessionId, participant) {
+  async addParticipant(sessionId, participant) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');
     }
 
     const participantId = this._generateParticipantId();
+
+    const isAgent = participant.isAgent || false;
 
     const participantData = {
       participantId,
@@ -145,11 +195,17 @@ class SessionStore {
       keysLoaded: false, // Track if keys are loaded in memory
       publicKey: null, // Will be known after signature
       label: participant.label || null,
-      websocket: participant.websocket || null
+      websocket: participant.websocket || null,
+      isAgent // Track agent participants separately from regular participants
     };
 
     session.participants.set(participantId, participantData);
     session.stats.participantsConnected++;
+
+    // Track agent connections separately in stats
+    if (isAgent) {
+      session.stats.agentsConnected = (session.stats.agentsConnected || 0) + 1;
+    }
 
     return participantId;
   }
@@ -161,7 +217,7 @@ class SessionStore {
    * @param {string} participantId - Participant identifier
    * @param {string} status - New status
    */
-  updateParticipantStatus(sessionId, participantId, status) {
+  async updateParticipantStatus(sessionId, participantId, status) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return;
@@ -181,7 +237,7 @@ class SessionStore {
    * @param {string} participantId - Participant identifier
    * @param {Object} signature - Signature data
    */
-  addSignature(sessionId, participantId, signature) {
+  async addSignature(sessionId, participantId, signature) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -214,26 +270,26 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
    */
-  removeParticipant(sessionId, participantId) {
+  async removeParticipant(sessionId, participantId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return;
     }
 
     const participant = session.participants.get(participantId);
-    if (participant && participant.status !== 'signed') {
-      // Decrement ready count if participant was ready
-      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
-        session.stats.participantsReady--;
-      }
+    if (!participant) return;
+
+    // Decrement ready count if participant was ready or had been ready before signing
+    const wasReady = participant.status === 'ready' || participant.status === 'signed';
+    if (wasReady && session.stats.participantsReady > 0) {
+      session.stats.participantsReady--;
+    }
+
+    if (participant.status !== 'signed') {
       session.participants.delete(participantId);
       session.stats.participantsConnected--;
-    } else if (participant) {
+    } else {
       // Mark as disconnected but keep if signed
-      // Also decrement ready count if they were ready
-      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
-        session.stats.participantsReady--;
-      }
       participant.status = 'disconnected';
       participant.websocket = null;
     }
@@ -245,7 +301,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {boolean} True if threshold met
    */
-  isThresholdMet(sessionId) {
+  async isThresholdMet(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return false;
@@ -260,7 +316,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {Array} Array of signature objects
    */
-  getSignatures(sessionId) {
+  async getSignatures(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return [];
@@ -284,7 +340,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {Object|null} Session stats or null
    */
-  getStats(sessionId) {
+  async getStats(sessionId) {
     const session = this.sessions.get(sessionId);
     return session ? session.stats : null;
   }
@@ -294,11 +350,12 @@ class SessionStore {
    *
    * @returns {Array} Array of session summaries
    */
-  listActiveSessions() {
+  async listActiveSessions() {
     const active = [];
 
+    const activeStatuses = ACTIVE_SESSION_STATES;
     for (const [sessionId, session] of this.sessions) {
-      if (session.status === 'active') {
+      if (activeStatuses.includes(session.status)) {
         active.push({
           sessionId,
           createdAt: session.createdAt,
@@ -317,7 +374,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
    */
-  setParticipantReady(sessionId, participantId) {
+  async setParticipantReady(sessionId, participantId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -328,11 +385,14 @@ class SessionStore {
       throw new Error('Participant not found');
     }
 
+    // Guard against double-counting if already ready
+    if (participant.status !== 'ready') {
+      session.stats.participantsReady++;
+    }
+
     participant.keysLoaded = true;
     participant.status = 'ready';
     participant.readyAt = Date.now();
-
-    session.stats.participantsReady++;
   }
 
   /**
@@ -341,7 +401,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {boolean} True if all expected participants are ready
    */
-  areAllParticipantsReady(sessionId) {
+  async areAllParticipantsReady(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return false;
@@ -356,7 +416,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {Array} Array of ready participant IDs
    */
-  getReadyParticipants(sessionId) {
+  async getReadyParticipants(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return [];
@@ -379,7 +439,7 @@ class SessionStore {
    * @param {string} frozenTransaction - Serialized frozen transaction
    * @param {Object} txDetails - Transaction details
    */
-  injectTransaction(sessionId, frozenTransaction, txDetails) {
+  async injectTransaction(sessionId, frozenTransaction, txDetails) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -400,48 +460,29 @@ class SessionStore {
   }
 
   /**
-   * Timing-safe string comparison to prevent timing attacks
-   * @private
+   * Timing-safe string comparison (delegates to shared/crypto-utils)
    * @param {string} a - First string
    * @param {string} b - Second string
    * @returns {boolean} True if strings are equal
    */
   _timingSafeCompare(a, b) {
-    // Handle null/undefined
-    if (!a || !b) {
-      return false;
-    }
-
-    // Convert to buffers - pad shorter to match longer to avoid length-based timing leaks
-    const bufA = Buffer.from(a, 'utf8');
-    const bufB = Buffer.from(b, 'utf8');
-
-    // If lengths differ, still compare but return false
-    // Use max length buffer comparison to avoid timing leak
-    if (bufA.length !== bufB.length) {
-      // Compare against a dummy to maintain constant time, then return false
-      const dummy = Buffer.alloc(bufA.length, 0);
-      crypto.timingSafeEqual(bufA, dummy);
-      return false;
-    }
-
-    return crypto.timingSafeEqual(bufA, bufB);
+    return timingSafeCompare(a, b);
   }
 
   /**
-   * Generate unique session ID
+   * Generate unique session ID (delegates to shared/crypto-utils)
    * @private
    */
   _generateSessionId() {
-    return crypto.randomBytes(16).toString('hex');
+    return generateSessionId();
   }
 
   /**
-   * Generate unique participant ID
+   * Generate unique participant ID (delegates to shared/crypto-utils)
    * @private
    */
   _generateParticipantId() {
-    return crypto.randomBytes(8).toString('hex');
+    return generateParticipantId();
   }
 
   /**

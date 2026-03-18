@@ -305,16 +305,22 @@ class RedisSessionStore {
     }
 
     const participant = session.participants[participantId];
-    if (participant && participant.status !== 'signed') {
-      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
-        session.stats.participantsReady--;
-      }
+    if (!participant) {
+      await this._saveSession(session);
+      return;
+    }
+
+    // Decrement ready count if participant was ready or had been ready before signing
+    const wasReady = participant.status === 'ready' || participant.status === 'signed';
+    if (wasReady && session.stats.participantsReady > 0) {
+      session.stats.participantsReady--;
+    }
+
+    if (participant.status !== 'signed') {
       delete session.participants[participantId];
       session.stats.participantsConnected--;
-    } else if (participant) {
-      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
-        session.stats.participantsReady--;
-      }
+    } else {
+      // Mark as disconnected but keep if signed
       participant.status = 'disconnected';
     }
 
@@ -436,11 +442,14 @@ class RedisSessionStore {
       throw new Error('Participant not found');
     }
 
+    // Guard against double-counting if already ready
+    if (participant.status !== 'ready') {
+      session.stats.participantsReady++;
+    }
+
     participant.keysLoaded = true;
     participant.status = 'ready';
     participant.readyAt = Date.now();
-
-    session.stats.participantsReady++;
 
     await this._saveSession(session);
   }
@@ -654,9 +663,17 @@ class RedisSessionStore {
    * @private
    */
   _startCleanup() {
-    this.cleanupTimer = setInterval(() => {
-      this._cleanupExpiredSessions();
-    }, this.cleanupInterval);
+    // Use timerController if available for clean shutdown, otherwise fall back to raw setInterval
+    try {
+      const { globalTimerController } = require('../../shared/TimerController');
+      this.cleanupTimer = globalTimerController.setInterval(() => {
+        this._cleanupExpiredSessions();
+      }, this.cleanupInterval, 'redis-session-cleanup');
+    } catch (e) {
+      this.cleanupTimer = setInterval(() => {
+        this._cleanupExpiredSessions();
+      }, this.cleanupInterval);
+    }
   }
 
   /**

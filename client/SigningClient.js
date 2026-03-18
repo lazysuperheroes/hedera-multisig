@@ -26,6 +26,14 @@ class SigningClient {
     this.privateKey = null; // Loaded in memory, NEVER transmitted
     this.sessionInfo = null;
     this.eventHandlers = {};
+
+    // Reconnection state
+    this.connectionParams = null; // { serverUrl, sessionId, pin, reconnectionToken }
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = options.maxReconnectAttempts || 5;
+    this.reconnectInterval = options.reconnectInterval || 3000;
+    this.reconnectTimer = null;
+    this.intentionalDisconnect = false;
   }
 
   /**
@@ -40,20 +48,27 @@ class SigningClient {
     return new Promise((resolve, reject) => {
       try {
         this.sessionId = sessionId;
+        this.connectionParams = { serverUrl, sessionId, pin };
+        this.intentionalDisconnect = false;
 
         // Connect to WebSocket server
         this.ws = new WebSocket(serverUrl);
 
         this.ws.on('open', () => {
-          // Authenticate
+          // Authenticate (use reconnection token if available from previous session)
+          const authPayload = {
+            sessionId,
+            role: 'participant',
+            label: this.options.label
+          };
+          if (this.connectionParams?.reconnectionToken) {
+            authPayload.reconnectionToken = this.connectionParams.reconnectionToken;
+          } else {
+            authPayload.pin = pin;
+          }
           this.ws.send(JSON.stringify({
             type: 'AUTH',
-            payload: {
-              sessionId,
-              pin,
-              role: 'participant',
-              label: this.options.label
-            }
+            payload: authPayload
           }));
         });
 
@@ -70,6 +85,11 @@ class SigningClient {
           this.status = 'disconnected';
           this._log('Disconnected from session', 'info');
           this._emit('disconnected');
+
+          // Attempt auto-reconnect if not intentionally disconnected
+          if (!this.intentionalDisconnect && this.connectionParams) {
+            this._attemptReconnect();
+          }
         });
 
       } catch (error) {
@@ -141,18 +161,30 @@ class SigningClient {
       this.status = 'reviewing';
       this._log('\n🔔 Transaction received for review!', 'info');
 
-      const { frozenTransaction, txDetails, metadata, contractInterface } = payload;
+      const { frozenTransaction, txDetails, metadata, abi, contractInterface } = payload;
+
+      // Reconstruct ethers Interface from ABI if provided (ABI is JSON-serializable,
+      // contractInterface objects don't survive JSON.stringify over WebSocket)
+      let resolvedInterface = contractInterface || null;
+      if (abi && !resolvedInterface) {
+        try {
+          const { Interface } = require('ethers');
+          resolvedInterface = new Interface(abi);
+        } catch (e) {
+          this._log(`Warning: Could not reconstruct contract interface from ABI: ${e.message}`, 'warning');
+        }
+      }
 
       // Decode transaction from bytes
       const decodedTx = TransactionReviewer.decode(
         frozenTransaction.base64,
-        contractInterface
+        resolvedInterface
       );
 
       // Display transaction for approval
       const display = TransactionReviewer.displayForApproval(decodedTx, {
         metadata,
-        contractInterface
+        contractInterface: resolvedInterface
       });
 
       console.log(display);
@@ -367,6 +399,13 @@ class SigningClient {
     this.participantId = payload.participantId;
     this.sessionInfo = payload.sessionInfo;
     this.status = 'connected';
+    this.reconnectAttempts = 0; // Reset on successful auth
+
+    // Store reconnection token for future reconnects (replaces PIN)
+    if (payload.reconnectionToken && this.connectionParams) {
+      this.connectionParams.reconnectionToken = payload.reconnectionToken;
+      delete this.connectionParams.pin;
+    }
 
     this._log('✅ Connected to session successfully!', 'success');
     this._log(`   Session ID: ${this.sessionInfo.sessionId}`, 'info');
@@ -426,6 +465,48 @@ class SigningClient {
       default:
         console.log(`${prefix} ${message}`);
     }
+  }
+
+  /**
+   * Attempt to reconnect to the session after disconnect.
+   * @private
+   */
+  _attemptReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      this._log(`Max reconnection attempts (${this.maxReconnectAttempts}) reached`, 'error');
+      this._emit('reconnectFailed');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    this._log(`Reconnecting (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`, 'info');
+
+    this.reconnectTimer = setTimeout(() => {
+      if (this.connectionParams) {
+        const { serverUrl, sessionId, pin } = this.connectionParams;
+        this.connect(serverUrl, sessionId, pin || '').catch((err) => {
+          this._log(`Reconnection failed: ${err.message}`, 'error');
+        });
+      }
+    }, this.reconnectInterval);
+  }
+
+  /**
+   * Disconnect from the session intentionally (no auto-reconnect).
+   */
+  disconnect() {
+    this.intentionalDisconnect = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.status = 'disconnected';
+    this.privateKey = null;
+    this.connectionParams = null;
   }
 }
 

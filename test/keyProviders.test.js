@@ -6,197 +6,183 @@
 
 const fs = require('fs');
 const path = require('path');
+const { expect } = require('chai');
 const { PrivateKey } = require('@hashgraph/sdk');
 
 const KeyValidator = require('../keyManagement/KeyValidator');
 const EnvKeyProvider = require('../keyManagement/EnvKeyProvider');
 const EncryptedFileProvider = require('../keyManagement/EncryptedFileProvider');
 
-// Test key generation
-console.log('\n╔═══════════════════════════════════════════════════════╗');
-console.log('║        KEY PROVIDER INTEGRATION TESTS                 ║');
-console.log('╚═══════════════════════════════════════════════════════╝\n');
+describe('Key Provider Integration Tests', function() {
+  this.timeout(30000);
 
-let testsPassed = 0;
-let testsFailed = 0;
+  // Generate test keys once for all tests
+  let testKey1, testKey2, testKey3;
+  let testKey1String, testKey2String, testKey3String;
 
-function assert(condition, testName) {
-  if (condition) {
-    console.log(`✅ ${testName}`);
-    testsPassed++;
-  } else {
-    console.error(`❌ ${testName}`);
-    testsFailed++;
-  }
-}
+  before(function() {
+    testKey1 = PrivateKey.generate();
+    testKey2 = PrivateKey.generate();
+    testKey3 = PrivateKey.generate();
+    testKey1String = testKey1.toString();
+    testKey2String = testKey2.toString();
+    testKey3String = testKey3.toString();
+  });
 
-// Generate test keys
-const testKey1 = PrivateKey.generate();
-const testKey2 = PrivateKey.generate();
-const testKey3 = PrivateKey.generate();
+  // ============================================================================
+  // KeyValidator Tests
+  // ============================================================================
 
-const testKey1String = testKey1.toString();
-const testKey2String = testKey2.toString();
-const testKey3String = testKey3.toString();
+  describe('KeyValidator', function() {
 
-console.log('Test Setup:');
-console.log(`  Generated 3 test private keys\n`);
+    it('validates a valid private key', function() {
+      const validation = KeyValidator.validatePrivateKey(testKey1String);
+      expect(validation.valid).to.equal(true);
+      expect(validation.format).to.equal('DER');
+      expect(validation.type).to.equal('ED25519');
+    });
 
-// ============================================================================
-// KeyValidator Tests
-// ============================================================================
+    it('rejects an invalid private key', function() {
+      const validation = KeyValidator.validatePrivateKey('invalid-key');
+      expect(validation.valid).to.equal(false);
+      expect(validation.errors).to.have.length.greaterThan(0);
+    });
 
-console.log('KeyValidator Tests:\n');
+    it('rejects an empty string', function() {
+      const validation = KeyValidator.validatePrivateKey('');
+      expect(validation.valid).to.equal(false);
+    });
 
-// Test 1: Validate valid private key
-const validation1 = KeyValidator.validatePrivateKey(testKey1String);
-assert(validation1.valid === true, 'Validates valid private key');
-assert(validation1.format === 'DER', 'Detects DER format');
-assert(validation1.type === 'ED25519', 'Detects ED25519 type');
+    it('validates a valid signature tuple', function() {
+      const signatureBytes = testKey1.sign(Buffer.from('test'));
+      const signatureTuple = `${testKey1.publicKey.toString()}:${Buffer.from(signatureBytes).toString('base64')}`;
+      const validation = KeyValidator.validateSignatureTuple(signatureTuple);
+      expect(validation.valid).to.equal(true);
+    });
 
-// Test 2: Validate invalid private key
-const validation2 = KeyValidator.validatePrivateKey('invalid-key');
-assert(validation2.valid === false, 'Rejects invalid private key');
-assert(validation2.errors.length > 0, 'Provides error messages');
+    it('validates a valid threshold config (2-of-3)', function() {
+      const validation = KeyValidator.validateThresholdConfig(3, 2);
+      expect(validation.valid).to.equal(true);
+    });
 
-// Test 3: Validate empty string
-const validation3 = KeyValidator.validatePrivateKey('');
-assert(validation3.valid === false, 'Rejects empty string');
+    it('rejects an invalid threshold config (2-of-1)', function() {
+      const validation = KeyValidator.validateThresholdConfig(1, 2);
+      expect(validation.valid).to.equal(false);
+    });
+  });
 
-// Test 4: Validate signature tuple
-const signatureBytes = testKey1.sign(Buffer.from('test'));
-const signatureTuple = `${testKey1.publicKey.toString()}:${Buffer.from(signatureBytes).toString('base64')}`;
-const validation4 = KeyValidator.validateSignatureTuple(signatureTuple);
-assert(validation4.valid === true, 'Validates valid signature tuple');
+  // ============================================================================
+  // EncryptedFileProvider Tests
+  // ============================================================================
 
-// Test 5: Validate threshold configuration
-const validation5 = KeyValidator.validateThresholdConfig(3, 2);
-assert(validation5.valid === true, 'Validates valid threshold config (2-of-3)');
+  describe('EncryptedFileProvider', function() {
+    const testFilePath = path.join(__dirname, 'test-encrypted-keys.json');
+    const testPassphrase = 'test-passphrase-123456';
 
-const validation6 = KeyValidator.validateThresholdConfig(1, 2);
-assert(validation6.valid === false, 'Rejects invalid threshold config (2-of-1)');
+    afterEach(function() {
+      // Clean up test file after each test in this block
+      if (fs.existsSync(testFilePath)) {
+        fs.unlinkSync(testFilePath);
+      }
+    });
 
-console.log('');
+    it('creates an encrypted file', function() {
+      EncryptedFileProvider.createEncryptedFile(
+        [testKey1String, testKey2String, testKey3String],
+        testPassphrase,
+        testFilePath,
+        { description: 'Test multi-sig keys' }
+      );
 
-// ============================================================================
-// EncryptedFileProvider Tests
-// ============================================================================
+      expect(fs.existsSync(testFilePath)).to.equal(true);
 
-console.log('EncryptedFileProvider Tests:\n');
+      const fileContent = JSON.parse(fs.readFileSync(testFilePath, 'utf8'));
+      expect(fileContent.algorithm).to.equal('aes-256-gcm');
+      expect(fileContent.kdf).to.equal('pbkdf2');
+      expect(fileContent.metadata.keyCount).to.equal(3);
+    });
 
-const testFilePath = path.join(__dirname, 'test-encrypted-keys.json');
-const testPassphrase = 'test-passphrase-123456';
+    it('reads file metadata without decryption', function() {
+      EncryptedFileProvider.createEncryptedFile(
+        [testKey1String, testKey2String, testKey3String],
+        testPassphrase,
+        testFilePath,
+        { description: 'Test multi-sig keys' }
+      );
 
-// Test 7: Create encrypted file
-try {
-  EncryptedFileProvider.createEncryptedFile(
-    [testKey1String, testKey2String, testKey3String],
-    testPassphrase,
-    testFilePath,
-    { description: 'Test multi-sig keys' }
-  );
+      const metadata = EncryptedFileProvider.getFileMetadata(testFilePath);
+      expect(metadata.keyCount).to.equal(3);
+      expect(metadata.algorithm).to.equal('aes-256-gcm');
+    });
 
-  assert(fs.existsSync(testFilePath), 'Creates encrypted file');
+    it('verifies a correct passphrase', function() {
+      EncryptedFileProvider.createEncryptedFile(
+        [testKey1String, testKey2String, testKey3String],
+        testPassphrase,
+        testFilePath,
+        { description: 'Test multi-sig keys' }
+      );
 
-  const fileContent = JSON.parse(fs.readFileSync(testFilePath, 'utf8'));
-  assert(fileContent.algorithm === 'aes-256-gcm', 'Uses AES-256-GCM encryption');
-  assert(fileContent.kdf === 'pbkdf2', 'Uses PBKDF2 key derivation');
-  assert(fileContent.metadata.keyCount === 3, 'Stores correct key count');
-} catch (error) {
-  assert(false, `Create encrypted file: ${error.message}`);
-}
+      const passphraseValid = EncryptedFileProvider.verifyPassphrase(testFilePath, testPassphrase);
+      expect(passphraseValid).to.equal(true);
+    });
 
-// Test 8: Get file metadata without decrypting
-try {
-  const metadata = EncryptedFileProvider.getFileMetadata(testFilePath);
-  assert(metadata.keyCount === 3, 'Reads metadata without decryption');
-  assert(metadata.algorithm === 'aes-256-gcm', 'Metadata contains algorithm');
-} catch (error) {
-  assert(false, `Get file metadata: ${error.message}`);
-}
+    it('rejects an incorrect passphrase', function() {
+      EncryptedFileProvider.createEncryptedFile(
+        [testKey1String, testKey2String, testKey3String],
+        testPassphrase,
+        testFilePath,
+        { description: 'Test multi-sig keys' }
+      );
 
-// Test 9: Verify passphrase
-const passphraseValid = EncryptedFileProvider.verifyPassphrase(testFilePath, testPassphrase);
-assert(passphraseValid === true, 'Verifies correct passphrase');
+      const passphraseInvalid = EncryptedFileProvider.verifyPassphrase(testFilePath, 'wrong-passphrase');
+      expect(passphraseInvalid).to.equal(false);
+    });
 
-const passphraseInvalid = EncryptedFileProvider.verifyPassphrase(testFilePath, 'wrong-passphrase');
-assert(passphraseInvalid === false, 'Rejects incorrect passphrase');
+    it('creates an EncryptedFileProvider instance', function() {
+      EncryptedFileProvider.createEncryptedFile(
+        [testKey1String, testKey2String, testKey3String],
+        testPassphrase,
+        testFilePath,
+        { description: 'Test multi-sig keys' }
+      );
 
-// Test 10: Decrypt and load keys
-try {
-  const provider = new EncryptedFileProvider(testFilePath, { passphrase: testPassphrase });
+      const provider = new EncryptedFileProvider(testFilePath, { passphrase: testPassphrase });
 
-  // Note: We can't actually call getKeys() in this test without user interaction
-  // but we can verify the provider was created successfully
-  assert(provider !== null, 'Creates EncryptedFileProvider instance');
-  assert(provider.getName().includes('test-encrypted-keys.json'), 'Provider has correct name');
-  assert(provider.getSecurityLevel() === 'high', 'Provider reports high security level');
-} catch (error) {
-  assert(false, `Create EncryptedFileProvider: ${error.message}`);
-}
+      expect(provider).to.not.equal(null);
+      expect(provider.getName()).to.include('test-encrypted-keys.json');
+      expect(provider.getSecurityLevel()).to.equal('high');
+    });
 
-// Test 11: Generate random passphrase
-const randomPassphrase = EncryptedFileProvider.generatePassphrase(20);
-assert(randomPassphrase.length === 20, 'Generates passphrase of correct length');
-assert(/[A-Za-z0-9!@#$%^&*]/.test(randomPassphrase), 'Passphrase contains valid characters');
+    it('generates a random passphrase of correct length', function() {
+      const randomPassphrase = EncryptedFileProvider.generatePassphrase(20);
+      expect(randomPassphrase).to.have.length(20);
+      expect(randomPassphrase).to.match(/[A-Za-z0-9!@#$%^&*]/);
+    });
+  });
 
-console.log('');
+  // ============================================================================
+  // EnvKeyProvider Tests
+  // ============================================================================
 
-// ============================================================================
-// EnvKeyProvider Tests
-// ============================================================================
+  describe('EnvKeyProvider', function() {
 
-console.log('EnvKeyProvider Tests:\n');
+    it('creates an EnvKeyProvider instance', function() {
+      const provider = new EnvKeyProvider({ prefix: 'TEST_KEY' });
+      expect(provider).to.not.equal(null);
+      expect(provider.getName()).to.equal('Environment Variables (.env)');
+      expect(provider.getSecurityLevel()).to.equal('medium');
+    });
 
-// Test 12: Create EnvKeyProvider
-try {
-  const provider = new EnvKeyProvider({ prefix: 'TEST_KEY' });
-  assert(provider !== null, 'Creates EnvKeyProvider instance');
-  assert(provider.getName() === 'Environment Variables (.env)', 'Provider has correct name');
-  assert(provider.getSecurityLevel() === 'medium', 'Provider reports medium security level');
-} catch (error) {
-  assert(false, `Create EnvKeyProvider: ${error.message}`);
-}
+    it('checks .env file existence', function() {
+      const envExists = EnvKeyProvider.envFileExists('.env');
+      expect(envExists).to.be.a('boolean');
+    });
 
-// Test 13: Check .env file existence
-const envExists = EnvKeyProvider.envFileExists('.env');
-assert(typeof envExists === 'boolean', 'Checks .env file existence');
-
-// Test 14: Validate .env file security
-const securityCheck = EnvKeyProvider.validateEnvFileSecurity('.env');
-assert(securityCheck !== null, 'Validates .env file security');
-assert(typeof securityCheck.secure === 'boolean', 'Security check has result');
-
-console.log('');
-
-// ============================================================================
-// Cleanup
-// ============================================================================
-
-// Remove test encrypted file
-if (fs.existsSync(testFilePath)) {
-  fs.unlinkSync(testFilePath);
-  console.log('Cleanup: Removed test encrypted file\n');
-}
-
-// ============================================================================
-// Summary
-// ============================================================================
-
-console.log('═══════════════════════════════════════════════════════\n');
-console.log('TEST SUMMARY:\n');
-console.log(`  ✅ Passed: ${testsPassed}`);
-console.log(`  ❌ Failed: ${testsFailed}`);
-console.log(`  Total: ${testsPassed + testsFailed}\n`);
-
-if (testsFailed === 0) {
-  console.log('╔═══════════════════════════════════════════════════════╗');
-  console.log('║              ✅ ALL TESTS PASSED!                     ║');
-  console.log('╚═══════════════════════════════════════════════════════╝\n');
-  process.exit(0);
-} else {
-  console.log('╔═══════════════════════════════════════════════════════╗');
-  console.log('║              ❌ SOME TESTS FAILED                     ║');
-  console.log('╚═══════════════════════════════════════════════════════╝\n');
-  process.exit(1);
-}
+    it('validates .env file security', function() {
+      const securityCheck = EnvKeyProvider.validateEnvFileSecurity('.env');
+      expect(securityCheck).to.not.equal(null);
+      expect(securityCheck.secure).to.be.a('boolean');
+    });
+  });
+});

@@ -89,7 +89,7 @@ function JoinPageContent() {
 
       // If PIN is included, we could auto-submit, but let's show the form for confirmation
     } else {
-      setParseError('Invalid connection string format');
+      setParseError('This doesn\u0027t look like a valid connection string. It should start with hmsc:');
     }
   };
 
@@ -108,11 +108,11 @@ function JoinPageContent() {
           setShowManualForm(true);
           setParseError(null);
         } else {
-          setParseError('Clipboard does not contain a valid connection string');
+          setParseError('The clipboard text isn\u0027t a valid connection string. Ask your coordinator for a new one.');
         }
       }
     } catch {
-      setParseError('Could not read from clipboard');
+      setParseError('Clipboard access denied. Try pasting manually with Ctrl+V.');
     }
   };
 
@@ -129,12 +129,12 @@ function JoinPageContent() {
       setShowManualForm(true);
       setParseError(null);
     } else {
-      setParseError('QR code does not contain a valid connection string');
+      setParseError('This QR code doesn\u0027t contain session details. Make sure you\u0027re scanning the coordinator\u0027s QR code.');
     }
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
+    <main className="min-h-screen p-6 sm:p-8 bg-[var(--background)]">
       {/* QR Scanner Modal */}
       {showQRScanner && (
         <Suspense fallback={
@@ -152,22 +152,19 @@ function JoinPageContent() {
         </Suspense>
       )}
 
-      <div className="max-w-2xl w-full space-y-8">
+      <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="text-center space-y-2">
-          <Link href="/" className="text-blue-600 dark:text-blue-400 hover:underline text-sm">
-            ← Back to Home
-          </Link>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
+        <div className="mb-8">
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white">
             Join Signing Session
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Paste a connection string or enter session details manually
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            Paste a connection string or enter session details manually.
           </p>
         </div>
 
         {/* Quick Connect - Connection String */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Quick Connect</h2>
 
           <div className="space-y-4">
@@ -182,7 +179,7 @@ function JoinPageContent() {
                   id="connectionString"
                   value={connectionString}
                   onChange={handleConnectionStringChange}
-                  placeholder="hmsc:eyJzIjoi..."
+                  placeholder="Paste connection string here"
                   className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 font-mono text-sm"
                 />
                 <button
@@ -231,7 +228,7 @@ function JoinPageContent() {
 
         {/* Manual Form */}
         {showManualForm && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
+          <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Session Details</h2>
               {connectionString && (
@@ -248,7 +245,7 @@ function JoinPageContent() {
               {/* Server URL */}
               <div>
                 <label htmlFor="serverUrl" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  WebSocket Server URL
+                  Server URL
                 </label>
                 <input
                   type="text"
@@ -307,28 +304,16 @@ function JoinPageContent() {
                 disabled={!formData.serverUrl || !formData.sessionId || !formData.pin}
                 className="w-full px-6 py-4 bg-blue-600 text-white font-semibold rounded-lg shadow-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Continue to Session
+                Join Session
               </button>
             </form>
           </div>
         )}
 
-        {/* Info Box */}
-        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">What happens next?</h3>
-          <ol className="list-decimal list-inside space-y-2 text-sm text-blue-800 dark:text-blue-300">
-            <li>Connect your Hedera wallet via WalletConnect</li>
-            <li>Join the signing session with the provided credentials</li>
-            <li>Review the transaction details (verified and unverified data)</li>
-            <li>Approve and sign the transaction with your wallet</li>
-            <li>Wait for other participants to meet the signature threshold</li>
-          </ol>
-        </div>
-
-        {/* Connection String Format Info */}
-        <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-xs text-gray-600 dark:text-gray-400">
-          <details>
-            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300">About connection strings</summary>
+        {/* Connection string format hint — collapsed, minimal */}
+        <div className="mt-8 border-t border-gray-200 dark:border-gray-800 pt-6">
+          <details className="text-xs text-gray-500 dark:text-gray-400">
+            <summary className="cursor-pointer font-medium text-gray-600 dark:text-gray-400">About connection strings</summary>
             <p className="mt-2">
               Connection strings start with <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">hmsc:</code> followed by encoded session data.
               They contain the server URL, session ID, and optionally the PIN. Your coordinator will provide this when creating a session.
@@ -343,7 +328,7 @@ function JoinPageContent() {
 export default function JoinPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
+      <main className="min-h-screen flex items-center justify-center p-8 bg-[var(--background)]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600 dark:text-gray-400">Loading...</p>

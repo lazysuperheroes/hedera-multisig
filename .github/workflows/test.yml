@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, 'feature/**', 'upgrade-*']
+    branches: [main, develop, 'feature/**', 'bugfix/**', 'upgrade-*']
   pull_request:
     branches: [main, develop]
 
@@ -33,6 +33,9 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
+      - name: Run workflow tests
+        run: npm run test:workflows --if-present
+
       - name: Verify CLI tools
         run: |
           node cli/server.js --version
@@ -60,8 +63,7 @@ jobs:
         run: npm ci
 
       - name: Run npm audit
-        run: npm audit --audit-level=moderate
-        continue-on-error: true
+        run: npm audit --audit-level=critical
 
       - name: Run security audit tool
         run: node cli/securityAudit.js
@@ -85,11 +87,17 @@ jobs:
       - name: Check package exports
         run: node -e "const pkg = require('./index.js'); console.log('Package exports:', Object.keys(pkg))"
 
+      - name: Install dApp dependencies
+        working-directory: ./dapp
+        run: npm ci
+
+      - name: Run dApp Jest tests
+        working-directory: ./dapp
+        run: npx jest --ci --passWithNoTests
+
       - name: Verify dApp builds
         working-directory: ./dapp
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
 
   e2e-tests:
     runs-on: ubuntu-latest

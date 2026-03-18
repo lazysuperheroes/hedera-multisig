@@ -51,11 +51,11 @@ function EntityLink({ type, id, network }: { type: 'account' | 'contract' | 'tok
       href={getHashScanUrl(type, id, network)}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-blue-600 hover:text-blue-800 underline font-mono inline-flex items-center gap-1"
+      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-mono inline-flex items-center gap-1"
       title={`View ${id} on HashScan`}
     >
       {id}
-      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
       </svg>
     </a>
@@ -154,21 +154,47 @@ export function TransactionReview({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-4 text-gray-600">Decoding transaction...</span>
+      <div className="space-y-4" aria-busy="true" aria-label="Loading transaction details">
+        {/* Skeleton: mimics the verified transaction card shape */}
+        <div className="bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div className="bg-green-600 dark:bg-green-700 px-4 py-3">
+            <div className="skeleton h-5 w-48 rounded" style={{background: 'rgba(255,255,255,0.2)'}}></div>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="skeleton h-3 w-20 rounded"></div>
+            <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 space-y-2">
+                  <div className="skeleton h-3 w-12 rounded"></div>
+                  <div className="skeleton h-4 w-32 rounded"></div>
+                </div>
+                <div className="skeleton h-6 w-24 rounded"></div>
+                <div className="flex-1 space-y-2 text-right">
+                  <div className="skeleton h-3 w-12 rounded ml-auto"></div>
+                  <div className="skeleton h-4 w-32 rounded ml-auto"></div>
+                </div>
+              </div>
+            </div>
+            <div className="skeleton h-3 w-full rounded"></div>
+            <div className="skeleton h-3 w-3/4 rounded"></div>
+          </div>
+        </div>
+        <div className="space-y-3 pt-4">
+          <div className="skeleton h-14 w-full rounded-lg"></div>
+          <div className="skeleton h-10 w-full rounded-lg"></div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border-2 border-red-500 rounded-lg p-6">
-        <h2 className="text-xl font-bold text-red-700 mb-2">❌ Decoding Error</h2>
-        <p className="text-red-600">{error}</p>
+      <div className="bg-red-50 dark:bg-red-950/40 border-2 border-red-500 dark:border-red-700 rounded-lg p-6">
+        <h2 className="text-xl font-bold text-red-700 dark:text-red-300 mb-2">Could Not Read Transaction</h2>
+        <p className="text-red-600 dark:text-red-400">{error}</p>
         <button
           onClick={() => onReject(`Decoding error: ${error}`)}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
         >
           Reject Transaction
         </button>
@@ -181,7 +207,6 @@ export function TransactionReview({
   }
 
   // Format transfers for display (sender → receiver)
-  // Amount strings are like "-1 ℏ" or "100" - extract numeric part to determine sign
   const formattedTransfers = amounts.reduce((acc, amount) => {
     const numericStr = amount.amount.replace(/[^\d.-]/g, '');
     const value = parseFloat(numericStr) || 0;
@@ -209,16 +234,16 @@ export function TransactionReview({
     <div className="space-y-4">
       {/* EXPIRED Banner */}
       {isExpired && (
-        <div className="bg-red-100 border-2 border-red-600 rounded-lg p-4">
+        <div className="bg-red-100 dark:bg-red-950/50 border-2 border-red-600 dark:border-red-700 rounded-lg p-4">
           <div className="flex items-center gap-3">
-            <div className="text-red-600">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="text-red-600 dark:text-red-400">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div>
-              <h3 className="font-bold text-red-800">Transaction Expired</h3>
-              <p className="text-sm text-red-700">
+              <h3 className="font-bold text-red-800 dark:text-red-200">Transaction Expired</h3>
+              <p className="text-sm text-red-700 dark:text-red-300">
                 This transaction has timed out and can no longer be signed. Please request a new transaction from the coordinator.
               </p>
             </div>
@@ -229,24 +254,31 @@ export function TransactionReview({
       {/* Countdown Timer */}
       {secondsRemaining !== null && !isExpired && (
         <div className={`border-2 rounded-lg p-3 ${
-          secondsRemaining <= 30 ? 'bg-red-50 border-red-400' :
-          secondsRemaining <= 60 ? 'bg-yellow-50 border-yellow-400' :
-          'bg-blue-50 border-blue-400'
+          secondsRemaining <= 30 ? 'bg-red-50 dark:bg-red-950/30 border-red-400 dark:border-red-700' :
+          secondsRemaining <= 60 ? 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-400 dark:border-yellow-700' :
+          'bg-blue-50 dark:bg-blue-950/30 border-blue-400 dark:border-blue-700'
         }`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <svg className={`w-5 h-5 ${secondsRemaining <= 30 ? 'text-red-600' : secondsRemaining <= 60 ? 'text-yellow-600' : 'text-blue-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className={`w-5 h-5 ${secondsRemaining <= 30 ? 'text-red-600 dark:text-red-400' : secondsRemaining <= 60 ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className={`font-semibold ${secondsRemaining <= 30 ? 'text-red-800' : secondsRemaining <= 60 ? 'text-yellow-800' : 'text-blue-800'}`}>
+              <span className={`font-semibold ${secondsRemaining <= 30 ? 'text-red-800 dark:text-red-200' : secondsRemaining <= 60 ? 'text-yellow-800 dark:text-yellow-200' : 'text-blue-800 dark:text-blue-200'}`}>
                 Time to Sign
               </span>
             </div>
-            <span className={`font-mono font-bold text-lg ${secondsRemaining <= 30 ? 'text-red-700' : secondsRemaining <= 60 ? 'text-yellow-700' : 'text-blue-700'}`}>
+            <span className={`font-mono font-bold text-lg tabular-nums ${secondsRemaining <= 30 ? 'text-red-700 dark:text-red-300' : secondsRemaining <= 60 ? 'text-yellow-700 dark:text-yellow-300' : 'text-blue-700 dark:text-blue-300'}`}>
               {formatTimeRemaining(secondsRemaining)}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div
+            className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"
+            role="progressbar"
+            aria-valuenow={secondsRemaining}
+            aria-valuemin={0}
+            aria-valuemax={decoded?.details.transactionValidDuration || 120}
+            aria-label={`${secondsRemaining} seconds remaining to sign`}
+          >
             <div
               className={`h-2 rounded-full transition-all duration-1000 ${
                 secondsRemaining <= 30 ? 'bg-red-500' :
@@ -261,19 +293,21 @@ export function TransactionReview({
 
       {/* Warnings Banner (if mismatches detected) */}
       {validation && Object.keys(validation.mismatches).length > 0 && (
-        <div className="bg-red-50 border-2 border-red-500 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-red-800 font-semibold mb-2">
-            <span className="text-xl">⚠️</span>
+        <div className="bg-red-50 dark:bg-red-950/40 border-2 border-red-500 dark:border-red-700 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-red-800 dark:text-red-200 font-semibold mb-2">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
             <span>Metadata Mismatch Warning</span>
           </div>
-          <p className="text-sm text-red-700 mb-2">
-            Coordinator-provided metadata doesn&apos;t match the verified transaction data. Review carefully!
+          <p className="text-sm text-red-700 dark:text-red-300 mb-2">
+            What the coordinator claims this transaction does doesn&apos;t match what it actually does. Review carefully before signing.
           </p>
           <details className="text-xs">
-            <summary className="cursor-pointer text-red-600 hover:text-red-800">Show details</summary>
-            <div className="mt-2 p-2 bg-red-100 rounded">
+            <summary className="cursor-pointer text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300">Show details</summary>
+            <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded">
               {Object.entries(validation.mismatches).map(([field, { metadata: meta, actual }]) => (
-                <div key={field} className="mb-1">
+                <div key={field} className="mb-1 text-red-800 dark:text-red-200">
                   <span className="font-semibold">{field}:</span> claimed &quot;{JSON.stringify(meta)}&quot; vs actual &quot;{JSON.stringify(actual)}&quot;
                 </div>
               ))}
@@ -283,42 +317,44 @@ export function TransactionReview({
       )}
 
       {/* Main Transaction Card */}
-      <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
         {/* Header */}
-        <div className="bg-green-600 text-white px-4 py-3">
+        <div className="bg-green-600 dark:bg-green-700 text-white px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xl">✅</span>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
               <span className="font-semibold">Verified Transaction</span>
             </div>
-            <span className="text-sm bg-green-700 px-2 py-1 rounded">{decoded.type}</span>
+            <span className="text-sm bg-green-700 dark:bg-green-800 px-2 py-1 rounded">{decoded.type}</span>
           </div>
         </div>
 
         {/* Transfers Section (most important) */}
         {amounts.length > 0 && (
-          <div className="p-4 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-600 mb-3">TRANSFERS</h3>
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">TRANSFERS</h3>
             <div className="space-y-3">
               {formattedTransfers.senders.map((sender, i) => {
                 const receiver = formattedTransfers.receivers[i];
                 return (
-                  <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                     {/* From */}
                     <div className="flex-1">
-                      <div className="text-xs text-gray-500 mb-1">From</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">From</div>
                       <EntityLink type="account" id={sender.accountId} network={network} />
                     </div>
                     {/* Arrow + Amount */}
                     <div className="flex flex-col items-center">
-                      <div className="text-lg font-bold text-gray-800">
+                      <div className="text-lg font-bold text-gray-800 dark:text-gray-100 tabular-nums">
                         {TransactionDecoder.formatAmount(sender.amount.replace('-', ''), sender.type).replace('+', '').replace('-', '')}
                       </div>
-                      <div className="text-gray-400">→</div>
+                      <div className="text-gray-400 dark:text-gray-500">&rarr;</div>
                     </div>
                     {/* To */}
                     <div className="flex-1 text-right">
-                      <div className="text-xs text-gray-500 mb-1">To</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">To</div>
                       {receiver && <EntityLink type="account" id={receiver.accountId} network={network} />}
                     </div>
                   </div>
@@ -330,11 +366,11 @@ export function TransactionReview({
 
         {/* Token Association */}
         {decoded.details.tokenIds && decoded.details.tokenIds.length > 0 && (
-          <div className="p-4 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">TOKEN ASSOCIATION</h3>
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">TOKEN ASSOCIATION</h3>
             <div className="flex flex-wrap gap-2">
               {decoded.details.tokenIds.map((tokenId, index) => (
-                <div key={index} className="px-3 py-1 bg-blue-50 border border-blue-200 rounded">
+                <div key={index} className="px-3 py-1 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded">
                   <EntityLink type="token" id={tokenId} network={network} />
                 </div>
               ))}
@@ -344,23 +380,23 @@ export function TransactionReview({
 
         {/* Contract Execution */}
         {decoded.details.contractId && (
-          <div className="p-4 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">CONTRACT CALL</h3>
-            <div className="space-y-2 text-sm text-gray-800">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">CONTRACT CALL</h3>
+            <div className="space-y-2 text-sm text-gray-800 dark:text-gray-200">
               <div className="flex gap-2">
-                <span className="text-gray-500">Contract:</span>
+                <span className="text-gray-500 dark:text-gray-400">Contract:</span>
                 <EntityLink type="contract" id={decoded.details.contractId} network={network} />
               </div>
               {decoded.details.functionName && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500">Function:</span>
-                  <span className="font-mono font-semibold text-gray-800">{decoded.details.functionName}()</span>
+                  <span className="text-gray-500 dark:text-gray-400">Function:</span>
+                  <span className="font-mono font-semibold text-gray-800 dark:text-gray-100">{decoded.details.functionName}()</span>
                 </div>
               )}
               {decoded.details.gas && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500">Gas:</span>
-                  <span className="font-mono text-gray-800">{decoded.details.gas.toLocaleString()}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Gas:</span>
+                  <span className="font-mono text-gray-800 dark:text-gray-200 tabular-nums">{decoded.details.gas.toLocaleString()}</span>
                 </div>
               )}
             </div>
@@ -369,14 +405,16 @@ export function TransactionReview({
 
         {/* Metadata from Coordinator (collapsed by default if no issues) */}
         {metadata && (
-          <div className="p-4 border-b border-gray-200 bg-yellow-50">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-yellow-50 dark:bg-yellow-950/20">
             <details className={validation && !validation.valid ? 'open' : ''}>
-              <summary className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-yellow-800">
-                <span>⚠️</span>
-                <span>Coordinator-Provided Info (Unverified)</span>
+              <summary className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-yellow-800 dark:text-yellow-200">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <span>Coordinator&apos;s Description (Not Verified)</span>
               </summary>
-              <div className="mt-3 p-3 bg-white rounded border border-yellow-200 text-xs">
-                <pre className="text-gray-600 whitespace-pre-wrap overflow-x-auto">
+              <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border border-yellow-200 dark:border-yellow-800 text-xs">
+                <pre className="text-gray-600 dark:text-gray-300 whitespace-pre-wrap overflow-x-auto">
                   {JSON.stringify(metadata, null, 2)}
                 </pre>
               </div>
@@ -385,50 +423,50 @@ export function TransactionReview({
         )}
 
         {/* Technical Details (collapsed) */}
-        <div className="p-4 bg-gray-50">
+        <div className="p-4 bg-gray-50 dark:bg-gray-900/50">
           <details>
-            <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+            <summary className="cursor-pointer text-sm font-semibold text-gray-700 dark:text-gray-300">
               Transaction Details
             </summary>
-            <div className="mt-3 space-y-2 text-xs text-gray-800">
+            <div className="mt-3 space-y-2 text-xs text-gray-800 dark:text-gray-200">
               <div className="flex gap-2">
-                <span className="text-gray-500">Transaction ID:</span>
-                <span className="font-mono text-gray-800">{decoded.details.transactionId}</span>
+                <span className="text-gray-500 dark:text-gray-400">Transaction ID:</span>
+                <span className="font-mono text-gray-800 dark:text-gray-200">{decoded.details.transactionId}</span>
               </div>
               <div className="flex gap-2">
-                <span className="text-gray-500">Max Fee:</span>
-                <span className="font-mono text-gray-800">{decoded.details.maxTransactionFee}</span>
+                <span className="text-gray-500 dark:text-gray-400">Max Fee:</span>
+                <span className="font-mono text-gray-800 dark:text-gray-200">{decoded.details.maxTransactionFee}</span>
               </div>
               {decoded.details.validStartTimestamp && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500">Valid Start:</span>
-                  <span className="font-mono text-gray-800">{new Date(decoded.details.validStartTimestamp * 1000).toLocaleString()}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Valid Start:</span>
+                  <span className="font-mono text-gray-800 dark:text-gray-200">{new Date(decoded.details.validStartTimestamp * 1000).toLocaleString()}</span>
                 </div>
               )}
               {decoded.details.transactionValidDuration && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500">Valid Duration:</span>
-                  <span className="font-mono text-gray-800">{decoded.details.transactionValidDuration}s</span>
+                  <span className="text-gray-500 dark:text-gray-400">Valid Duration:</span>
+                  <span className="font-mono text-gray-800 dark:text-gray-200 tabular-nums">{decoded.details.transactionValidDuration}s</span>
                 </div>
               )}
               <div className="flex flex-col gap-1">
-                <span className="text-gray-500">Checksum (SHA256):</span>
-                <span className="font-mono text-[10px] break-all bg-gray-100 p-1 rounded text-gray-700">{decoded.checksum}</span>
+                <span className="text-gray-500 dark:text-gray-400">Checksum (SHA256):</span>
+                <span className="font-mono text-[10px] break-all bg-gray-100 dark:bg-gray-800 p-1 rounded text-gray-700 dark:text-gray-300">{decoded.checksum}</span>
               </div>
               {decoded.details.transactionMemo && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500">Memo:</span>
-                  <span className="text-gray-800">{decoded.details.transactionMemo}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Memo:</span>
+                  <span className="text-gray-800 dark:text-gray-200">{decoded.details.transactionMemo}</span>
                 </div>
               )}
 
               {/* Nested Raw Transaction Data */}
-              <details className="mt-4 pt-3 border-t border-gray-200">
-                <summary className="cursor-pointer text-sm font-semibold text-gray-600 hover:text-gray-800">
+              <details className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <summary className="cursor-pointer text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
                   Raw Transaction Data
                 </summary>
-                <div className="mt-3 p-3 bg-white rounded border border-gray-200 overflow-auto max-h-96">
-                  <pre className="text-[11px] font-mono text-gray-700 whitespace-pre-wrap">
+                <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 overflow-auto max-h-96">
+                  <pre className="text-[11px] font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
                     {JSON.stringify(decoded.details, (key, value) => {
                       // Handle Uint8Array and other binary data
                       if (value instanceof Uint8Array) {
@@ -448,10 +486,23 @@ export function TransactionReview({
         </div>
       </div>
 
-      {/* ACTIONS */}
-      <div className="flex items-center justify-between space-x-4 pt-4 border-t-2 border-gray-200">
-        {/* Reject */}
-        <div className="flex-1">
+      {/* ACTIONS — Approve is dominant, Reject is secondary */}
+      <div className="space-y-3 pt-4 border-t-2 border-gray-200 dark:border-gray-700">
+        {/* Approve — the hero action, full-width, visually dominant */}
+        <button
+          onClick={onApprove}
+          disabled={disabled || isExpired}
+          className={`w-full px-6 py-4 text-lg font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+            isExpired
+              ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 dark:text-gray-400 cursor-not-allowed'
+              : 'bg-green-600 text-white hover:bg-green-700 shadow-md hover:shadow-lg active:shadow-sm active:translate-y-px'
+          }`}
+        >
+          {isExpired ? 'Transaction Expired' : 'Approve & Sign'}
+        </button>
+
+        {/* Reject — secondary, subdued */}
+        <div>
           {showRejectInput ? (
             <div className="space-y-2">
               <input
@@ -459,13 +510,13 @@ export function TransactionReview({
                 placeholder="Enter optional rejection reason..."
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-red-500 text-gray-800 placeholder:text-gray-400"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded focus:ring-2 focus:ring-red-500 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500"
               />
               <div className="flex space-x-2">
                 <button
                   onClick={handleReject}
                   disabled={disabled}
-                  className="flex-1 px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Confirm Rejection
                 </button>
@@ -474,7 +525,7 @@ export function TransactionReview({
                     setShowRejectInput(false);
                     setRejectReason('');
                   }}
-                  className="px-4 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                 >
                   Cancel
                 </button>
@@ -484,32 +535,19 @@ export function TransactionReview({
             <button
               onClick={handleReject}
               disabled={disabled}
-              className="w-full px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              ❌ Reject Transaction
+              Reject Transaction
             </button>
           )}
         </div>
-
-        {/* Approve */}
-        <button
-          onClick={onApprove}
-          disabled={disabled || isExpired}
-          className={`flex-1 px-6 py-3 font-semibold rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
-            isExpired
-              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-              : 'bg-green-600 text-white hover:bg-green-700'
-          }`}
-        >
-          {isExpired ? '⏱️ Transaction Expired' : '✅ Approve & Sign'}
-        </button>
       </div>
 
       {/* Warning Footer */}
-      <div className="bg-gray-100 border border-gray-300 rounded p-4 text-center">
-        <p className="text-sm text-gray-700">
-          ⚠️ <span className="font-semibold">Important:</span> Signing this transaction will create a cryptographic
-          signature that authorizes these actions. Review all details carefully before approving.
+      <div className="bg-gray-100 dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700 rounded p-4 text-center">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          <span className="font-semibold">Important:</span> Signing authorizes this transaction to execute.
+          Review the details above before approving.
         </p>
       </div>
     </div>

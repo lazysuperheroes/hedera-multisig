@@ -10,6 +10,9 @@
  *   npm run multisig-client -- --url ws://localhost:3000 --session <id> --pin <pin>
  */
 
+// DEPRECATED: Use `hedera-multisig participant` (Commander.js CLI) instead of this standalone script.
+console.warn('\x1b[33m⚠️  Deprecation: Use `npx hedera-multisig participant` instead of `node cli/participant.js`\x1b[0m\n');
+
 const { PrivateKey } = require('@hashgraph/sdk');
 const { SigningClient } = require('../client');
 const EncryptedFileProvider = require('../keyManagement/EncryptedFileProvider');

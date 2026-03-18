@@ -4,239 +4,220 @@
  * Validates that the multi-sig library properly handles both key types
  */
 
+const { expect } = require('chai');
 const { PrivateKey } = require('@hashgraph/sdk');
 const KeyValidator = require('../keyManagement/KeyValidator');
 const TransactionFreezer = require('../core/TransactionFreezer');
 const SignatureCollector = require('../core/SignatureCollector');
 const SignatureVerifier = require('../core/SignatureVerifier');
 
-async function runTests() {
-  console.log('\n╔═══════════════════════════════════════════════════════╗');
-  console.log('║     MULTI-KEY TYPE SUPPORT TEST (Ed25519 & ECDSA)    ║');
-  console.log('╚═══════════════════════════════════════════════════════╝\n');
+describe('Multi-Key Type Support (Ed25519 & ECDSA)', function() {
+  this.timeout(30000);
 
-  let testsPassed = 0;
-  let testsFailed = 0;
+  // Generate test keys once for all tests
+  let ed25519Key1, ed25519Key2, ecdsaKey1, ecdsaKey2;
 
-  function assert(condition, testName) {
-    if (condition) {
-      console.log(`✅ ${testName}`);
-      testsPassed++;
-    } else {
-      console.error(`❌ ${testName}`);
-      testsFailed++;
-    }
-  }
+  before(function() {
+    ed25519Key1 = PrivateKey.generate();
+    ed25519Key2 = PrivateKey.generate();
+    ecdsaKey1 = PrivateKey.generateECDSA();
+    ecdsaKey2 = PrivateKey.generateECDSA();
+  });
 
-// Generate test keys of both types
-const ed25519Key1 = PrivateKey.generate();
-const ed25519Key2 = PrivateKey.generate();
-const ecdsaKey1 = PrivateKey.generateECDSA();
-const ecdsaKey2 = PrivateKey.generateECDSA();
+  // ============================================================================
+  // Key Type Detection Tests
+  // ============================================================================
 
-console.log('Test Setup:');
-console.log(`  Generated 2 Ed25519 keys`);
-console.log(`  Generated 2 ECDSA keys\n`);
+  describe('Key Type Detection', function() {
 
-// ============================================================================
-// Key Type Detection Tests
-// ============================================================================
+    it('validates Ed25519 private key', function() {
+      const validation = KeyValidator.validatePrivateKey(ed25519Key1.toString());
+      expect(validation.valid).to.equal(true);
+      expect(validation.type).to.equal('ED25519');
+      expect(validation.format).to.equal('DER');
+    });
 
-console.log('Key Type Detection Tests:\n');
+    it('validates ECDSA private key', function() {
+      const validation = KeyValidator.validatePrivateKey(ecdsaKey1.toString());
+      expect(validation.valid).to.equal(true);
+      expect(validation.type).to.equal('ECDSA_SECP256K1');
+      expect(validation.format).to.equal('DER');
+    });
 
-// Test Ed25519 private key
-const ed25519PrivValidation = KeyValidator.validatePrivateKey(ed25519Key1.toString());
-assert(ed25519PrivValidation.valid === true, 'Validates Ed25519 private key');
-assert(ed25519PrivValidation.type === 'ED25519', 'Detects Ed25519 private key type');
-assert(ed25519PrivValidation.format === 'DER', 'Detects DER format for Ed25519 private');
+    it('validates Ed25519 public key', function() {
+      const validation = KeyValidator.validatePublicKey(ed25519Key1.publicKey.toString());
+      expect(validation.valid).to.equal(true);
+      expect(validation.type).to.equal('ED25519');
+    });
 
-// Test ECDSA private key
-const ecdsaPrivValidation = KeyValidator.validatePrivateKey(ecdsaKey1.toString());
-assert(ecdsaPrivValidation.valid === true, 'Validates ECDSA private key');
-assert(ecdsaPrivValidation.type === 'ECDSA_SECP256K1', 'Detects ECDSA private key type');
-assert(ecdsaPrivValidation.format === 'DER', 'Detects DER format for ECDSA private');
+    it('validates ECDSA public key', function() {
+      const validation = KeyValidator.validatePublicKey(ecdsaKey1.publicKey.toString());
+      expect(validation.valid).to.equal(true);
+      expect(validation.type).to.equal('ECDSA_SECP256K1');
+    });
+  });
 
-// Test Ed25519 public key
-const ed25519PubValidation = KeyValidator.validatePublicKey(ed25519Key1.publicKey.toString());
-assert(ed25519PubValidation.valid === true, 'Validates Ed25519 public key');
-assert(ed25519PubValidation.type === 'ED25519', 'Detects Ed25519 public key type');
+  // ============================================================================
+  // Mixed Key Batch Validation
+  // ============================================================================
 
-// Test ECDSA public key
-const ecdsaPubValidation = KeyValidator.validatePublicKey(ecdsaKey1.publicKey.toString());
-assert(ecdsaPubValidation.valid === true, 'Validates ECDSA public key');
-assert(ecdsaPubValidation.type === 'ECDSA_SECP256K1', 'Detects ECDSA public key type');
+  describe('Mixed Key Type Batch Validation', function() {
 
-console.log('');
+    it('validates a batch with mixed key types', function() {
+      const mixedKeys = [
+        ed25519Key1.toString(),
+        ecdsaKey1.toString(),
+        ed25519Key2.toString(),
+        ecdsaKey2.toString()
+      ];
 
-// ============================================================================
-// Mixed Key Batch Validation
-// ============================================================================
+      const batchValidation = KeyValidator.validatePrivateKeys(mixedKeys);
+      expect(batchValidation.allValid).to.equal(true);
+      expect(batchValidation.validCount).to.equal(4);
+    });
 
-console.log('Mixed Key Type Batch Validation:\n');
+    it('correctly identifies key types in batch', function() {
+      const mixedKeys = [
+        ed25519Key1.toString(),
+        ecdsaKey1.toString(),
+        ed25519Key2.toString(),
+        ecdsaKey2.toString()
+      ];
 
-const mixedKeys = [
-  ed25519Key1.toString(),
-  ecdsaKey1.toString(),
-  ed25519Key2.toString(),
-  ecdsaKey2.toString()
-];
+      const batchValidation = KeyValidator.validatePrivateKeys(mixedKeys);
+      expect(batchValidation.results[0].type).to.equal('ED25519');
+      expect(batchValidation.results[1].type).to.equal('ECDSA_SECP256K1');
+      expect(batchValidation.results[2].type).to.equal('ED25519');
+      expect(batchValidation.results[3].type).to.equal('ECDSA_SECP256K1');
+    });
+  });
 
-const batchValidation = KeyValidator.validatePrivateKeys(mixedKeys);
-assert(batchValidation.allValid === true, 'Validates batch with mixed key types');
-assert(batchValidation.validCount === 4, 'All 4 keys in mixed batch are valid');
-assert(batchValidation.results[0].type === 'ED25519', 'Batch correctly identifies Ed25519 #1');
-assert(batchValidation.results[1].type === 'ECDSA_SECP256K1', 'Batch correctly identifies ECDSA #1');
-assert(batchValidation.results[2].type === 'ED25519', 'Batch correctly identifies Ed25519 #2');
-assert(batchValidation.results[3].type === 'ECDSA_SECP256K1', 'Batch correctly identifies ECDSA #2');
+  // ============================================================================
+  // Signature Generation and Verification (Mixed Types)
+  // ============================================================================
 
-console.log('');
+  describe('Signature Tests with Mixed Key Types', function() {
 
-// ============================================================================
-// Signature Generation and Verification (Mixed Types)
-// ============================================================================
+    let testData, mockFrozenTx;
 
-console.log('Signature Tests with Mixed Key Types:\n');
+    before(function() {
+      testData = Buffer.from('Multi-sig test transaction');
+      mockFrozenTx = {
+        bytes: testData,
+        base64: testData.toString('base64'),
+        hash: 'mock-hash',
+        frozenAt: new Date(),
+        expiresAt: new Date(Date.now() + 110000)
+      };
+    });
 
-const testData = Buffer.from('Multi-sig test transaction');
+    it('produces 64-byte signatures for Ed25519', function() {
+      const sig = ed25519Key1.sign(testData);
+      expect(sig.length).to.equal(64);
+    });
 
-// Create mock frozen transaction
-const mockFrozenTx = {
-  bytes: testData,
-  base64: testData.toString('base64'),
-  hash: 'mock-hash',
-  frozenAt: new Date(),
-  expiresAt: new Date(Date.now() + 110000)
-};
+    it('produces 64-byte signatures for ECDSA', function() {
+      const sig = ecdsaKey1.sign(testData);
+      expect(sig.length).to.equal(64);
+    });
 
-// Generate signatures with both key types
-const ed25519Sig1 = ed25519Key1.sign(testData);
-const ed25519Sig2 = ed25519Key2.sign(testData);
-const ecdsaSig1 = ecdsaKey1.sign(testData);
-const ecdsaSig2 = ecdsaKey2.sign(testData);
+    it('validates Ed25519 signature tuple', function() {
+      const sig = ed25519Key1.sign(testData);
+      const tuple = `${ed25519Key1.publicKey.toString()}:${Buffer.from(sig).toString('base64')}`;
+      const validation = KeyValidator.validateSignatureTuple(tuple);
+      expect(validation.valid).to.equal(true);
+    });
 
-assert(ed25519Sig1.length === 64, 'Ed25519 signature is 64 bytes');
-assert(ecdsaSig1.length === 64, 'ECDSA signature is 64 bytes');
+    it('validates ECDSA signature tuple', function() {
+      const sig = ecdsaKey1.sign(testData);
+      const tuple = `${ecdsaKey1.publicKey.toString()}:${Buffer.from(sig).toString('base64')}`;
+      const validation = KeyValidator.validateSignatureTuple(tuple);
+      expect(validation.valid).to.equal(true);
+    });
 
-// Create signature tuples
-const signatures = [
-  {
-    publicKey: ed25519Key1.publicKey.toString(),
-    signature: Buffer.from(ed25519Sig1).toString('base64')
-  },
-  {
-    publicKey: ecdsaKey1.publicKey.toString(),
-    signature: Buffer.from(ecdsaSig1).toString('base64')
-  }
-];
+    it('generates signatures for all keys using SignatureCollector', function() {
+      const allKeys = [ed25519Key1, ecdsaKey1, ed25519Key2];
+      const generatedSignatures = SignatureCollector.generateSignatures(mockFrozenTx, allKeys);
 
-// Validate signature tuples
-const sig1Validation = KeyValidator.validateSignatureTuple(
-  `${signatures[0].publicKey}:${signatures[0].signature}`
-);
-assert(sig1Validation.valid === true, 'Ed25519 signature tuple validates');
+      expect(generatedSignatures).to.have.length(3);
+      expect(generatedSignatures[0].publicKey).to.equal(ed25519Key1.publicKey.toString());
+      expect(generatedSignatures[1].publicKey).to.equal(ecdsaKey1.publicKey.toString());
+      expect(generatedSignatures[2].publicKey).to.equal(ed25519Key2.publicKey.toString());
+    });
+  });
 
-const sig2Validation = KeyValidator.validateSignatureTuple(
-  `${signatures[1].publicKey}:${signatures[1].signature}`
-);
-assert(sig2Validation.valid === true, 'ECDSA signature tuple validates');
+  // ============================================================================
+  // Signature Verification (Mixed Types)
+  // ============================================================================
 
-console.log('');
+  describe('Signature Verification with Mixed Types', function() {
 
-// ============================================================================
-// Mixed Key Type Multi-Sig Workflow
-// ============================================================================
+    let testData, mockFrozenTx, generatedSignatures;
 
-console.log('Mixed Key Type Multi-Sig Workflow:\n');
+    before(function() {
+      testData = Buffer.from('Multi-sig test transaction');
+      mockFrozenTx = {
+        bytes: testData,
+        base64: testData.toString('base64'),
+        hash: 'mock-hash',
+        frozenAt: new Date(),
+        expiresAt: new Date(Date.now() + 110000)
+      };
 
-// Generate signatures using SignatureCollector (simulated)
-const allKeys = [ed25519Key1, ecdsaKey1, ed25519Key2];
-const generatedSignatures = SignatureCollector.generateSignatures(mockFrozenTx, allKeys);
+      const allKeys = [ed25519Key1, ecdsaKey1, ed25519Key2];
+      generatedSignatures = SignatureCollector.generateSignatures(mockFrozenTx, allKeys);
+    });
 
-assert(generatedSignatures.length === 3, 'Generates signatures for all 3 keys');
-assert(generatedSignatures[0].publicKey === ed25519Key1.publicKey.toString(), 'First signature is Ed25519');
-assert(generatedSignatures[1].publicKey === ecdsaKey1.publicKey.toString(), 'Second signature is ECDSA');
-assert(generatedSignatures[2].publicKey === ed25519Key2.publicKey.toString(), 'Third signature is Ed25519');
+    it('verifies all signatures (mixed types)', async function() {
+      const verification = await SignatureVerifier.verify(mockFrozenTx, generatedSignatures, {
+        threshold: 3
+      });
 
-console.log('');
+      expect(verification.valid).to.equal(true);
+      expect(verification.validCount).to.equal(3);
+    });
 
-// ============================================================================
-// Signature Verification (Mixed Types)
-// ============================================================================
+    it('verifies individual signature types correctly', async function() {
+      const verification = await SignatureVerifier.verify(mockFrozenTx, generatedSignatures, {
+        threshold: 3
+      });
 
-console.log('Signature Verification with Mixed Types:\n');
+      expect(verification.details[0].valid).to.equal(true); // Ed25519 #1
+      expect(verification.details[1].valid).to.equal(true); // ECDSA
+      expect(verification.details[2].valid).to.equal(true); // Ed25519 #2
+    });
 
-// Verify all signatures
-const verification = await SignatureVerifier.verify(mockFrozenTx, generatedSignatures, {
-  threshold: 3
-});
+    it('supports 2-of-3 multi-sig with mixed key types', async function() {
+      const partialSignatures = generatedSignatures.slice(0, 2);
+      const verification = await SignatureVerifier.verify(mockFrozenTx, partialSignatures, {
+        threshold: 2
+      });
 
-assert(verification.valid === true, 'Verifies all signatures (mixed types)');
-assert(verification.validCount === 3, 'All 3 signatures are cryptographically valid');
-assert(verification.details[0].valid === true, 'Ed25519 signature #1 verifies correctly');
-assert(verification.details[1].valid === true, 'ECDSA signature verifies correctly');
-assert(verification.details[2].valid === true, 'Ed25519 signature #2 verifies correctly');
+      expect(verification.valid).to.equal(true);
+      expect(verification.validCount).to.equal(2);
+    });
+  });
 
-// Test threshold with mixed types (2-of-3)
-const partialSignatures = generatedSignatures.slice(0, 2);
-const verification2 = await SignatureVerifier.verify(mockFrozenTx, partialSignatures, {
-  threshold: 2
-});
+  // ============================================================================
+  // DER Prefix Detection
+  // ============================================================================
 
-assert(verification2.valid === true, '2-of-3 multi-sig works with mixed key types');
-assert(verification2.validCount === 2, '2 signatures verified (1 Ed25519 + 1 ECDSA)');
+  describe('DER Prefix Detection', function() {
 
-console.log('');
+    it('Ed25519 private key DER starts with 302e', function() {
+      expect(ed25519Key1.toString().startsWith('302e')).to.equal(true);
+    });
 
-// ============================================================================
-// DER Prefix Detection
-// ============================================================================
+    it('ECDSA private key DER starts with 3030', function() {
+      expect(ecdsaKey1.toString().startsWith('3030')).to.equal(true);
+    });
 
-console.log('DER Prefix Detection:\n');
+    it('Ed25519 public key DER starts with 302a', function() {
+      expect(ed25519Key1.publicKey.toString().startsWith('302a')).to.equal(true);
+    });
 
-const ed25519Der = ed25519Key1.toString();
-const ecdsaDer = ecdsaKey1.toString();
-
-assert(ed25519Der.startsWith('302e'), 'Ed25519 DER starts with 302e');
-assert(ecdsaDer.startsWith('3030'), 'ECDSA DER starts with 3030');
-
-const ed25519PubDer = ed25519Key1.publicKey.toString();
-const ecdsaPubDer = ecdsaKey1.publicKey.toString();
-
-assert(ed25519PubDer.startsWith('302a'), 'Ed25519 public key DER starts with 302a');
-assert(ecdsaPubDer.startsWith('302d'), 'ECDSA public key DER starts with 302d');
-
-console.log('');
-
-// ============================================================================
-// Summary
-// ============================================================================
-
-console.log('═══════════════════════════════════════════════════════\n');
-console.log('TEST SUMMARY:\n');
-console.log(`  ✅ Passed: ${testsPassed}`);
-console.log(`  ❌ Failed: ${testsFailed}`);
-console.log(`  Total: ${testsPassed + testsFailed}\n`);
-
-  if (testsFailed === 0) {
-    console.log('╔═══════════════════════════════════════════════════════╗');
-    console.log('║   ✅ FULL Ed25519 & ECDSA SUPPORT CONFIRMED!         ║');
-    console.log('╚═══════════════════════════════════════════════════════╝\n');
-    console.log('The multi-sig library fully supports both key types:\n');
-    console.log('  ✅ Ed25519 (Hedera native)');
-    console.log('  ✅ ECDSA secp256k1 (Ethereum compatible)\n');
-    console.log('All signatures verify correctly regardless of key type.\n');
-    process.exit(0);
-  } else {
-    console.log('╔═══════════════════════════════════════════════════════╗');
-    console.log('║              ❌ SOME TESTS FAILED                     ║');
-    console.log('╚═══════════════════════════════════════════════════════╝\n');
-    process.exit(1);
-  }
-}
-
-// Run the tests
-runTests().catch((error) => {
-  console.error('\n❌ Test execution failed:', error.message);
-  console.error(error.stack);
-  process.exit(1);
+    it('ECDSA public key DER starts with 302d', function() {
+      expect(ecdsaKey1.publicKey.toString().startsWith('302d')).to.equal(true);
+    });
+  });
 });
