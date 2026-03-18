@@ -55,9 +55,13 @@ class SessionStore {
       participants: new Map(), // participantId -> participant data
       signatures: new Map(), // publicKey -> signature data
 
+      // Session mode (realtime or scheduled)
+      mode: sessionData.mode || 'realtime',
+
       // Coordinator info
       coordinatorClient: null, // WebSocket connection
       coordinatorToken: sessionData.coordinatorToken || null, // Separate auth for coordinator role
+      agentApiKey: sessionData.agentApiKey || null, // API key for agent authentication
 
       // Reconnection tokens (participantId -> token)
       reconnectionTokens: new Map(),

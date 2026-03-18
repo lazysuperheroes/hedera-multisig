@@ -505,6 +505,7 @@ class SigningClient {
       this.ws = null;
     }
     this.status = 'disconnected';
+    this.privateKey = null;
     this.connectionParams = null;
   }
 }

@@ -188,6 +188,7 @@ Examples:
           sessionId: session.sessionId,
           pin: session.pin,
           coordinatorToken: session.coordinatorToken,
+          agentApiKey: session.agentApiKey,
           serverUrl: shareUrl,
           localUrl: serverInfo.url,
           publicUrl: serverInfo.publicUrl || null,
@@ -214,6 +215,8 @@ Examples:
           console.log(chalk.white('PIN: ') + chalk.bold.yellow(session.pin));
           console.log(chalk.white('Coordinator Token: ') + chalk.bold.red(session.coordinatorToken));
           console.log(chalk.gray('  (Keep this secret — required to authenticate as coordinator)'));
+          console.log(chalk.white('Agent API Key: ') + chalk.bold.red(session.agentApiKey));
+          console.log(chalk.gray('  (Share with agents — alternative to PIN for programmatic access)'));
 
           if (serverInfo.publicUrl) {
             console.log(chalk.white('Public URL: ') + chalk.yellow(serverInfo.publicUrl));

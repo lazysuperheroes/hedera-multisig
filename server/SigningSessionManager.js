@@ -51,6 +51,15 @@ class SigningSessionManager {
       // Generate coordinator token (separate from participant PIN)
       const coordinatorToken = this._generateCoordinatorToken();
 
+      // Generate agent API key for programmatic access
+      const agentApiKey = crypto.randomBytes(16).toString('hex');
+
+      // Determine session timeout based on mode
+      // Scheduled sessions get a much longer default timeout (24 hours)
+      const scheduledDefaultTimeout = 86400000; // 24 hours
+      const effectiveTimeout = config.timeout ||
+        (config.mode === 'scheduled' ? scheduledDefaultTimeout : this.options.defaultTimeout);
+
       // Pre-session mode (no transaction yet)
       if (!transaction) {
         // Must provide eligiblePublicKeys and threshold for pre-session
@@ -65,12 +74,14 @@ class SigningSessionManager {
         const session = await this.store.createSession({
           pin,
           coordinatorToken,
+          agentApiKey,
           frozenTransaction: null,
           txDetails: null,
           threshold: config.threshold,
           eligiblePublicKeys: config.eligiblePublicKeys,
           expectedParticipants: config.expectedParticipants || config.eligiblePublicKeys.length,
-          timeout: config.timeout || this.options.defaultTimeout
+          timeout: effectiveTimeout,
+          mode: config.mode || 'realtime'
         });
 
         // Initialize event handlers for this session
@@ -97,6 +108,7 @@ class SigningSessionManager {
           sessionId: session.sessionId,
           pin,
           coordinatorToken,
+          agentApiKey,
           threshold: config.threshold,
           eligiblePublicKeys: config.eligiblePublicKeys,
           expectedParticipants: session.stats.participantsExpected,
@@ -142,6 +154,7 @@ class SigningSessionManager {
       const session = await this.store.createSession({
         pin,
         coordinatorToken,
+        agentApiKey,
         frozenTransaction: {
           bytes: frozenTxBytes,
           base64: frozenTxBase64,
@@ -151,7 +164,8 @@ class SigningSessionManager {
         threshold,
         eligiblePublicKeys,
         expectedParticipants: config.expectedParticipants || eligiblePublicKeys.length,
-        timeout: config.timeout || this.options.defaultTimeout
+        timeout: effectiveTimeout,
+        mode: config.mode || 'realtime'
       });
 
       // Initialize event handlers for this session
@@ -170,6 +184,7 @@ class SigningSessionManager {
         sessionId: session.sessionId,
         pin,
         coordinatorToken,
+        agentApiKey,
         threshold,
         eligiblePublicKeys,
         txDetails,
@@ -246,6 +261,26 @@ class SigningSessionManager {
     }
 
     return this.store._timingSafeCompare(coordinatorToken, session.coordinatorToken);
+  }
+
+  /**
+   * Authenticate as agent using API key (alternative to PIN for programmatic access)
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string} apiKey - Agent API key
+   * @returns {boolean} True if authenticated as agent
+   */
+  async authenticateAgent(sessionId, apiKey) {
+    if (!apiKey) {
+      return false;
+    }
+
+    const session = await this.store.getSession(sessionId);
+    if (!session || !session.agentApiKey) {
+      return false;
+    }
+
+    return this.store._timingSafeCompare(apiKey, session.agentApiKey);
   }
 
   /**
@@ -384,6 +419,15 @@ class SigningSessionManager {
       // unverifiable signatures in pre-session mode)
       if (!session.frozenTransaction) {
         throw new Error('No transaction to sign - transaction must be injected before signatures can be submitted');
+      }
+
+      // Check transaction validity window (120-second Hedera constraint)
+      // Scheduled sessions skip this check since they operate asynchronously
+      if (session.mode !== 'scheduled' && session.transactionReceivedAt) {
+        const elapsed = Date.now() - session.transactionReceivedAt;
+        if (elapsed > 120000) {
+          throw new Error('Transaction validity window (120 seconds) has expired. Please inject a new transaction.');
+        }
       }
 
       // Check if public key is eligible

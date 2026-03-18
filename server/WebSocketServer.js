@@ -519,7 +519,7 @@ class MultiSigWebSocketServer {
    * @private
    */
   async _handleAuth(ws, req, message, callback) {
-    const { sessionId, pin, role, label, publicKey, coordinatorToken, reconnectionToken } = message.payload;
+    const { sessionId, pin, role, label, publicKey, coordinatorToken, reconnectionToken, apiKey } = message.payload;
     const clientIp = req.socket.remoteAddress;
 
     // Check rate limit
@@ -550,8 +550,8 @@ class MultiSigWebSocketServer {
       }
     }
 
-    // Validate required fields (PIN or reconnection token required)
-    if (!sessionId || (!pin && !reconnectionToken)) {
+    // Validate required fields (PIN, reconnection token, or agent API key required)
+    if (!sessionId || (!pin && !reconnectionToken && !apiKey)) {
       this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
@@ -573,6 +573,9 @@ class MultiSigWebSocketServer {
     } else if (isCoordinator) {
       // Coordinator must provide coordinatorToken alongside PIN
       authenticated = await this.sessionManager.authenticateCoordinator(sessionId, pin, coordinatorToken);
+    } else if (isAgent && apiKey) {
+      // Agent authentication via API key (alternative to PIN)
+      authenticated = await this.sessionManager.authenticateAgent(sessionId, apiKey);
     } else {
       // Standard participant auth with PIN
       authenticated = await this.sessionManager.authenticate(sessionId, pin);
