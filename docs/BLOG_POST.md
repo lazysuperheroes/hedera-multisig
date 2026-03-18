@@ -157,10 +157,10 @@ If these don't match, the system warns you. Never sign based solely on what the 
 
 ### 4. Implement Key Rotation
 
-Ideally keys should be *rotated annually*, but at a minimum always:
-- When any team member leaves
-- After any security incident
-- When upgrading key storage
+Rotate keys when circumstances demand it — not on a calendar. Unlike passwords or API keys, threshold keys don't weaken with age, and rotation itself carries risk (a mistake can lock the account). Rotate when:
+- A team member with key access leaves the organization
+- Any security incident or suspected key compromise
+- Upgrading key storage (e.g., migrating to hardware wallets)
 
 ```javascript
 // Rotate keys without downtime
