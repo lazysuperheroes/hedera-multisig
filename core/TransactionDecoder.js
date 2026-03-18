@@ -1,3 +1,10 @@
+// =============================================================================
+// DEPRECATED: This module is deprecated. Use shared/transaction-decoder instead.
+// This file is retained for backward compatibility only and will be removed
+// in a future major version. All new code should import from
+// require('../shared/transaction-decoder') or require('./shared/transaction-decoder').
+// =============================================================================
+
 const { AccountId, ContractId } = require('@hashgraph/sdk');
 const {
   TransactionDecoder: SharedDecoder,
@@ -11,11 +18,15 @@ const {
  * Critical for user trust - users should never blindly sign transactions.
  *
  * This module provides terminal display functionality on top of the shared decoder.
+ *
+ * @deprecated Use shared/transaction-decoder instead. This module is retained for
+ * backward compatibility and will be removed in a future major version.
  */
 class TransactionDecoder {
   /**
    * Decode a Hedera transaction into human-readable details
    *
+   * @deprecated Use shared/transaction-decoder's TransactionDecoder.decode() instead.
    * @param {Transaction} transaction - Hedera SDK transaction
    * @param {Interface} contractInterface - ethers.js Interface for ABI decoding (optional)
    * @returns {TransactionDetails} Decoded transaction details

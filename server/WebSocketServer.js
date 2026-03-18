@@ -561,6 +561,7 @@ class MultiSigWebSocketServer {
     }
 
     const isCoordinator = role === 'coordinator';
+    const isAgent = role === 'agent';
     let authenticated = false;
     let reconnectedParticipantId = null;
 
@@ -590,7 +591,7 @@ class MultiSigWebSocketServer {
     }
 
     // Enhanced validation for participants: Check public key eligibility if provided
-    if (!isCoordinator && publicKey) {
+    if (!isCoordinator && !isAgent && publicKey) {
       const sessionInfo = await this.sessionManager.getSessionInfo(sessionId);
 
       if (sessionInfo && sessionInfo.eligiblePublicKeys) {
@@ -644,7 +645,7 @@ class MultiSigWebSocketServer {
       }
 
     } else {
-      // Register participant (or reconnect existing)
+      // Register participant or agent (or reconnect existing)
       let participantId;
       if (reconnectedParticipantId) {
         // Reconnecting participant - reuse existing ID
@@ -653,7 +654,8 @@ class MultiSigWebSocketServer {
       } else {
         const result = await this.sessionManager.addParticipant(sessionId, {
           label,
-          websocket: ws
+          websocket: ws,
+          isAgent
         });
         participantId = result.participantId;
       }
@@ -666,11 +668,13 @@ class MultiSigWebSocketServer {
 
       const sessionInfo = await this.sessionManager.getSessionInfo(sessionId);
 
+      const assignedRole = isAgent ? 'agent' : 'participant';
+
       // Send session info to participant (includes reconnectionToken, never includes PIN)
       ws.send(JSON.stringify({
         type: 'AUTH_SUCCESS',
         payload: {
-          role: 'participant',
+          role: assignedRole,
           participantId,
           reconnectionToken: newReconnectionToken,
           sessionInfo: {
@@ -686,9 +690,9 @@ class MultiSigWebSocketServer {
         }
       }));
 
-      this.log.info('Participant authenticated', { sessionId, participantId, label: label || 'anonymous', clientIp });
+      this.log.info(`${isAgent ? 'Agent' : 'Participant'} authenticated`, { sessionId, participantId, label: label || 'anonymous', role: assignedRole, clientIp });
       if (this.options.verbose) {
-        console.log(chalk.green(`✅ Participant ${participantId} authenticated (${label || 'anonymous'})`));
+        console.log(chalk.green(`✅ ${isAgent ? 'Agent' : 'Participant'} ${participantId} authenticated (${label || 'anonymous'})`));
       }
 
       // Notify coordinator and other participants
@@ -698,6 +702,7 @@ class MultiSigWebSocketServer {
         payload: {
           participantId,
           label,
+          isAgent,
           stats: connectStats
         }
       }, participantId);

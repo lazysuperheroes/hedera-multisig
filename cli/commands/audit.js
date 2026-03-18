@@ -12,6 +12,7 @@ module.exports = function(program) {
     .command('audit')
     .description('Run security audit on codebase')
     .option('--verbose', 'Show detailed code snippets for issues')
+    .option('--json', 'Output results as JSON')
     .addHelpText('after', `
 This tool scans the multi-sig library for potential security issues:
   - Private key logging
@@ -22,13 +23,18 @@ This tool scans the multi-sig library for potential security issues:
 Examples:
   $ hedera-multisig audit
   $ hedera-multisig audit --verbose
+  $ hedera-multisig audit --json
     `)
     .action((options) => {
-      const { ExitCodes } = require('../utils/cliUtils');
+      const { ExitCodes, JsonOutput } = require('../utils/cliUtils');
 
-      console.log('\n╔═══════════════════════════════════════════════════════╗');
-      console.log('║          MULTI-SIG SECURITY AUDIT                     ║');
-      console.log('╚═══════════════════════════════════════════════════════╝\n');
+      const jsonOutput = new JsonOutput(!!options.json);
+
+      if (!jsonOutput.enabled) {
+        console.log('\n╔═══════════════════════════════════════════════════════╗');
+        console.log('║          MULTI-SIG SECURITY AUDIT                     ║');
+        console.log('╚═══════════════════════════════════════════════════════╝\n');
+      }
 
       // Security rules
       const SECURITY_RULES = [
@@ -282,33 +288,66 @@ Examples:
       // Main execution
       const libPath = path.join(__dirname, '../..');
 
-      console.log(`Scanning: ${libPath}\n`);
+      if (!jsonOutput.enabled) {
+        console.log(`Scanning: ${libPath}\n`);
+      }
 
       // Run automated scans
       scanDirectory(libPath, libPath);
 
-      // Display results
-      const allClear = displayResults();
+      if (jsonOutput.enabled) {
+        // JSON output mode
+        const allClear = results.issuesFound === 0;
 
-      // Run manual checks
-      runManualChecks();
+        jsonOutput.set('scanPath', libPath);
+        jsonOutput.set('filesScanned', results.filesScanned);
+        jsonOutput.set('issuesFound', results.issuesFound);
+        jsonOutput.set('severity', {
+          critical: results.critical,
+          high: results.high,
+          medium: results.medium,
+          low: results.low
+        });
+        jsonOutput.set('issues', results.issues);
+        jsonOutput.set('allClear', allClear);
 
-      // Summary
-      console.log('═══════════════════════════════════════════════════════\n');
+        if (!allClear) {
+          if (results.critical > 0) {
+            jsonOutput.addWarning('CRITICAL issues found - must be fixed before production');
+          } else if (results.high > 0) {
+            jsonOutput.addWarning('HIGH severity issues found - should be fixed');
+          } else {
+            jsonOutput.addWarning('Medium/low issues found - review recommended');
+          }
+        }
 
-      if (allClear) {
-        console.log('✅ Security audit complete - no issues found\n');
-        process.exit(ExitCodes.SUCCESS);
+        jsonOutput.print(allClear || results.critical === 0 && results.high === 0);
+        const exitCode = (results.critical > 0 || results.high > 0) ? ExitCodes.VALIDATION_ERROR : ExitCodes.SUCCESS;
+        process.exit(exitCode);
       } else {
-        if (results.critical > 0) {
-          console.log('🔴 CRITICAL issues found - must be fixed before production\n');
-          process.exit(ExitCodes.VALIDATION_ERROR);
-        } else if (results.high > 0) {
-          console.log('🟠 HIGH severity issues found - should be fixed\n');
-          process.exit(ExitCodes.VALIDATION_ERROR);
-        } else {
-          console.log('🟡 Medium/low issues found - review recommended\n');
+        // Display results
+        const allClear = displayResults();
+
+        // Run manual checks
+        runManualChecks();
+
+        // Summary
+        console.log('═══════════════════════════════════════════════════════\n');
+
+        if (allClear) {
+          console.log('✅ Security audit complete - no issues found\n');
           process.exit(ExitCodes.SUCCESS);
+        } else {
+          if (results.critical > 0) {
+            console.log('🔴 CRITICAL issues found - must be fixed before production\n');
+            process.exit(ExitCodes.VALIDATION_ERROR);
+          } else if (results.high > 0) {
+            console.log('🟠 HIGH severity issues found - should be fixed\n');
+            process.exit(ExitCodes.VALIDATION_ERROR);
+          } else {
+            console.log('🟡 Medium/low issues found - review recommended\n');
+            process.exit(ExitCodes.SUCCESS);
+          }
         }
       }
     });

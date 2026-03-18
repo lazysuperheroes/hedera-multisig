@@ -68,7 +68,8 @@ class SessionStore {
         participantsReady: 0,
         participantsExpected: sessionData.expectedParticipants || sessionData.eligiblePublicKeys?.length || 0,
         signaturesCollected: 0,
-        signaturesRequired: sessionData.threshold
+        signaturesRequired: sessionData.threshold,
+        agentsConnected: 0
       }
     };
 
@@ -181,6 +182,8 @@ class SessionStore {
 
     const participantId = this._generateParticipantId();
 
+    const isAgent = participant.isAgent || false;
+
     const participantData = {
       participantId,
       connectedAt: Date.now(),
@@ -188,11 +191,17 @@ class SessionStore {
       keysLoaded: false, // Track if keys are loaded in memory
       publicKey: null, // Will be known after signature
       label: participant.label || null,
-      websocket: participant.websocket || null
+      websocket: participant.websocket || null,
+      isAgent // Track agent participants separately from regular participants
     };
 
     session.participants.set(participantId, participantData);
     session.stats.participantsConnected++;
+
+    // Track agent connections separately in stats
+    if (isAgent) {
+      session.stats.agentsConnected = (session.stats.agentsConnected || 0) + 1;
+    }
 
     return participantId;
   }

@@ -17,6 +17,12 @@ module.exports = function(program) {
     .command('create')
     .description('Create an encrypted key file')
     .option('-o, --output <path>', 'Output file path', 'multisig-keys.encrypted')
+    .option('-k, --key <hex>', 'Private key in hex (repeatable or comma-separated)', (val, prev) => {
+      const keys = val.includes(',') ? val.split(',').map(k => k.trim()) : [val.trim()];
+      return prev ? prev.concat(keys) : keys;
+    })
+    .option('-p, --passphrase <value>', 'Passphrase for encryption (non-interactive mode)')
+    .option('--json', 'Output results as JSON')
     .addHelpText('after', `
 This tool creates an AES-256-GCM encrypted file to securely
 store multi-sig private keys with PBKDF2 key derivation.
@@ -24,12 +30,113 @@ store multi-sig private keys with PBKDF2 key derivation.
 Examples:
   $ hedera-multisig keys create
   $ hedera-multisig keys create --output my-keys.encrypted
+
+Non-interactive mode (all three flags required):
+  $ hedera-multisig keys create --key <hex1> --key <hex2> --passphrase "my secret" --output keys.encrypted
+  $ hedera-multisig keys create --key <hex1>,<hex2> --passphrase "my secret" -o keys.encrypted --json
     `)
     .action(async (options) => {
-      const readlineSync = require('readline-sync');
       const EncryptedFileProvider = require('../../keyManagement/EncryptedFileProvider');
       const KeyValidator = require('../../keyManagement/KeyValidator');
-      const { ExitCodes } = require('../utils/cliUtils');
+      const { ExitCodes, JsonOutput } = require('../utils/cliUtils');
+
+      const jsonOutput = new JsonOutput(!!options.json);
+
+      // Determine if non-interactive mode
+      const hasKey = options.key && options.key.length > 0;
+      const hasPassphrase = !!options.passphrase;
+      const nonInteractive = hasKey || hasPassphrase;
+
+      if (nonInteractive) {
+        // Non-interactive mode: all three flags required
+        if (!hasKey || !hasPassphrase) {
+          const missing = [];
+          if (!hasKey) missing.push('--key');
+          if (!hasPassphrase) missing.push('--passphrase');
+          const errorMsg = `Non-interactive mode requires --key, --passphrase, and --output. Missing: ${missing.join(', ')}`;
+          if (jsonOutput.enabled) {
+            jsonOutput.exitWithError(errorMsg, ExitCodes.VALIDATION_ERROR);
+          } else {
+            console.error(`\n❌ Error: ${errorMsg}\n`);
+            process.exit(ExitCodes.VALIDATION_ERROR);
+          }
+          return;
+        }
+
+        try {
+          const outputPath = path.resolve(options.output);
+          const keys = options.key;
+
+          // Validate passphrase length
+          if (options.passphrase.length < 12) {
+            const errorMsg = 'Passphrase must be at least 12 characters';
+            if (jsonOutput.enabled) {
+              jsonOutput.exitWithError(errorMsg, ExitCodes.VALIDATION_ERROR);
+            } else {
+              console.error(`\n❌ Error: ${errorMsg}\n`);
+              process.exit(ExitCodes.VALIDATION_ERROR);
+            }
+            return;
+          }
+
+          // Validate all keys
+          const invalidKeys = [];
+          keys.forEach((k, i) => {
+            const validation = KeyValidator.validatePrivateKey(k);
+            if (!validation.valid) {
+              invalidKeys.push({ index: i + 1, error: validation.errors[0] });
+            }
+          });
+
+          if (invalidKeys.length > 0) {
+            const details = invalidKeys.map(ik => `Key #${ik.index}: ${ik.error}`).join('; ');
+            const errorMsg = `Invalid key(s): ${details}`;
+            if (jsonOutput.enabled) {
+              jsonOutput.exitWithError(errorMsg, ExitCodes.VALIDATION_ERROR);
+            } else {
+              console.error(`\n❌ Error: ${errorMsg}\n`);
+              process.exit(ExitCodes.VALIDATION_ERROR);
+            }
+            return;
+          }
+
+          // Create encrypted file
+          const encryptedFile = EncryptedFileProvider.createEncryptedFile(
+            keys,
+            options.passphrase,
+            outputPath,
+            { description: 'Multi-sig keys' }
+          );
+
+          if (jsonOutput.enabled) {
+            jsonOutput.set('file', outputPath);
+            jsonOutput.set('keysEncrypted', keys.length);
+            jsonOutput.set('algorithm', encryptedFile.algorithm);
+            jsonOutput.set('kdf', encryptedFile.kdf);
+            jsonOutput.set('kdfIterations', encryptedFile.kdfParams.iterations);
+            jsonOutput.set('created', encryptedFile.metadata.created);
+            jsonOutput.print(true);
+          } else {
+            console.log(`\n✅ Encrypted file created: ${outputPath}`);
+            console.log(`   Keys encrypted: ${keys.length}`);
+            console.log(`   Algorithm: ${encryptedFile.algorithm.toUpperCase()}`);
+            console.log(`   KDF: ${encryptedFile.kdf.toUpperCase()} (${encryptedFile.kdfParams.iterations.toLocaleString()} iterations)\n`);
+          }
+
+        } catch (error) {
+          if (jsonOutput.enabled) {
+            jsonOutput.exitWithError(error.message, ExitCodes.INTERNAL_ERROR);
+          } else {
+            console.error('\n❌ Error: ' + error.message + '\n');
+            process.exit(ExitCodes.INTERNAL_ERROR);
+          }
+        }
+
+        return;
+      }
+
+      // Interactive mode (original behavior)
+      const readlineSync = require('readline-sync');
 
       console.log('\n╔═══════════════════════════════════════════════════════╗');
       console.log('║        CREATE ENCRYPTED KEY FILE                      ║');
@@ -232,79 +339,128 @@ Examples:
   keys
     .command('test <file>')
     .description('Test decryption of an encrypted key file')
+    .option('--json', 'Output results as JSON')
     .addHelpText('after', `
 This tool verifies that an encrypted key file can be decrypted.
 It does NOT display the keys, only confirms they can be loaded.
 
 Examples:
   $ hedera-multisig keys test multisig-keys.encrypted
+  $ hedera-multisig keys test multisig-keys.encrypted --json
     `)
-    .action(async (file) => {
+    .action(async (file, options) => {
       const EncryptedFileProvider = require('../../keyManagement/EncryptedFileProvider');
-      const { ExitCodes } = require('../utils/cliUtils');
+      const { ExitCodes, JsonOutput } = require('../utils/cliUtils');
 
-      console.log('\n╔═══════════════════════════════════════════════════════╗');
-      console.log('║          TEST ENCRYPTED KEY FILE                      ║');
-      console.log('╚═══════════════════════════════════════════════════════╝\n');
+      const jsonOutput = new JsonOutput(!!options.json);
+
+      if (!jsonOutput.enabled) {
+        console.log('\n╔═══════════════════════════════════════════════════════╗');
+        console.log('║          TEST ENCRYPTED KEY FILE                      ║');
+        console.log('╚═══════════════════════════════════════════════════════╝\n');
+      }
 
       try {
         const resolvedPath = path.resolve(file);
 
-        console.log(`Testing file: ${resolvedPath}\n`);
+        if (!jsonOutput.enabled) {
+          console.log(`Testing file: ${resolvedPath}\n`);
+        }
+
+        jsonOutput.set('file', resolvedPath);
 
         // Display metadata without decrypting
-        console.log('FILE METADATA:\n');
+        let metadata;
         try {
-          const metadata = EncryptedFileProvider.getFileMetadata(resolvedPath);
+          metadata = EncryptedFileProvider.getFileMetadata(resolvedPath);
 
-          console.log(`  Version: ${metadata.version}`);
-          console.log(`  Algorithm: ${metadata.algorithm}`);
-          console.log(`  KDF: ${metadata.kdf} (${metadata.iterations?.toLocaleString()} iterations)`);
-          console.log(`  Key Count: ${metadata.keyCount}`);
-          console.log(`  Created: ${metadata.created}`);
-          console.log(`  Description: ${metadata.description}\n`);
+          if (jsonOutput.enabled) {
+            jsonOutput.set('metadata', {
+              version: metadata.version,
+              algorithm: metadata.algorithm,
+              kdf: metadata.kdf,
+              iterations: metadata.iterations,
+              keyCount: metadata.keyCount,
+              created: metadata.created,
+              description: metadata.description
+            });
+          } else {
+            console.log('FILE METADATA:\n');
+            console.log(`  Version: ${metadata.version}`);
+            console.log(`  Algorithm: ${metadata.algorithm}`);
+            console.log(`  KDF: ${metadata.kdf} (${metadata.iterations?.toLocaleString()} iterations)`);
+            console.log(`  Key Count: ${metadata.keyCount}`);
+            console.log(`  Created: ${metadata.created}`);
+            console.log(`  Description: ${metadata.description}\n`);
+          }
         } catch (error) {
-          console.error(`❌ Failed to read file metadata: ${error.message}\n`);
-          process.exit(ExitCodes.FILE_ERROR);
+          if (jsonOutput.enabled) {
+            jsonOutput.exitWithError(`Failed to read file metadata: ${error.message}`, ExitCodes.FILE_ERROR);
+          } else {
+            console.error(`❌ Failed to read file metadata: ${error.message}\n`);
+            process.exit(ExitCodes.FILE_ERROR);
+          }
+          return;
         }
 
         // Try to decrypt
-        console.log('DECRYPTION TEST:\n');
-        console.log('Attempting to load keys (you will be prompted for passphrase)...\n');
+        if (!jsonOutput.enabled) {
+          console.log('DECRYPTION TEST:\n');
+          console.log('Attempting to load keys (you will be prompted for passphrase)...\n');
+        }
 
         const provider = new EncryptedFileProvider(resolvedPath);
         const keys = await provider.getKeys();
 
-        console.log('╔═══════════════════════════════════════════════════════╗');
-        console.log('║                  ✅ SUCCESS!                          ║');
-        console.log('╚═══════════════════════════════════════════════════════╝\n');
-
-        console.log(`Successfully decrypted and loaded ${keys.length} key(s)\n`);
-
-        console.log('KEY VERIFICATION:\n');
-        keys.forEach((key, index) => {
+        const keyVerifications = keys.map((key, index) => {
           const publicKey = key.publicKey.toString();
           const sanitized = publicKey.substring(0, 6) + '...' + publicKey.substring(publicKey.length - 4);
-          console.log(`  Key ${index + 1}: ${sanitized} ✅`);
+          return { index: index + 1, publicKeyPreview: sanitized };
         });
 
-        console.log('\nThe encrypted file is working correctly!\n');
+        if (jsonOutput.enabled) {
+          jsonOutput.set('decryption', 'success');
+          jsonOutput.set('keysLoaded', keys.length);
+          jsonOutput.set('keys', keyVerifications);
+          jsonOutput.print(true);
+        } else {
+          console.log('╔═══════════════════════════════════════════════════════╗');
+          console.log('║                  ✅ SUCCESS!                          ║');
+          console.log('╚═══════════════════════════════════════════════════════╝\n');
+
+          console.log(`Successfully decrypted and loaded ${keys.length} key(s)\n`);
+
+          console.log('KEY VERIFICATION:\n');
+          keyVerifications.forEach(kv => {
+            console.log(`  Key ${kv.index}: ${kv.publicKeyPreview} ✅`);
+          });
+
+          console.log('\nThe encrypted file is working correctly!\n');
+        }
 
       } catch (error) {
-        console.error('\n╔═══════════════════════════════════════════════════════╗');
-        console.error('║                  ❌ FAILED                            ║');
-        console.error('╚═══════════════════════════════════════════════════════╝\n');
-
-        if (error.message.includes('Incorrect passphrase')) {
-          console.error('❌ Incorrect passphrase or corrupted file\n');
-          console.error('Possible causes:');
-          console.error('  - Wrong passphrase entered');
-          console.error('  - File has been corrupted');
-          console.error('  - File has been tampered with\n');
-          process.exit(ExitCodes.AUTH_ERROR);
+        if (jsonOutput.enabled) {
+          if (error.message.includes('Incorrect passphrase')) {
+            jsonOutput.exitWithError('Incorrect passphrase or corrupted file', ExitCodes.AUTH_ERROR);
+          } else {
+            jsonOutput.exitWithError(error.message, ExitCodes.INTERNAL_ERROR);
+          }
         } else {
-          console.error(`❌ Error: ${error.message}\n`);
-          process.exit(ExitCodes.INTERNAL_ERROR);
+          console.error('\n╔═══════════════════════════════════════════════════════╗');
+          console.error('║                  ❌ FAILED                            ║');
+          console.error('╚═══════════════════════════════════════════════════════╝\n');
+
+          if (error.message.includes('Incorrect passphrase')) {
+            console.error('❌ Incorrect passphrase or corrupted file\n');
+            console.error('Possible causes:');
+            console.error('  - Wrong passphrase entered');
+            console.error('  - File has been corrupted');
+            console.error('  - File has been tampered with\n');
+            process.exit(ExitCodes.AUTH_ERROR);
+          } else {
+            console.error(`❌ Error: ${error.message}\n`);
+            process.exit(ExitCodes.INTERNAL_ERROR);
+          }
         }
       }
     });
