@@ -29,18 +29,12 @@ test.describe('dApp Basic Tests', () => {
   test('shows error for invalid session connection', async ({ page }) => {
     await page.goto('/join');
 
-    // Try to connect with invalid connection string
-    const connectionInput = page.getByPlaceholder(/hmsc:|connection/i).first();
+    // Try to fill an invalid connection string — error shows inline as user types
+    const connectionInput = page.getByPlaceholder(/connection/i).first();
     await connectionInput.fill('invalid-connection-string');
 
-    // Find and click connect button
-    const connectBtn = page.getByRole('button', { name: /connect|join/i }).first();
-    if (await connectBtn.isVisible()) {
-      await connectBtn.click();
-
-      // Should show error
-      await expect(page.getByText(/error|invalid|failed/i).first()).toBeVisible({ timeout: 5000 });
-    }
+    // Error message appears inline (no button click needed)
+    await expect(page.getByText(/doesn't look like|not a valid|should start with hmsc/i).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('responsive design - mobile viewport', async ({ page }) => {
