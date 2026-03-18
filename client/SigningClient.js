@@ -69,7 +69,6 @@ class SigningClient {
           this.ws.send(JSON.stringify({
             type: 'AUTH',
             payload: authPayload
-            }
           }));
         });
 

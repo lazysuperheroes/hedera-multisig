@@ -37,7 +37,19 @@ const TransactionDisplay = require('./ui/TransactionDisplay');
 const { SessionStore, SigningSessionManager, WebSocketServer } = require('./server');
 
 // Client Components (Network-based Multi-Sig)
-const { SigningClient, TransactionReviewer } = require('./client');
+const {
+  SigningClient,
+  AgentSigningClient,
+  TransactionReviewer,
+  PolicyEngine,
+  MaxAmountRule,
+  AllowedRecipientsRule,
+  AllowedTransactionTypesRule,
+  TimeWindowRule,
+  RateLimitRule,
+  createTreasuryAgentPolicy,
+  createApprovalBotPolicy,
+} = require('./client');
 
 // Shared Components
 const SharedTransactionDecoder = require('./shared/transaction-decoder');
@@ -76,7 +88,18 @@ module.exports = {
 
   // Client Components
   SigningClient,
+  AgentSigningClient,
   TransactionReviewer,
+
+  // Agent Signing SDK
+  PolicyEngine,
+  MaxAmountRule,
+  AllowedRecipientsRule,
+  AllowedTransactionTypesRule,
+  TimeWindowRule,
+  RateLimitRule,
+  createTreasuryAgentPolicy,
+  createApprovalBotPolicy,
 
   // Shared Components
   SharedTransactionDecoder,
