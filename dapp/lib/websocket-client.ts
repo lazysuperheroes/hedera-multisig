@@ -46,8 +46,9 @@ export class BrowserSigningClient {
   private connectionParams: {
     serverUrl: string;
     sessionId: string;
-    pin: string;
+    pin?: string;
     publicKey?: string;
+    reconnectionToken?: string;
   } | null = null;
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -87,6 +88,7 @@ export class BrowserSigningClient {
     return new Promise((resolve, reject) => {
       try {
         // Store connection params for potential reconnection
+        // PIN is stored temporarily for initial auth only; replaced by reconnectionToken after AUTH_SUCCESS
         this.connectionParams = { serverUrl, sessionId, pin, publicKey };
         this.sessionId = sessionId;
         this.connectResolve = resolve;
@@ -107,15 +109,23 @@ export class BrowserSigningClient {
           this.isReconnecting = false;
 
           // Authenticate (with optional public key for early eligibility validation)
+          // Use reconnection token if available (from previous AUTH_SUCCESS), otherwise use PIN
+          const authPayload: Record<string, unknown> = {
+            sessionId,
+            role: 'participant',
+            label: this.options.label || undefined,
+            publicKey: publicKey || undefined,
+          };
+
+          if (this.connectionParams?.reconnectionToken) {
+            authPayload.reconnectionToken = this.connectionParams.reconnectionToken;
+          } else {
+            authPayload.pin = pin;
+          }
+
           this.send({
             type: 'AUTH',
-            payload: {
-              sessionId,
-              pin,
-              role: 'participant',
-              label: this.options.label || undefined,
-              publicKey: publicKey || undefined, // Optional: Validates eligibility during AUTH
-            },
+            payload: authPayload,
           });
         };
 
@@ -175,8 +185,9 @@ export class BrowserSigningClient {
 
     this.reconnectTimeout = setTimeout(() => {
       if (this.connectionParams) {
-        const { serverUrl, sessionId, pin, publicKey } = this.connectionParams;
-        this.connect(serverUrl, sessionId, pin, publicKey).catch((err) => {
+        const { serverUrl, sessionId, pin, publicKey, reconnectionToken } = this.connectionParams as any;
+        // Prefer reconnection token over PIN for reconnecting
+        this.connect(serverUrl, sessionId, pin || '', publicKey).catch((err) => {
           this.log(`Reconnection failed: ${err.message}`, 'error');
         });
       }
@@ -436,11 +447,19 @@ export class BrowserSigningClient {
    */
   private handleAuthSuccess(payload: {
     participantId: string;
+    reconnectionToken?: string;
     sessionInfo: SessionInfo;
   }): void {
     this.participantId = payload.participantId;
     this.sessionInfo = payload.sessionInfo;
     this.status = 'connected';
+
+    // Replace PIN with reconnection token for future reconnections (SEC-09)
+    if (payload.reconnectionToken && this.connectionParams) {
+      this.connectionParams.reconnectionToken = payload.reconnectionToken;
+      // Clear PIN from memory now that we have a reconnection token
+      delete this.connectionParams.pin;
+    }
 
     this.log('✅ Connected to session successfully!', 'success');
     this.log(`   Session ID: ${this.sessionInfo.sessionId}`, 'info');

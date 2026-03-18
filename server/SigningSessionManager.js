@@ -33,6 +33,7 @@ class SigningSessionManager {
     });
 
     this.eventHandlers = new Map(); // sessionId -> event handlers
+    this._signatureLocks = new Map(); // sessionId -> Promise chain for serializing signature submissions
   }
 
   /**
@@ -47,6 +48,9 @@ class SigningSessionManager {
       // Generate PIN if not provided
       const pin = config.pin || this._generatePin();
 
+      // Generate coordinator token (separate from participant PIN)
+      const coordinatorToken = this._generateCoordinatorToken();
+
       // Pre-session mode (no transaction yet)
       if (!transaction) {
         // Must provide eligiblePublicKeys and threshold for pre-session
@@ -58,8 +62,9 @@ class SigningSessionManager {
           throw new Error('threshold required when creating pre-session (no transaction)');
         }
 
-        const session = this.store.createSession({
+        const session = await this.store.createSession({
           pin,
+          coordinatorToken,
           frozenTransaction: null,
           txDetails: null,
           threshold: config.threshold,
@@ -91,6 +96,7 @@ class SigningSessionManager {
         return {
           sessionId: session.sessionId,
           pin,
+          coordinatorToken,
           threshold: config.threshold,
           eligiblePublicKeys: config.eligiblePublicKeys,
           expectedParticipants: session.stats.participantsExpected,
@@ -133,8 +139,9 @@ class SigningSessionManager {
       const frozenTxBase64 = Buffer.from(frozenTxBytes).toString('base64');
 
       // Create session in store
-      const session = this.store.createSession({
+      const session = await this.store.createSession({
         pin,
+        coordinatorToken,
         frozenTransaction: {
           bytes: frozenTxBytes,
           base64: frozenTxBase64,
@@ -162,6 +169,7 @@ class SigningSessionManager {
       return {
         sessionId: session.sessionId,
         pin,
+        coordinatorToken,
         threshold,
         eligiblePublicKeys,
         txDetails,
@@ -184,8 +192,8 @@ class SigningSessionManager {
    * @param {string} sessionId - Session identifier
    * @returns {Object|null} Session info or null
    */
-  getSessionInfo(sessionId) {
-    const session = this.store.getSession(sessionId);
+  async getSessionInfo(sessionId) {
+    const session = await this.store.getSession(sessionId);
 
     if (!session) {
       return null;
@@ -212,8 +220,70 @@ class SigningSessionManager {
    * @param {string} pin - PIN code
    * @returns {boolean} True if authenticated
    */
-  authenticate(sessionId, pin) {
-    return this.store.authenticate(sessionId, pin);
+  async authenticate(sessionId, pin) {
+    return await this.store.authenticate(sessionId, pin);
+  }
+
+  /**
+   * Authenticate as coordinator (requires coordinatorToken)
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string} pin - Session PIN
+   * @param {string} coordinatorToken - Coordinator-specific token
+   * @returns {boolean} True if authenticated as coordinator
+   */
+  async authenticateCoordinator(sessionId, pin, coordinatorToken) {
+    // First verify PIN
+    if (!await this.store.authenticate(sessionId, pin)) {
+      return false;
+    }
+
+    // Then verify coordinator token
+    const session = await this.store.getSession(sessionId);
+    if (!session || !session.coordinatorToken) {
+      // Legacy session without coordinator token - allow PIN-only for backward compatibility
+      return true;
+    }
+
+    return this.store._timingSafeCompare(coordinatorToken, session.coordinatorToken);
+  }
+
+  /**
+   * Generate reconnection token for a participant
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string} participantId - Participant identifier
+   * @returns {string} Reconnection token
+   */
+  async generateReconnectionToken(sessionId, participantId) {
+    const token = crypto.randomBytes(16).toString('hex');
+    const session = await this.store.getSession(sessionId);
+    if (session) {
+      session.reconnectionTokens.set(participantId, token);
+    }
+    return token;
+  }
+
+  /**
+   * Authenticate with reconnection token (alternative to PIN for returning participants)
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string} reconnectionToken - Previously issued reconnection token
+   * @returns {{ valid: boolean, participantId?: string }}
+   */
+  async authenticateWithReconnectionToken(sessionId, reconnectionToken) {
+    const session = await this.store.getSession(sessionId);
+    if (!session) {
+      return { valid: false };
+    }
+
+    for (const [participantId, token] of session.reconnectionTokens) {
+      if (this.store._timingSafeCompare(reconnectionToken, token)) {
+        return { valid: true, participantId };
+      }
+    }
+
+    return { valid: false };
   }
 
   /**
@@ -223,8 +293,8 @@ class SigningSessionManager {
    * @param {Object} participantData - Participant information
    * @returns {Object} Participant info
    */
-  addParticipant(sessionId, participantData) {
-    const participantId = this.store.addParticipant(sessionId, participantData);
+  async addParticipant(sessionId, participantData) {
+    const participantId = await this.store.addParticipant(sessionId, participantData);
 
     // Emit event
     const handlers = this.eventHandlers.get(sessionId);
@@ -232,7 +302,7 @@ class SigningSessionManager {
       handlers.onParticipantConnected({
         sessionId,
         participantId,
-        stats: this.store.getStats(sessionId)
+        stats: await this.store.getStats(sessionId)
       });
     }
 
@@ -246,13 +316,13 @@ class SigningSessionManager {
    * @param {string} participantId - Participant identifier
    * @param {string} status - New status
    */
-  updateParticipantStatus(sessionId, participantId, status) {
-    this.store.updateParticipantStatus(sessionId, participantId, status);
+  async updateParticipantStatus(sessionId, participantId, status) {
+    await this.store.updateParticipantStatus(sessionId, participantId, status);
 
     // Emit event
     const handlers = this.eventHandlers.get(sessionId);
     if (handlers && handlers.onStatusUpdate) {
-      const session = this.store.getSession(sessionId);
+      const session = await this.store.getSession(sessionId);
       const participant = session?.participants.get(participantId);
 
       handlers.onStatusUpdate({
@@ -260,7 +330,7 @@ class SigningSessionManager {
         participantId,
         status,
         participant,
-        stats: this.store.getStats(sessionId)
+        stats: await this.store.getStats(sessionId)
       });
     }
   }
@@ -274,8 +344,21 @@ class SigningSessionManager {
    * @returns {Object} Submission result
    */
   async submitSignature(sessionId, participantId, signature) {
+    // Serialize signature submissions per session to prevent race conditions
+    // that could cause double-execution of financial transactions
+    const prevLock = this._signatureLocks.get(sessionId) || Promise.resolve();
+    let releaseLock;
+    const lockPromise = new Promise(resolve => { releaseLock = resolve; });
+    this._signatureLocks.set(sessionId, prevLock.then(() => lockPromise));
+
     try {
-      const session = this.store.getSession(sessionId);
+      await prevLock; // Wait for any previous submission to complete
+    } catch (e) {
+      // Previous submission failed, that's ok, proceed with this one
+    }
+
+    try {
+      const session = await this.store.getSession(sessionId);
 
       if (!session) {
         throw new Error('Session not found');
@@ -289,12 +372,18 @@ class SigningSessionManager {
 
       // Update to signing status if this is the first signature
       if (session.status === 'transaction-received' && session.signatures.size === 0) {
-        this.store.updateStatus(sessionId, 'signing');
+        await this.store.updateStatus(sessionId, 'signing');
       }
 
       // Validate signature format
       if (!signature.publicKey || !signature.signature) {
         throw new Error('Invalid signature format: missing publicKey or signature');
+      }
+
+      // Reject signatures if no frozen transaction is stored (prevents accepting
+      // unverifiable signatures in pre-session mode)
+      if (!session.frozenTransaction) {
+        throw new Error('No transaction to sign - transaction must be injected before signatures can be submitted');
       }
 
       // Check if public key is eligible
@@ -323,7 +412,7 @@ class SigningSessionManager {
       }
 
       // Add signature to session
-      this.store.addSignature(sessionId, participantId, signature);
+      await this.store.addSignature(sessionId, participantId, signature);
 
       // Emit signature received event
       const handlers = this.eventHandlers.get(sessionId);
@@ -332,19 +421,19 @@ class SigningSessionManager {
           sessionId,
           participantId,
           publicKey: signature.publicKey,
-          stats: this.store.getStats(sessionId)
+          stats: await this.store.getStats(sessionId)
         });
       }
 
       // Check if threshold is met
-      const thresholdMet = this.store.isThresholdMet(sessionId);
+      const thresholdMet = await this.store.isThresholdMet(sessionId);
 
       if (thresholdMet) {
         if (handlers && handlers.onThresholdMet) {
           handlers.onThresholdMet({
             sessionId,
-            stats: this.store.getStats(sessionId),
-            signatures: this.store.getSignatures(sessionId)
+            stats: await this.store.getStats(sessionId),
+            signatures: await this.store.getSignatures(sessionId)
           });
         }
 
@@ -368,6 +457,9 @@ class SigningSessionManager {
       }
 
       throw error;
+    } finally {
+      // Release the per-session signature lock
+      releaseLock();
     }
   }
 
@@ -379,13 +471,13 @@ class SigningSessionManager {
    */
   async executeTransaction(sessionId) {
     try {
-      const session = this.store.getSession(sessionId);
+      const session = await this.store.getSession(sessionId);
 
       if (!session) {
         throw new Error('Session not found');
       }
 
-      if (!this.store.isThresholdMet(sessionId)) {
+      if (!await this.store.isThresholdMet(sessionId)) {
         throw new Error('Threshold not met, cannot execute transaction');
       }
 
@@ -394,10 +486,10 @@ class SigningSessionManager {
       }
 
       // Update session status
-      this.store.updateStatus(sessionId, 'executing');
+      await this.store.updateStatus(sessionId, 'executing');
 
       // Get signatures
-      const signatures = this.store.getSignatures(sessionId);
+      const signatures = await this.store.getSignatures(sessionId);
 
       // Reconstruct transaction from stored data
       // frozenTransaction may be:
@@ -450,7 +542,7 @@ class SigningSessionManager {
       const receipt = await txResponse.getReceipt(this.client);
 
       // Update session status
-      this.store.updateStatus(sessionId, 'completed');
+      await this.store.updateStatus(sessionId, 'completed');
 
       const result = {
         success: true,
@@ -477,7 +569,7 @@ class SigningSessionManager {
       return result;
 
     } catch (error) {
-      this.store.updateStatus(sessionId, 'active'); // Revert to active on error
+      await this.store.updateStatus(sessionId, 'active'); // Revert to active on error
 
       const handlers = this.eventHandlers.get(sessionId);
       if (handlers && handlers.onError) {
@@ -497,8 +589,8 @@ class SigningSessionManager {
    *
    * @param {string} sessionId - Session identifier
    */
-  cancelSession(sessionId) {
-    this.store.updateStatus(sessionId, 'cancelled');
+  async cancelSession(sessionId) {
+    await this.store.updateStatus(sessionId, 'cancelled');
     this.eventHandlers.delete(sessionId);
 
     if (this.options.verbose) {
@@ -512,15 +604,15 @@ class SigningSessionManager {
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
    */
-  removeParticipant(sessionId, participantId) {
-    this.store.removeParticipant(sessionId, participantId);
+  async removeParticipant(sessionId, participantId) {
+    await this.store.removeParticipant(sessionId, participantId);
 
     const handlers = this.eventHandlers.get(sessionId);
     if (handlers && handlers.onParticipantDisconnected) {
       handlers.onParticipantDisconnected({
         sessionId,
         participantId,
-        stats: this.store.getStats(sessionId)
+        stats: await this.store.getStats(sessionId)
       });
     }
   }
@@ -530,8 +622,8 @@ class SigningSessionManager {
    *
    * @returns {Array} Array of session summaries
    */
-  listActiveSessions() {
-    return this.store.listActiveSessions();
+  async listActiveSessions() {
+    return await this.store.listActiveSessions();
   }
 
   /**
@@ -540,24 +632,24 @@ class SigningSessionManager {
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
    */
-  setParticipantReady(sessionId, participantId) {
-    this.store.setParticipantReady(sessionId, participantId);
+  async setParticipantReady(sessionId, participantId) {
+    await this.store.setParticipantReady(sessionId, participantId);
 
     // Emit event
     const handlers = this.eventHandlers.get(sessionId);
     if (handlers && handlers.onParticipantReady) {
-      const session = this.store.getSession(sessionId);
+      const session = await this.store.getSession(sessionId);
 
       handlers.onParticipantReady({
         sessionId,
         participantId,
-        stats: this.store.getStats(sessionId),
-        allReady: this.store.areAllParticipantsReady(sessionId)
+        stats: await this.store.getStats(sessionId),
+        allReady: await this.store.areAllParticipantsReady(sessionId)
       });
     }
 
     if (this.options.verbose) {
-      const stats = this.store.getStats(sessionId);
+      const stats = await this.store.getStats(sessionId);
       console.log(`\n✅ Participant ${participantId} is ready (${stats.participantsReady}/${stats.participantsExpected})\n`);
     }
   }
@@ -572,7 +664,7 @@ class SigningSessionManager {
    */
   async injectTransaction(sessionId, transaction, options = {}) {
     try {
-      const session = this.store.getSession(sessionId);
+      const session = await this.store.getSession(sessionId);
 
       if (!session) {
         throw new Error('Session not found');
@@ -613,7 +705,7 @@ class SigningSessionManager {
       };
 
       // Inject into session
-      this.store.injectTransaction(sessionId, frozenTransaction, fullTxDetails);
+      await this.store.injectTransaction(sessionId, frozenTransaction, fullTxDetails);
 
       // Emit event
       const handlers = this.eventHandlers.get(sessionId);
@@ -710,12 +802,28 @@ class SigningSessionManager {
     // Generate 8-character alphanumeric token (A-Z, 0-9, excluding confusing chars)
     // Uses uppercase + digits, excluding O/0, I/1, L for readability
     const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    const bytes = crypto.randomBytes(8);
+    const charCount = chars.length; // 30
+    const maxUnbiased = Math.floor(256 / charCount) * charCount; // 240 (largest multiple of 30 <= 256)
+
     let token = '';
-    for (let i = 0; i < 8; i++) {
-      token += chars[bytes[i] % chars.length];
+    while (token.length < 8) {
+      const bytes = crypto.randomBytes(8 - token.length);
+      for (let i = 0; i < bytes.length && token.length < 8; i++) {
+        // Rejection sampling: discard bytes >= maxUnbiased to eliminate modulo bias
+        if (bytes[i] < maxUnbiased) {
+          token += chars[bytes[i] % charCount];
+        }
+      }
     }
     return token;
+  }
+
+  /**
+   * Generate coordinator token (16-byte hex, more entropy than PIN)
+   * @private
+   */
+  _generateCoordinatorToken() {
+    return crypto.randomBytes(16).toString('hex');
   }
 
   /**

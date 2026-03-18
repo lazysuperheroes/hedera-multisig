@@ -36,9 +36,6 @@ class OfflineWorkflow {
     };
 
     this.progress = new ProgressIndicator();
-    this.collector = new SignatureCollector({ mode: 'offline' });
-    this.verifier = new SignatureVerifier();
-    this.executor = new TransactionExecutor(client, { auditLogPath: this.options.auditLogPath });
   }
 
   /**
@@ -227,11 +224,11 @@ class OfflineWorkflow {
       for (const sigData of signatures) {
         this.progress.startSpinner(`Verifying signature from ${sigData.signerLabel || 'signer'}`);
 
-        const isValid = await this.verifier.verify(
-          frozenTransaction,
-          sigData.signature,
-          sigData.publicKey
+        const verifyStatus = await SignatureVerifier.verifySingle(
+          { bytes: frozenTransaction.toBytes() },
+          { publicKey: sigData.publicKey, signature: sigData.signature }
         );
+        const isValid = verifyStatus.valid;
 
         this.progress.stopSpinner();
 
@@ -302,7 +299,12 @@ class OfflineWorkflow {
 
       // Execute the transaction
       this.progress.startSpinner('Submitting transaction to Hedera network');
-      const result = await this.executor.execute(signedTx);
+      const result = await TransactionExecutor.execute(
+        { bytes: signedTx.toBytes(), transaction: signedTx },
+        [], // signatures already added to the transaction
+        this.client,
+        { auditLogPath: this.options.auditLogPath }
+      );
       this.progress.stopSpinner();
 
       if (result.success) {

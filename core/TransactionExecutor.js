@@ -1,4 +1,4 @@
-const { Transaction, TransactionReceipt, Status } = require('@hashgraph/sdk');
+const { Transaction, TransactionReceipt, Status, PublicKey } = require('@hashgraph/sdk');
 const fs = require('fs');
 const path = require('path');
 
@@ -63,7 +63,6 @@ class TransactionExecutor {
 
       // Add all signatures to the transaction
       for (const sigTuple of signatures) {
-        const { PublicKey } = require('@hashgraph/sdk');
         const publicKey = PublicKey.fromString(sigTuple.publicKey);
 
         // Parse signature (support both base64 and hex)
@@ -180,8 +179,8 @@ class TransactionExecutor {
       receiptStatus: result.status,
       error: result.error || null,
 
-      // Metadata
-      ...metadata
+      // Metadata (namespaced to prevent overwriting critical fields)
+      metadata: metadata || {}
     };
 
     return entry;
@@ -204,8 +203,19 @@ class TransactionExecutor {
    */
   static _appendAuditLog(entry, customPath = null) {
     try {
-      // Determine log path
-      const logPath = customPath || path.join(process.cwd(), 'logs', 'multisig-audit.jsonl');
+      // Determine log path with path traversal protection
+      const defaultPath = path.join(process.cwd(), 'logs', 'multisig-audit.jsonl');
+      let logPath = customPath || defaultPath;
+
+      // Validate custom path stays within allowed directory
+      if (customPath) {
+        const resolvedPath = path.resolve(customPath);
+        const allowedBase = path.resolve(process.cwd());
+        if (!resolvedPath.startsWith(allowedBase)) {
+          console.error(`⚠️  Warning: Audit log path outside project directory rejected: ${customPath}`);
+          logPath = defaultPath;
+        }
+      }
 
       // Ensure logs directory exists
       const logDir = path.dirname(logPath);

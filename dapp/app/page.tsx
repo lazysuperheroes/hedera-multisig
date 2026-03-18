@@ -65,7 +65,7 @@ export default function Home() {
           <p>
             Part of the Hedera MultiSig networked architecture.{' '}
             <a
-              href="https://github.com/hashgraph/hedera-multisig"
+              href="https://github.com/lazysuperheroes/hedera-multisig"
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-600 dark:text-blue-400 hover:underline"

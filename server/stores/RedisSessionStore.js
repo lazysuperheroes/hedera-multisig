@@ -436,11 +436,14 @@ class RedisSessionStore {
       throw new Error('Participant not found');
     }
 
+    // Guard against double-counting if already ready
+    if (participant.status !== 'ready') {
+      session.stats.participantsReady++;
+    }
+
     participant.keysLoaded = true;
     participant.status = 'ready';
     participant.readyAt = Date.now();
-
-    session.stats.participantsReady++;
 
     await this._saveSession(session);
   }
@@ -654,9 +657,17 @@ class RedisSessionStore {
    * @private
    */
   _startCleanup() {
-    this.cleanupTimer = setInterval(() => {
-      this._cleanupExpiredSessions();
-    }, this.cleanupInterval);
+    // Use timerController if available for clean shutdown, otherwise fall back to raw setInterval
+    try {
+      const { globalTimerController } = require('../../shared/TimerController');
+      this.cleanupTimer = globalTimerController.setInterval(() => {
+        this._cleanupExpiredSessions();
+      }, this.cleanupInterval, 'redis-session-cleanup');
+    } catch (e) {
+      this.cleanupTimer = setInterval(() => {
+        this._cleanupExpiredSessions();
+      }, this.cleanupInterval);
+    }
   }
 
   /**

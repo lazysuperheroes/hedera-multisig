@@ -25,7 +25,7 @@ class SessionStore {
    * @param {Object} sessionData - Session configuration
    * @returns {Object} Created session
    */
-  createSession(sessionData) {
+  async createSession(sessionData) {
     const sessionId = this._generateSessionId();
     const now = Date.now();
 
@@ -49,6 +49,10 @@ class SessionStore {
 
       // Coordinator info
       coordinatorClient: null, // WebSocket connection
+      coordinatorToken: sessionData.coordinatorToken || null, // Separate auth for coordinator role
+
+      // Reconnection tokens (participantId -> token)
+      reconnectionTokens: new Map(),
 
       // Statistics
       stats: {
@@ -70,7 +74,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {Object|null} Session or null if not found
    */
-  getSession(sessionId) {
+  async getSession(sessionId) {
     const session = this.sessions.get(sessionId);
 
     if (!session) {
@@ -93,8 +97,8 @@ class SessionStore {
    * @param {string} pin - PIN code
    * @returns {boolean} True if authenticated
    */
-  authenticate(sessionId, pin) {
-    const session = this.getSession(sessionId);
+  async authenticate(sessionId, pin) {
+    const session = await this.getSession(sessionId);
 
     if (!session) {
       return false;
@@ -116,7 +120,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @param {string} status - New status
    */
-  updateStatus(sessionId, status) {
+  async updateStatus(sessionId, status) {
     const session = this.sessions.get(sessionId);
     if (session) {
       session.status = status;
@@ -130,7 +134,7 @@ class SessionStore {
    * @param {Object} participant - Participant data
    * @returns {string} Participant ID
    */
-  addParticipant(sessionId, participant) {
+  async addParticipant(sessionId, participant) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -161,7 +165,7 @@ class SessionStore {
    * @param {string} participantId - Participant identifier
    * @param {string} status - New status
    */
-  updateParticipantStatus(sessionId, participantId, status) {
+  async updateParticipantStatus(sessionId, participantId, status) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return;
@@ -181,7 +185,7 @@ class SessionStore {
    * @param {string} participantId - Participant identifier
    * @param {Object} signature - Signature data
    */
-  addSignature(sessionId, participantId, signature) {
+  async addSignature(sessionId, participantId, signature) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -214,26 +218,26 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
    */
-  removeParticipant(sessionId, participantId) {
+  async removeParticipant(sessionId, participantId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return;
     }
 
     const participant = session.participants.get(participantId);
-    if (participant && participant.status !== 'signed') {
-      // Decrement ready count if participant was ready
-      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
-        session.stats.participantsReady--;
-      }
+    if (!participant) return;
+
+    // Decrement ready count if participant was ready or had been ready before signing
+    const wasReady = participant.status === 'ready' || participant.status === 'signed';
+    if (wasReady && session.stats.participantsReady > 0) {
+      session.stats.participantsReady--;
+    }
+
+    if (participant.status !== 'signed') {
       session.participants.delete(participantId);
       session.stats.participantsConnected--;
-    } else if (participant) {
+    } else {
       // Mark as disconnected but keep if signed
-      // Also decrement ready count if they were ready
-      if (participant.status === 'ready' && session.stats.participantsReady > 0) {
-        session.stats.participantsReady--;
-      }
       participant.status = 'disconnected';
       participant.websocket = null;
     }
@@ -245,7 +249,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {boolean} True if threshold met
    */
-  isThresholdMet(sessionId) {
+  async isThresholdMet(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return false;
@@ -260,7 +264,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {Array} Array of signature objects
    */
-  getSignatures(sessionId) {
+  async getSignatures(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return [];
@@ -284,7 +288,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {Object|null} Session stats or null
    */
-  getStats(sessionId) {
+  async getStats(sessionId) {
     const session = this.sessions.get(sessionId);
     return session ? session.stats : null;
   }
@@ -294,11 +298,12 @@ class SessionStore {
    *
    * @returns {Array} Array of session summaries
    */
-  listActiveSessions() {
+  async listActiveSessions() {
     const active = [];
 
+    const activeStatuses = ['waiting', 'transaction-received', 'signing'];
     for (const [sessionId, session] of this.sessions) {
-      if (session.status === 'active') {
+      if (activeStatuses.includes(session.status)) {
         active.push({
           sessionId,
           createdAt: session.createdAt,
@@ -317,7 +322,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
    */
-  setParticipantReady(sessionId, participantId) {
+  async setParticipantReady(sessionId, participantId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -328,11 +333,14 @@ class SessionStore {
       throw new Error('Participant not found');
     }
 
+    // Guard against double-counting if already ready
+    if (participant.status !== 'ready') {
+      session.stats.participantsReady++;
+    }
+
     participant.keysLoaded = true;
     participant.status = 'ready';
     participant.readyAt = Date.now();
-
-    session.stats.participantsReady++;
   }
 
   /**
@@ -341,7 +349,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {boolean} True if all expected participants are ready
    */
-  areAllParticipantsReady(sessionId) {
+  async areAllParticipantsReady(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return false;
@@ -356,7 +364,7 @@ class SessionStore {
    * @param {string} sessionId - Session identifier
    * @returns {Array} Array of ready participant IDs
    */
-  getReadyParticipants(sessionId) {
+  async getReadyParticipants(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return [];
@@ -379,7 +387,7 @@ class SessionStore {
    * @param {string} frozenTransaction - Serialized frozen transaction
    * @param {Object} txDetails - Transaction details
    */
-  injectTransaction(sessionId, frozenTransaction, txDetails) {
+  async injectTransaction(sessionId, frozenTransaction, txDetails) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');

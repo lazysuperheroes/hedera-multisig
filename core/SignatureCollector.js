@@ -80,6 +80,8 @@ class SignatureCollector {
       const startTime = Date.now();
       let countdownInterval = null;
 
+      let expired = false;
+
       try {
         countdownInterval = setInterval(() => {
           const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -87,7 +89,9 @@ class SignatureCollector {
 
           if (timeLeft <= 0) {
             clearInterval(countdownInterval);
-            throw new Error('Timeout! Transaction validity window expired.');
+            countdownInterval = null;
+            expired = true;
+            console.log('\n⚠️  TIMEOUT: Transaction validity window expired.\n');
           }
 
           // Warning at 20 seconds
@@ -98,6 +102,10 @@ class SignatureCollector {
 
         // Collect signatures
         for (let i = 0; i < remaining; i++) {
+          if (expired) {
+            throw new Error('Timeout! Transaction validity window expired.');
+          }
+
           const timeLeft = timeout - Math.floor((Date.now() - startTime) / 1000);
           console.log(`⏳ Remaining: ${timeLeft}s`);
 

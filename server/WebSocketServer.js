@@ -227,8 +227,8 @@ class MultiSigWebSocketServer {
    * @param {Object} message - Message to broadcast
    * @param {string} excludeParticipantId - Optional participant to exclude
    */
-  broadcastToSession(sessionId, message, excludeParticipantId = null) {
-    const sessionInfo = this.sessionManager.getSessionInfo(sessionId);
+  async broadcastToSession(sessionId, message, excludeParticipantId = null) {
+    const sessionInfo = await this.sessionManager.getSessionInfo(sessionId);
 
     if (!sessionInfo) {
       return;
@@ -337,11 +337,11 @@ class MultiSigWebSocketServer {
             break;
 
           case 'PARTICIPANT_READY':
-            this._handleParticipantReady(sessionId, participantId, message);
+            await this._handleParticipantReady(sessionId, participantId, message);
             break;
 
           case 'STATUS_UPDATE':
-            this._handleStatusUpdate(sessionId, participantId, message);
+            await this._handleStatusUpdate(sessionId, participantId, message);
             break;
 
           case 'SIGNATURE_SUBMIT':
@@ -353,7 +353,7 @@ class MultiSigWebSocketServer {
             break;
 
           case 'TRANSACTION_REJECTED':
-            this._handleTransactionRejected(sessionId, participantId, message);
+            await this._handleTransactionRejected(sessionId, participantId, message);
             break;
 
           case 'EXECUTE_TRANSACTION':
@@ -382,21 +382,22 @@ class MultiSigWebSocketServer {
     });
 
     // Handle disconnection
-    ws.on('close', () => {
+    ws.on('close', async () => {
       if (participantId) {
         this.clients.delete(participantId);
-        this.sessionManager.removeParticipant(sessionId, participantId);
+        await this.sessionManager.removeParticipant(sessionId, participantId);
 
         if (this.options.verbose) {
           console.log(chalk.yellow(`\n📴 Participant ${participantId} disconnected\n`));
         }
 
         // Notify others
-        this.broadcastToSession(sessionId, {
+        const disconnectStats = await this.sessionManager.store.getStats(sessionId);
+        await this.broadcastToSession(sessionId, {
           type: 'PARTICIPANT_DISCONNECTED',
           payload: {
             participantId,
-            stats: this.sessionManager.store.getStats(sessionId)
+            stats: disconnectStats
           }
         });
       }
@@ -486,12 +487,13 @@ class MultiSigWebSocketServer {
    * @private
    */
   async _handleAuth(ws, req, message, callback) {
-    const { sessionId, pin, role, label, publicKey } = message.payload;
+    const { sessionId, pin, role, label, publicKey, coordinatorToken, reconnectionToken } = message.payload;
     const clientIp = req.socket.remoteAddress;
 
     // Check rate limit
+    let rateLimitAttempts;
     try {
-      var rateLimitAttempts = this._checkRateLimit(clientIp);
+      rateLimitAttempts = this._checkRateLimit(clientIp);
     } catch (error) {
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
@@ -500,33 +502,45 @@ class MultiSigWebSocketServer {
       return;
     }
 
-    // Validate required fields
-    if (!sessionId || !pin) {
+    // Validate required fields (PIN or reconnection token required)
+    if (!sessionId || (!pin && !reconnectionToken)) {
       this._recordFailedAuth(clientIp, rateLimitAttempts);
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
-        payload: { message: 'Missing sessionId or pin' }
-      }));
-      return;
-    }
-
-    // Authenticate with session manager
-    const authenticated = this.sessionManager.authenticate(sessionId, pin);
-
-    if (!authenticated) {
-      this._recordFailedAuth(clientIp, rateLimitAttempts);
-      ws.send(JSON.stringify({
-        type: 'AUTH_FAILED',
-        payload: { message: 'Invalid session ID or PIN' }
+        payload: { message: 'Missing sessionId or authentication credentials' }
       }));
       return;
     }
 
     const isCoordinator = role === 'coordinator';
+    let authenticated = false;
+    let reconnectedParticipantId = null;
+
+    if (reconnectionToken) {
+      // Authenticate with reconnection token (returning participant)
+      const result = await this.sessionManager.authenticateWithReconnectionToken(sessionId, reconnectionToken);
+      authenticated = result.valid;
+      reconnectedParticipantId = result.participantId;
+    } else if (isCoordinator) {
+      // Coordinator must provide coordinatorToken alongside PIN
+      authenticated = await this.sessionManager.authenticateCoordinator(sessionId, pin, coordinatorToken);
+    } else {
+      // Standard participant auth with PIN
+      authenticated = await this.sessionManager.authenticate(sessionId, pin);
+    }
+
+    if (!authenticated) {
+      this._recordFailedAuth(clientIp, rateLimitAttempts);
+      ws.send(JSON.stringify({
+        type: 'AUTH_FAILED',
+        payload: { message: isCoordinator ? 'Invalid credentials or coordinator token' : 'Invalid session ID or PIN' }
+      }));
+      return;
+    }
 
     // Enhanced validation for participants: Check public key eligibility if provided
     if (!isCoordinator && publicKey) {
-      const sessionInfo = this.sessionManager.getSessionInfo(sessionId);
+      const sessionInfo = await this.sessionManager.getSessionInfo(sessionId);
 
       if (sessionInfo && sessionInfo.eligiblePublicKeys) {
         const isEligible = isKeyEligible(publicKey, sessionInfo.eligiblePublicKeys);
@@ -560,7 +574,7 @@ class MultiSigWebSocketServer {
       this.coordinatorClients.set(sessionId, ws);
       callback(sessionId, null, true);
 
-      const sessionInfo = this.sessionManager.getSessionInfo(sessionId);
+      const sessionInfo = await this.sessionManager.getSessionInfo(sessionId);
 
       ws.send(JSON.stringify({
         type: 'AUTH_SUCCESS',
@@ -571,28 +585,42 @@ class MultiSigWebSocketServer {
       }));
 
       this.log.info('Coordinator authenticated', { sessionId, clientIp });
+
+      this.log.info('Coordinator authenticated', { sessionId, clientIp });
       if (this.options.verbose) {
         console.log(chalk.green(`✅ Coordinator authenticated for session ${sessionId}`));
       }
 
     } else {
-      // Register participant
-      const { participantId } = this.sessionManager.addParticipant(sessionId, {
-        label,
-        websocket: ws
-      });
+      // Register participant (or reconnect existing)
+      let participantId;
+      if (reconnectedParticipantId) {
+        // Reconnecting participant - reuse existing ID
+        participantId = reconnectedParticipantId;
+        this.log.info('Participant reconnected', { sessionId, participantId, clientIp });
+      } else {
+        const result = await this.sessionManager.addParticipant(sessionId, {
+          label,
+          websocket: ws
+        });
+        participantId = result.participantId;
+      }
 
       this.clients.set(participantId, ws);
       callback(sessionId, participantId, false);
 
-      const sessionInfo = this.sessionManager.getSessionInfo(sessionId);
+      // Generate reconnection token so client can reconnect without PIN
+      const newReconnectionToken = await this.sessionManager.generateReconnectionToken(sessionId, participantId);
 
-      // Send session info to participant
+      const sessionInfo = await this.sessionManager.getSessionInfo(sessionId);
+
+      // Send session info to participant (includes reconnectionToken, never includes PIN)
       ws.send(JSON.stringify({
         type: 'AUTH_SUCCESS',
         payload: {
           role: 'participant',
           participantId,
+          reconnectionToken: newReconnectionToken,
           sessionInfo: {
             sessionId: sessionInfo.sessionId,
             status: sessionInfo.status,
@@ -612,12 +640,13 @@ class MultiSigWebSocketServer {
       }
 
       // Notify coordinator and other participants
-      this.broadcastToSession(sessionId, {
+      const connectStats = await this.sessionManager.store.getStats(sessionId);
+      await this.broadcastToSession(sessionId, {
         type: 'PARTICIPANT_CONNECTED',
         payload: {
           participantId,
           label,
-          stats: this.sessionManager.store.getStats(sessionId)
+          stats: connectStats
         }
       }, participantId);
     }
@@ -627,18 +656,19 @@ class MultiSigWebSocketServer {
    * Handle status update from participant
    * @private
    */
-  _handleStatusUpdate(sessionId, participantId, message) {
+  async _handleStatusUpdate(sessionId, participantId, message) {
     const { status } = message.payload;
 
-    this.sessionManager.updateParticipantStatus(sessionId, participantId, status);
+    await this.sessionManager.updateParticipantStatus(sessionId, participantId, status);
 
     // Broadcast to session
-    this.broadcastToSession(sessionId, {
+    const statusStats = await this.sessionManager.store.getStats(sessionId);
+    await this.broadcastToSession(sessionId, {
       type: 'PARTICIPANT_STATUS_UPDATE',
       payload: {
         participantId,
         status,
-        stats: this.sessionManager.store.getStats(sessionId)
+        stats: statusStats
       }
     });
   }
@@ -674,18 +704,19 @@ class MultiSigWebSocketServer {
       });
 
       // Broadcast to session
-      this.broadcastToSession(sessionId, {
+      const sigStats = await this.sessionManager.store.getStats(sessionId);
+      await this.broadcastToSession(sessionId, {
         type: 'SIGNATURE_RECEIVED',
         payload: {
           participantId,
           publicKeyPreview: '...' + publicKey.slice(-8),
-          stats: this.sessionManager.store.getStats(sessionId),
+          stats: sigStats,
           thresholdMet: result.thresholdMet
         }
       });
 
       if (result.thresholdMet) {
-        this.broadcastToSession(sessionId, {
+        await this.broadcastToSession(sessionId, {
           type: 'THRESHOLD_MET',
           payload: {
             signaturesCollected: result.signaturesCollected,
@@ -706,18 +737,19 @@ class MultiSigWebSocketServer {
    * Handle participant ready notification
    * @private
    */
-  _handleParticipantReady(sessionId, participantId, message) {
+  async _handleParticipantReady(sessionId, participantId, message) {
     try {
       // Mark participant as ready
-      this.sessionManager.setParticipantReady(sessionId, participantId);
+      await this.sessionManager.setParticipantReady(sessionId, participantId);
 
       // Broadcast to session
-      this.broadcastToSession(sessionId, {
+      const readyStats = await this.sessionManager.store.getStats(sessionId);
+      await this.broadcastToSession(sessionId, {
         type: 'PARTICIPANT_READY',
         payload: {
           participantId,
-          stats: this.sessionManager.store.getStats(sessionId),
-          allReady: this.sessionManager.store.areAllParticipantsReady(sessionId)
+          stats: readyStats,
+          allReady: await this.sessionManager.store.areAllParticipantsReady(sessionId)
         }
       });
 
@@ -769,8 +801,8 @@ class MultiSigWebSocketServer {
           const timeUntilExpiry = (txExpiresAt - now) * 1000;
 
           if (timeUntilExpiry > 0) {
-            session.expirationTimerId = timerController.setTimeout(() => {
-              this._handleTransactionExpired(sessionId);
+            session.expirationTimerId = timerController.setTimeout(async () => {
+              await this._handleTransactionExpired(sessionId);
             }, timeUntilExpiry, `tx-expiry-${sessionId}`);
 
             if (this.options.verbose) {
@@ -778,14 +810,14 @@ class MultiSigWebSocketServer {
             }
           } else {
             // Already expired
-            this._handleTransactionExpired(sessionId);
+            await this._handleTransactionExpired(sessionId);
             return;
           }
         }
       }
 
       // Broadcast to all participants
-      this.broadcastToSession(sessionId, {
+      await this.broadcastToSession(sessionId, {
         type: 'TRANSACTION_RECEIVED',
         payload: {
           frozenTransaction,
@@ -811,8 +843,8 @@ class MultiSigWebSocketServer {
    * Handle transaction expiration
    * @private
    */
-  _handleTransactionExpired(sessionId) {
-    const session = this.sessionManager.store.getSession(sessionId);
+  async _handleTransactionExpired(sessionId) {
+    const session = await this.sessionManager.store.getSession(sessionId);
 
     if (session && session.status !== 'completed') {
       // Transaction expired, but session is still valid
@@ -828,7 +860,7 @@ class MultiSigWebSocketServer {
         }
 
         // Broadcast to all participants
-        this.broadcastToSession(sessionId, {
+        await this.broadcastToSession(sessionId, {
           type: 'TRANSACTION_EXPIRED',
           payload: {
             sessionId,
@@ -864,19 +896,20 @@ class MultiSigWebSocketServer {
    * Handle transaction rejection from participant
    * @private
    */
-  _handleTransactionRejected(sessionId, participantId, message) {
+  async _handleTransactionRejected(sessionId, participantId, message) {
     const { reason } = message.payload;
 
     // Update participant status
-    this.sessionManager.updateParticipantStatus(sessionId, participantId, 'rejected');
+    await this.sessionManager.updateParticipantStatus(sessionId, participantId, 'rejected');
 
     // Broadcast rejection to session
-    this.broadcastToSession(sessionId, {
+    const rejectedStats = await this.sessionManager.store.getStats(sessionId);
+    await this.broadcastToSession(sessionId, {
       type: 'TRANSACTION_REJECTED',
       payload: {
         participantId,
         reason,
-        stats: this.sessionManager.store.getStats(sessionId)
+        stats: rejectedStats
       }
     });
 
@@ -894,7 +927,7 @@ class MultiSigWebSocketServer {
       const result = await this.sessionManager.executeTransaction(sessionId);
 
       // Broadcast to session
-      this.broadcastToSession(sessionId, {
+      await this.broadcastToSession(sessionId, {
         type: 'TRANSACTION_EXECUTED',
         payload: result
       });

@@ -92,8 +92,13 @@ class SignatureVerifier {
       }
     }
 
-    // Overall validity: all signatures must be valid
-    result.valid = result.validCount === result.totalCount && result.errors.length === 0;
+    // Overall validity: when threshold is specified, validity means threshold is met
+    // When no threshold, all signatures must be valid
+    if (options.threshold) {
+      result.valid = result.validCount >= options.threshold && result.errors.length === 0;
+    } else {
+      result.valid = result.validCount === result.totalCount && result.errors.length === 0;
+    }
 
     return result;
   }

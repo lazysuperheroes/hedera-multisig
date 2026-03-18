@@ -66,6 +66,7 @@ Environment Variables:
         TransferTransaction,
         ContractExecuteTransaction,
         ContractId,
+        TransactionId,
         Hbar
       } = require('@hashgraph/sdk');
 
@@ -116,6 +117,9 @@ Environment Variables:
         } else {
           throw new Error(`Unsupported transaction type: ${options.type}. Supported: transfer, contract-execute`);
         }
+
+        // Set transaction ID for multi-sig hash stability (required before freeze)
+        transaction.setTransactionId(TransactionId.generate(AccountId.fromString(operatorId)));
 
         // Freeze the transaction
         const frozenTx = await transaction.freezeWith(client);
