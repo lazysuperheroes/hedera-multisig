@@ -10,66 +10,96 @@ export default function Home() {
             Hedera MultiSig
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-400">
-            WalletConnect Participant Portal
+            Multi-Signature Transaction Management for Hedera
           </p>
         </div>
 
-        {/* Description */}
+        {/* Value Proposition */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 space-y-4">
           <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
-            Sign Multi-Signature Transactions with Your Wallet
+            Secure Multi-Party Signing for Teams and Agents
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            Join signing sessions and approve multi-signature transactions using your connected Hedera wallet.
-            Supports hardware wallets via WalletConnect providers like HashPack.
+            Coordinate multi-signature transactions across geographies with real-time WebSocket sessions,
+            offline air-gapped signing, scheduled async workflows, and automated agent policies.
+            Private keys never leave your device.
           </p>
         </div>
 
-        {/* Features */}
+        {/* Use Cases */}
         <div className="grid md:grid-cols-3 gap-6">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-2">
-            <div className="text-3xl">🔐</div>
-            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Secure</h3>
+            <div className="text-3xl">🏦</div>
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Treasury Management</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Private keys never leave your wallet. Hardware wallet support included.
+              Move HBAR, tokens, and NFTs with multi-party approval. Smart contract calls with ABI verification.
             </p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-2">
-            <div className="text-3xl">✅</div>
-            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Verified</h3>
+            <div className="text-3xl">🤖</div>
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Agent Signing</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Review cryptographically verified transaction data before signing.
+              Automated agents with composable policy rules. Amount limits, recipient allowlists, time windows.
             </p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-2">
-            <div className="text-3xl">⚡</div>
-            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Real-Time</h3>
+            <div className="text-3xl">📅</div>
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Scheduled Transactions</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              WebSocket coordination for fast multi-party signing sessions.
+              Async signing over hours or days. No 120-second pressure for cross-timezone teams.
             </p>
           </div>
         </div>
 
-        {/* CTA */}
-        <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link
-            href="/join"
-            className="inline-block px-8 py-4 bg-blue-600 text-white font-semibold rounded-lg shadow-lg hover:bg-blue-700 transition-colors"
-          >
-            Join Signing Session
-          </Link>
-          <Link
-            href="/create"
-            className="inline-block px-8 py-4 bg-gray-700 dark:bg-gray-600 text-white font-semibold rounded-lg shadow-lg hover:bg-gray-800 dark:hover:bg-gray-500 transition-colors"
-          >
-            Coordinator Panel
-          </Link>
+        {/* Security Features */}
+        <div className="grid md:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-1">
+            <div className="text-2xl">🔐</div>
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Keys Stay Local</h4>
+            <p className="text-xs text-gray-600 dark:text-gray-400">Private keys never transmitted</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-1">
+            <div className="text-2xl">✅</div>
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Verified Data</h4>
+            <p className="text-xs text-gray-600 dark:text-gray-400">Cryptographic TX verification</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-1">
+            <div className="text-2xl">🔗</div>
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Mixed Sessions</h4>
+            <p className="text-xs text-gray-600 dark:text-gray-400">CLI + dApp + hardware wallets</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-1">
+            <div className="text-2xl">⚡</div>
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Real-Time</h4>
+            <p className="text-xs text-gray-600 dark:text-gray-400">WebSocket coordination</p>
+          </div>
         </div>
 
-        {/* Footer Note */}
-        <div className="text-sm text-gray-500 dark:text-gray-400 pt-8">
+        {/* CTAs */}
+        <div className="pt-4 space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              href="/join"
+              className="inline-block px-8 py-4 bg-blue-600 text-white font-semibold rounded-lg shadow-lg hover:bg-blue-700 transition-colors"
+            >
+              Join Signing Session
+            </Link>
+            <Link
+              href="/create"
+              className="inline-block px-8 py-4 bg-gray-700 dark:bg-gray-600 text-white font-semibold rounded-lg shadow-lg hover:bg-gray-800 dark:hover:bg-gray-500 transition-colors"
+            >
+              Coordinator Panel
+            </Link>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Participants join sessions. Coordinators create sessions and build transactions.
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div className="text-sm text-gray-500 dark:text-gray-400 pt-4 space-y-1">
           <p>
-            Part of the Hedera MultiSig networked architecture.{' '}
+            Open source multi-sig tooling for the Hedera ecosystem.{' '}
             <a
               href="https://github.com/lazysuperheroes/hedera-multisig"
               target="_blank"
@@ -77,6 +107,15 @@ export default function Home() {
               className="text-blue-600 dark:text-blue-400 hover:underline"
             >
               View on GitHub
+            </a>
+            {' | '}
+            <a
+              href="https://www.npmjs.com/package/@lazysuperheroes/hedera-multisig"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              npm Package
             </a>
           </p>
         </div>
