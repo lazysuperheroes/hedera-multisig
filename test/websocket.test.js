@@ -9,15 +9,19 @@ const { expect } = require('chai');
 describe('WebSocket Components', function() {
 
   describe('TimerController', function() {
-    const { TimerController } = require('../shared/TimerController');
     let controller;
 
     beforeEach(function() {
+      // Require fresh to avoid stale mock from other test files
+      delete require.cache[require.resolve('../shared/TimerController')];
+      const { TimerController } = require('../shared/TimerController');
       controller = new TimerController();
     });
 
     afterEach(function() {
-      controller.clearAll();
+      if (controller && typeof controller.clearAll === 'function') {
+        controller.clearAll();
+      }
     });
 
     it('creates setTimeout with tracking', function(done) {

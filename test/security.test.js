@@ -8,37 +8,26 @@
 
 const { expect } = require('chai');
 
-// Mock TimerController before requiring SessionStore
-const mockTimers = {
-  timers: new Map(),
-  nextId: 1,
-  setInterval: function(cb, interval, name) {
-    const id = this.nextId++;
-    this.timers.set(id, { cb, interval, name, type: 'interval' });
-    return id;
-  },
-  setTimeout: function(cb, delay, name) {
-    const id = this.nextId++;
-    this.timers.set(id, { cb, delay, name, type: 'timeout' });
-    return id;
-  },
-  clear: function(id) {
-    return this.timers.delete(id);
-  },
-  reset: function() {
-    this.timers.clear();
-    this.nextId = 1;
-  }
-};
+// These tests need SessionStore which requires TimerController.
+// We use a shared mock pattern that doesn't pollute the module cache for other test files.
+// SessionStore is loaded lazily to avoid cache conflicts.
 
-// Replace the timerController module
-require.cache[require.resolve('../shared/TimerController')] = {
-  exports: { timerController: mockTimers, TimerController: class {} }
-};
-
-const SessionStore = require('../server/SessionStore');
 const SignatureVerifier = require('../core/SignatureVerifier');
 const TransactionExecutor = require('../core/TransactionExecutor');
+
+// Create a standalone SessionStore for security tests by directly instantiating
+// after temporarily mocking the timer module
+// Use the same SessionStore that sessionStore.test.js uses.
+// SessionStore requires TimerController, which may be mocked by sessionStore.test.js.
+// We just need a working SessionStore instance — we don't care about timer tracking.
+// Import SessionStore lazily to let other test files set up their mocks first.
+let _SessionStore = null;
+function createMockedSessionStore(options = {}) {
+  if (!_SessionStore) {
+    _SessionStore = require('../server/SessionStore');
+  }
+  return new _SessionStore(options);
+}
 
 describe('Security Tests', function() {
 
@@ -50,8 +39,7 @@ describe('Security Tests', function() {
     let store;
 
     beforeEach(function() {
-      mockTimers.reset();
-      store = new SessionStore({ cleanupInterval: 60000 });
+      store = createMockedSessionStore({ cleanupInterval: 60000 });
     });
 
     afterEach(function() {
@@ -157,8 +145,7 @@ describe('Security Tests', function() {
     let store;
 
     beforeEach(function() {
-      mockTimers.reset();
-      store = new SessionStore({ cleanupInterval: 60000 });
+      store = createMockedSessionStore({ cleanupInterval: 60000 });
     });
 
     afterEach(function() {

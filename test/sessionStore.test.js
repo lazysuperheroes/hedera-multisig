@@ -6,6 +6,11 @@
 
 const { expect } = require('chai');
 
+// Force-load the real TimerController before mocking (bypass any existing mock)
+const timerModulePath = require.resolve('../shared/TimerController');
+delete require.cache[timerModulePath];
+const realTimerModule = { id: timerModulePath, filename: timerModulePath, loaded: true, exports: require(timerModulePath) };
+
 // Mock TimerController before requiring SessionStore
 const mockTimers = {
   timers: new Map(),
@@ -23,21 +28,70 @@ const mockTimers = {
   clear: function(id) {
     return this.timers.delete(id);
   },
+  clearAll: function() {
+    this.timers.clear();
+  },
+  clearByPrefix: function(prefix) {
+    for (const [id, timer] of this.timers) {
+      if (timer.name && timer.name.startsWith(prefix)) {
+        this.timers.delete(id);
+      }
+    }
+  },
+  getStats: function() {
+    let timeouts = 0, intervals = 0;
+    for (const timer of this.timers.values()) {
+      if (timer.type === 'timeout') timeouts++;
+      else intervals++;
+    }
+    return { timeouts, intervals, total: this.timers.size };
+  },
+  getActiveTimers: function() {
+    return Array.from(this.timers.values());
+  },
   reset: function() {
     this.timers.clear();
     this.nextId = 1;
   }
 };
 
+// Mock TimerController class that creates instances with the same API
+class MockTimerController {
+  constructor() {
+    this.timers = new Map();
+    this.nextId = 1;
+  }
+  setTimeout(cb, delay, name) { const id = this.nextId++; this.timers.set(id, { cb, delay, name, type: 'timeout' }); return id; }
+  setInterval(cb, interval, name) { const id = this.nextId++; this.timers.set(id, { cb, interval, name, type: 'interval' }); return id; }
+  clear(id) { return this.timers.delete(id); }
+  clearAll() { this.timers.clear(); }
+  clearByPrefix(prefix) { for (const [id, t] of this.timers) { if (t.name?.startsWith(prefix)) this.timers.delete(id); } }
+  getStats() { let to = 0, iv = 0; for (const t of this.timers.values()) { if (t.type === 'timeout') to++; else iv++; } return { timeouts: to, intervals: iv, total: this.timers.size }; }
+  getActiveTimers() { return Array.from(this.timers.values()); }
+  reset() { this.timers.clear(); this.nextId = 1; }
+}
+
 // Replace the timerController module
-require.cache[require.resolve('../shared/TimerController')] = {
-  exports: { timerController: mockTimers, TimerController: class {} }
+require.cache[timerModulePath] = {
+  id: timerModulePath,
+  filename: timerModulePath,
+  loaded: true,
+  exports: { timerController: mockTimers, TimerController: MockTimerController }
 };
 
 const SessionStore = require('../server/SessionStore');
 
 describe('SessionStore', function() {
   let store;
+
+  // Restore real TimerController module after all tests so other test files aren't affected
+  after(function() {
+    if (realTimerModule) {
+      require.cache[timerModulePath] = realTimerModule;
+    } else {
+      delete require.cache[timerModulePath];
+    }
+  });
 
   beforeEach(function() {
     mockTimers.reset();
@@ -377,9 +431,11 @@ describe('SessionStore', function() {
 
   describe('Cleanup', function() {
     it('starts cleanup timer on construction', function() {
+      // Create a fresh store and verify it registered a cleanup timer
+      mockTimers.reset();
+      const freshStore = new SessionStore({ cleanupInterval: 60000 });
       expect(mockTimers.timers.size).to.be.at.least(1);
 
-      // Find the cleanup timer
       let hasCleanupTimer = false;
       for (const timer of mockTimers.timers.values()) {
         if (timer.name === 'session-cleanup') {
@@ -388,11 +444,15 @@ describe('SessionStore', function() {
         }
       }
       expect(hasCleanupTimer).to.be.true;
+      freshStore.shutdown();
     });
 
     it('clears timer on shutdown', function() {
+      mockTimers.reset();
+      const freshStore = new SessionStore({ cleanupInterval: 60000 });
       const initialCount = mockTimers.timers.size;
-      store.shutdown();
+      expect(initialCount).to.be.at.least(1);
+      freshStore.shutdown();
       expect(mockTimers.timers.size).to.be.lessThan(initialCount);
     });
   });
