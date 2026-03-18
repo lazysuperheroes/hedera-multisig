@@ -122,26 +122,22 @@ export default function HistoryPage() {
   // ------------------------------------------------------------------
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-4 sm:p-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
-      <div className="max-w-5xl w-full space-y-6 py-4">
+    <main className="min-h-screen p-4 sm:p-8 bg-[var(--background)]">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="text-center space-y-2">
-          <Link
-            href="/"
-            className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
-          >
-            &larr; Back to Home
-          </Link>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
+        <div className="mb-6">
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white">
             Transaction History
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
             Locally stored transactions this browser participated in.
           </p>
         </div>
 
+        <div className="space-y-6">
+
         {/* Controls row */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
           {/* Status filter */}
           <div className="flex items-center gap-2">
             <label
@@ -263,7 +259,7 @@ export default function HistoryPage() {
 
         {/* Table / empty state */}
         {filtered.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-12 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
             <svg
               className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600 mb-4"
               fill="none"
@@ -293,10 +289,11 @@ export default function HistoryPage() {
             </Link>
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
             {/* Scrollable table wrapper */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
+                <caption className="sr-only">Transaction history</caption>
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                     <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">
@@ -414,26 +411,29 @@ export default function HistoryPage() {
           </div>
         )}
 
-        {/* Info box */}
-        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">
-            About Transaction History
-          </h3>
-          <ul className="list-disc list-inside space-y-1 text-sm text-blue-800 dark:text-blue-300">
-            <li>
-              History is stored in your browser&apos;s localStorage and never
-              sent to any server.
-            </li>
-            <li>
-              Only transactions created or signed from this browser are recorded.
-            </li>
-            <li>
-              Clearing your browser data will remove this history permanently.
-            </li>
-            <li>
-              Use &quot;Export CSV&quot; to save a copy before clearing.
-            </li>
-          </ul>
+        {/* Info — lighter treatment, separated from main content */}
+        <div className="mt-6 border-t border-gray-200 dark:border-gray-800 pt-6">
+          <details className="text-sm text-gray-600 dark:text-gray-400">
+            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300">
+              About Transaction History
+            </summary>
+            <ul className="list-disc list-inside space-y-1 mt-3">
+              <li>
+                History is stored in your browser&apos;s localStorage and never
+                sent to any server.
+              </li>
+              <li>
+                Only transactions created or signed from this browser are recorded.
+              </li>
+              <li>
+                Clearing your browser data will remove this history permanently.
+              </li>
+              <li>
+                Use &quot;Export CSV&quot; to save a copy before clearing.
+              </li>
+            </ul>
+          </details>
+        </div>
         </div>
       </div>
     </main>

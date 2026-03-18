@@ -212,6 +212,9 @@ See the [January 2026 8-agent analysis](#) for detailed architectural proposal.
 | BACKLOG-05 | Governance module | On-chain proposal voting |
 | BACKLOG-06 | Protocol versioning | Version negotiation in AUTH |
 | BACKLOG-07 | Pluggable audit sink | File, database, external service |
+| BACKLOG-08 | First-time user onboarding | Tooltip hints on the session page for new participants (e.g. "Your wallet will ask you to approve a signature"). Reduces confusion for users unfamiliar with multi-sig signing flows. |
+| BACKLOG-09 | Dedicated documentation site | Deploy GETTING_STARTED.md, TREASURY_GUIDE.md, and COORDINATOR_GUIDE.md as a proper docs site. The footer "Docs" link currently points to the GitHub README. |
+| BACKLOG-10 | Transaction builder preview | Show coordinators what the frozen transaction will look like before injecting. An expandable preview or confirmation step in the create page's build flow. Reduces injection anxiety. |
 
 ## Explicitly Not Planned
 

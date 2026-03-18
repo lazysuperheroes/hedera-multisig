@@ -3,6 +3,7 @@
  *
  * Top navigation with wallet connection controls
  * Shows: Connect button (disconnected) or Account info (connected)
+ * Mobile: hamburger menu for navigation links
  */
 
 'use client';
@@ -16,14 +17,13 @@ import { ThemeToggle } from './ThemeToggle';
 export function NavBar() {
   const { accountId, publicKey, publicKeyType, evmAddress, balance, isConnected, isConnecting, connect, disconnect } = useWallet();
   const [showWalletDialog, setShowWalletDialog] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleConnectClick = async () => {
     if (isConnected) {
-      // Disconnect
       await disconnect();
     } else {
-      // Show wallet selection dialog
       setShowWalletDialog(true);
     }
   };
@@ -44,19 +44,22 @@ export function NavBar() {
 
   const network = process.env.NEXT_PUBLIC_DEFAULT_NETWORK || 'testnet';
 
+  const navLinkClass = "px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors";
+
   return (
     <>
       <nav className="sticky top-0 left-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
+          <div className="flex justify-between items-center h-16 sm:h-20">
             {/* Logo / Brand */}
-            <Link href="/" className="flex items-center space-x-3">
+            <Link href="/" className="flex items-center space-x-3" onClick={() => setShowMobileMenu(false)}>
               <div className="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
                 <svg
                   className="w-6 h-6 text-white"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -85,29 +88,24 @@ export function NavBar() {
               </div>
             </Link>
 
-            {/* Navigation Links */}
+            {/* Desktop Navigation Links */}
             <div className="hidden sm:flex items-center gap-1">
-              <Link
-                href="/join"
-                className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-              >
+              <Link href="/join" className={navLinkClass}>
                 Join
               </Link>
-              <Link
-                href="/create"
-                className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                Coordinator
+              <Link href="/create" className={navLinkClass}>
+                Create
               </Link>
               <Link
                 href="/history"
-                className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-1.5"
+                className={`${navLinkClass} flex items-center gap-1.5`}
               >
                 <svg
                   className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -120,8 +118,8 @@ export function NavBar() {
               </Link>
             </div>
 
-            {/* Right Side: Theme Toggle + Wallet Info + Connect Button */}
-            <div className="flex items-center gap-4">
+            {/* Right Side: Theme Toggle + Wallet Info + Connect Button + Mobile Menu */}
+            <div className="flex items-center gap-3 sm:gap-4">
               {/* Theme Toggle */}
               <ThemeToggle />
 
@@ -144,6 +142,7 @@ export function NavBar() {
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
+                      aria-hidden="true"
                     >
                       <path
                         strokeLinecap="round"
@@ -154,7 +153,6 @@ export function NavBar() {
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0 space-y-1.5">
-                    {/* Top Row: Account ID, Key Type, Balance */}
                     <div className="flex items-center gap-3 flex-wrap">
                       <div className="text-sm font-mono font-semibold text-gray-900 dark:text-white">
                         {accountId}
@@ -165,12 +163,11 @@ export function NavBar() {
                         </div>
                       )}
                       {balance && (
-                        <div className="text-sm text-green-600 dark:text-green-400 font-semibold">
+                        <div className="text-sm text-green-600 dark:text-green-400 font-semibold tabular-nums">
                           {balance}
                         </div>
                       )}
                     </div>
-                    {/* Bottom Row: Public Key and EVM Address */}
                     <div className="flex items-center gap-3 text-xs">
                       {publicKey && (
                         <div className="font-mono text-gray-600 dark:text-gray-400 truncate" title={publicKey}>
@@ -192,17 +189,17 @@ export function NavBar() {
                     >
                       {copied ? (
                         <>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                           Copied!
                         </>
                       ) : (
                         <>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                           </svg>
-                          Copy Public Key
+                          Copy Key
                         </>
                       )}
                     </button>
@@ -215,13 +212,85 @@ export function NavBar() {
                 onClick={handleConnectClick}
                 disabled={isConnecting}
                 className={`
-                  px-4 py-2 rounded-lg font-medium transition-colors
+                  hidden sm:flex px-4 py-2 rounded-lg font-medium transition-colors
                   ${isConnected
                     ? 'bg-red-600 hover:bg-red-700 text-white'
                     : 'bg-blue-600 hover:bg-blue-700 text-white'
                   }
                   disabled:opacity-50 disabled:cursor-not-allowed
-                  flex items-center gap-2
+                  items-center gap-2
+                `}
+              >
+                {isConnecting && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                )}
+                {getButtonText()}
+              </button>
+
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+                className="sm:hidden p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+                aria-expanded={showMobileMenu}
+              >
+                {showMobileMenu ? (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Menu Panel */}
+        {showMobileMenu && (
+          <div className="sm:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 animate-slide-down">
+            <div className="px-4 py-3 space-y-1">
+              <Link
+                href="/join"
+                onClick={() => setShowMobileMenu(false)}
+                className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                Join Session
+              </Link>
+              <Link
+                href="/create"
+                onClick={() => setShowMobileMenu(false)}
+                className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                Create Session
+              </Link>
+              <Link
+                href="/history"
+                onClick={() => setShowMobileMenu(false)}
+                className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                History
+              </Link>
+            </div>
+
+            {/* Mobile Connect/Disconnect */}
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => {
+                  handleConnectClick();
+                  setShowMobileMenu(false);
+                }}
+                disabled={isConnecting}
+                className={`
+                  w-full px-4 py-3 rounded-lg font-medium transition-colors
+                  ${isConnected
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  flex items-center justify-center gap-2
                 `}
               >
                 {isConnecting && (
@@ -231,7 +300,7 @@ export function NavBar() {
               </button>
             </div>
           </div>
-        </div>
+        )}
       </nav>
 
       {/* Wallet Selection Dialog */}

@@ -32,12 +32,19 @@ export function SignatureProgress({
       {/* Progress Bar */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 tabular-nums">
             {signaturesCollected} / {signaturesRequired} signatures
           </span>
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{Math.round(progress)}%</span>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 tabular-nums">{Math.round(progress)}%</span>
         </div>
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
+        <div
+          className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden"
+          role="progressbar"
+          aria-valuenow={signaturesCollected}
+          aria-valuemin={0}
+          aria-valuemax={signaturesRequired}
+          aria-label={`${signaturesCollected} of ${signaturesRequired} signatures collected`}
+        >
           <div
             className={`h-full rounded-full transition-all duration-500 ${
               isComplete ? 'bg-green-500' : 'bg-blue-500'
@@ -51,7 +58,7 @@ export function SignatureProgress({
       {isComplete ? (
         <div className="bg-green-50 dark:bg-green-900/30 border-2 border-green-500 rounded p-4 mb-4">
           <div className="flex items-center space-x-3">
-            <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             <div>
@@ -66,7 +73,7 @@ export function SignatureProgress({
         <div className="bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-700 rounded p-4 mb-4">
           <div className="flex items-center space-x-3">
             <div className="animate-pulse">
-              <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -108,7 +115,7 @@ export function SignatureProgress({
                 key={index}
                 className="flex items-center space-x-1 px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded text-xs"
               >
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path
                     fillRule="evenodd"
                     d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
@@ -123,7 +130,7 @@ export function SignatureProgress({
                 key={`pending-${index}`}
                 className="flex items-center space-x-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-400 rounded text-xs"
               >
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path
                     fillRule="evenodd"
                     d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z"
