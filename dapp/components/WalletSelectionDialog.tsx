@@ -11,6 +11,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import { QRCodeSVG } from 'qrcode.react';
+import { Icon } from './Icon';
 
 export interface WalletSelectionDialogProps {
   open: boolean;
@@ -201,18 +202,16 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
           ) : extensions.length === 0 ? (
             // Desktop: No extensions found - show manual refresh and WalletConnect
             <>
-              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-3">
+              <div className="p-4 bg-warning-soft border border-warning/40 rounded-md">
+                <p className="text-sm text-warning-soft-fg mb-3">
                   No wallet extensions detected. Make sure your wallet extension is installed and unlocked.
                 </p>
                 <button
                   onClick={() => refreshExtensions()}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors text-sm"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-warning hover:opacity-90 text-accent-fg rounded-md transition-opacity text-sm"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Refresh Extensions
+                  <Icon name="refresh" size={16} />
+                  Refresh extensions
                 </button>
               </div>
 

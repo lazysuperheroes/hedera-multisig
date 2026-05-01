@@ -1,180 +1,174 @@
 import Link from 'next/link';
+import { Footer } from '../components/Footer';
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[var(--background)]">
-      {/* Hero — left-aligned, CTAs above fold */}
+    <main className="min-h-screen bg-background">
+      {/* Hero — left-aligned, CTAs above fold. No accent-color span;
+          the headline carries on its own. */}
       <section className="max-w-6xl mx-auto px-6 pt-16 pb-12 sm:pt-24 sm:pb-20">
         <div className="max-w-3xl">
-          <h1 className="animate-slide-up text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-gray-900 dark:text-white leading-[1.08]">
+          <h1 className="animate-slide-up font-heading text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.05]">
             Multi-sig that
             <br />
             survives time zones
             <br />
-            <span className="text-blue-600 dark:text-blue-400">on Hedera</span>
+            on Hedera.
           </h1>
-          <p className="animate-slide-up delay-100 mt-6 text-lg sm:text-xl text-gray-600 dark:text-gray-400 max-w-xl leading-relaxed">
-            Approve Tuesday, sign Wednesday from London, network executes when
-            the threshold is met — up to 62 days later. Threshold signatures,
-            agent automation, scheduled async signing.
+          <p className="animate-slide-up delay-100 mt-6 text-lg sm:text-xl text-foreground-muted max-w-xl leading-relaxed">
+            Approve Tuesday, sign Wednesday from London, network executes
+            when the threshold is met — up to 62 days later. Threshold
+            signatures, agent automation, scheduled async signing.
             Private keys never leave your device.
           </p>
 
-          {/* Primary CTAs — above the fold, with role hint */}
+          {/* Primary CTAs */}
           <div className="animate-slide-up delay-200 mt-10 space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Link
                 href="/join"
-                className="inline-flex items-center justify-center px-8 py-4 text-lg font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                className="
+                  inline-flex items-center justify-center px-7 py-3.5 text-base font-semibold
+                  bg-accent text-accent-fg rounded-md
+                  hover:bg-accent-hover transition-colors
+                "
               >
                 Join Signing Session
               </Link>
               <Link
                 href="/create"
-                className="inline-flex items-center justify-center px-8 py-4 text-lg font-semibold border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                className="
+                  inline-flex items-center justify-center px-7 py-3.5 text-base font-semibold
+                  text-foreground border border-border-strong rounded-md
+                  hover:bg-surface-recessed transition-colors
+                "
               >
                 Create Session
               </Link>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-foreground-subtle">
               Participants join to sign. Coordinators create sessions and build transactions.
             </p>
           </div>
 
-          {/* Hosted-vs-self-host clarity (Phase B7) — small reassurance for first-timers */}
-          <div className="animate-slide-up delay-300 mt-8 max-w-2xl rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-4 text-sm text-gray-600 dark:text-gray-400">
-            <p className="font-medium text-gray-900 dark:text-gray-200 mb-1">
-              How this works
-            </p>
-            <p className="leading-relaxed">
-              We host the user interface; <strong className="text-gray-900 dark:text-gray-200">you (or a teammate) host the coordinator</strong> via{' '}
-              <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">npx hedera-multisig server</code>.
-              The dApp connects to that coordinator URL — Vercel never sees your transactions.{' '}
-              <Link href="/learn" className="text-blue-600 dark:text-blue-400 hover:underline">
-                New here? Try the walkthrough →
-              </Link>
-            </p>
+          {/* "How this works" — flat callout, not a bordered card */}
+          <div className="animate-slide-up delay-300 mt-10 max-w-2xl border-l-2 border-accent/30 pl-5 py-1 text-sm text-foreground-muted leading-relaxed">
+            <span className="font-semibold text-foreground">How this works.</span>{' '}
+            We host the user interface;{' '}
+            <strong className="text-foreground">you (or a teammate) host the coordinator</strong>{' '}
+            via{' '}
+            <code className="text-xs font-mono bg-surface-recessed px-1.5 py-0.5 rounded">
+              npx hedera-multisig server
+            </code>
+            . The dApp connects to that coordinator URL — Vercel never sees your transactions.{' '}
+            <Link href="/learn" className="text-accent hover:underline whitespace-nowrap">
+              New here? Try the walkthrough →
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* Use Cases — featured primary + two supporting */}
-      <section className="border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
-        <div className="max-w-6xl mx-auto px-6 py-16 sm:py-20">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-500 mb-10">
+      {/* Use cases — asymmetric: primary takes 3 cols, supporting 2,
+          and the supporting two have intentionally different visual weights. */}
+      <section className="border-t border-border bg-surface-recessed/40">
+        <div className="max-w-6xl mx-auto px-6 py-16 sm:py-24">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-12">
             Use cases
-          </h2>
+          </p>
 
-          {/* Primary use case — larger, full width */}
-          <div className="mb-12">
-            <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-3">
-              Treasury Management
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 leading-relaxed max-w-2xl">
-              Move HBAR, tokens, and NFTs with multi-party approval. Smart contract calls with ABI verification.
-              The most common use case for teams managing shared accounts.
-            </p>
-          </div>
-
-          {/* Supporting use cases — smaller, side by side */}
-          <div className="grid sm:grid-cols-2 gap-x-12 gap-y-8">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                Agent Signing
+          <div className="grid lg:grid-cols-5 gap-y-12 lg:gap-x-16">
+            {/* Primary — large, full breath. Treasury is the dominant case. */}
+            <div className="lg:col-span-3 max-w-2xl">
+              <h3 className="font-heading text-2xl sm:text-3xl font-bold text-foreground mb-3 tracking-tight">
+                Treasury management
               </h3>
-              <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-                Automated agents with composable policy rules. Amount limits, recipient allowlists, time windows.
+              <p className="text-foreground-muted leading-relaxed">
+                Move HBAR, tokens, and NFTs with multi-party approval. Smart-contract
+                calls with ABI verification. The most common use case for teams
+                managing shared accounts.
               </p>
+              <Link
+                href="/learn"
+                className="mt-4 inline-flex text-sm font-medium text-accent hover:underline"
+              >
+                See the HBAR walkthrough →
+              </Link>
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                Scheduled Transactions
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-                Async signing over hours, days, or up to ~62 days (HIP-423). No 120-second pressure for cross-timezone teams.
-              </p>
+
+            {/* Supporting — smaller, stacked vertically (not side-by-side
+                cards), with different rhythms. Breaks the "identical card grid". */}
+            <div className="lg:col-span-2 space-y-10">
+              <div>
+                <h3 className="font-heading text-lg font-bold text-foreground mb-2">
+                  Agent signing
+                </h3>
+                <p className="text-foreground-muted leading-relaxed text-sm">
+                  Automated agents with composable policy rules. Amount limits,
+                  recipient allowlists, time windows.
+                </p>
+              </div>
+              <div className="border-t border-border pt-10">
+                <h3 className="font-heading text-lg font-bold text-foreground mb-2">
+                  Scheduled transactions
+                </h3>
+                <p className="text-foreground-muted leading-relaxed text-sm">
+                  Async signing over hours, days, or up to ~62 days (HIP-423).
+                  No 120-second pressure for cross-timezone teams.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Security Model — hidden on mobile (most mobile users arrive via /join link, not landing page) */}
-      <section className="hidden sm:block border-t border-gray-200 dark:border-gray-800">
+      {/* Security model — asymmetric pull-quote layout, kept (it works).
+          Hidden on mobile (most mobile users arrive via /join link). */}
+      <section className="hidden sm:block border-t border-border">
         <div className="max-w-6xl mx-auto px-6 py-16 sm:py-24">
           <div className="grid lg:grid-cols-5 gap-12 lg:gap-16">
             <div className="lg:col-span-3">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-500 mb-10">
-                Security Model
-              </h2>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-10">
+                Security model
+              </p>
               <dl className="space-y-8">
-                <div>
-                  <dt className="text-lg font-bold text-gray-900 dark:text-white">Keys stay local</dt>
-                  <dd className="mt-1.5 text-gray-600 dark:text-gray-400 leading-relaxed">
-                    Private keys are never transmitted. Only frozen transactions and signatures flow over the network.
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-lg font-bold text-gray-900 dark:text-white">Verified data separation</dt>
-                  <dd className="mt-1.5 text-gray-600 dark:text-gray-400 leading-relaxed">
-                    You always see what the transaction actually does, clearly separated from what the coordinator claims it does.
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-lg font-bold text-gray-900 dark:text-white">Mixed sessions</dt>
-                  <dd className="mt-1.5 text-gray-600 dark:text-gray-400 leading-relaxed">
-                    CLI tools, browser wallets, and automated agents can join the same signing session.
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-lg font-bold text-gray-900 dark:text-white">Real-time coordination</dt>
-                  <dd className="mt-1.5 text-gray-600 dark:text-gray-400 leading-relaxed">
-                    Live sessions with automatic reconnection, so participants can sign together without manual coordination.
-                  </dd>
-                </div>
+                <SecurityPrinciple
+                  title="Keys stay local"
+                  body="Private keys are never transmitted. Only frozen transactions and signatures flow over the network."
+                />
+                <SecurityPrinciple
+                  title="Verified data separation"
+                  body="You always see what the transaction actually does, clearly separated from what the coordinator claims it does."
+                />
+                <SecurityPrinciple
+                  title="Mixed sessions"
+                  body="CLI tools, browser wallets, and automated agents can join the same signing session."
+                />
+                <SecurityPrinciple
+                  title="Real-time coordination"
+                  body="Live sessions with automatic reconnection, so participants can sign together without manual coordination."
+                />
               </dl>
             </div>
             <div className="hidden lg:flex lg:col-span-2 items-center">
-              <blockquote className="text-3xl xl:text-4xl font-bold leading-tight tracking-tight text-gray-900 dark:text-white">
+              <blockquote className="font-heading text-3xl xl:text-4xl font-bold leading-[1.15] tracking-tight text-foreground">
                 The server coordinates signing
-                <span className="text-green-600 dark:text-green-400"> without ever seeing your private keys.</span>
+                <span className="text-success"> without ever seeing your private keys.</span>
               </blockquote>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Footer — compact, functional */}
-      <footer className="border-t border-gray-200 dark:border-gray-800">
-        <div className="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500 dark:text-gray-400">
-          <p>Open source multi-sig tooling for the Hedera ecosystem.</p>
-          <div className="flex items-center gap-6">
-            <a
-              href="https://github.com/lazysuperheroes/hedera-multisig#readme"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline decoration-gray-300 dark:decoration-gray-600 hover:text-gray-900 dark:hover:text-white hover:decoration-gray-500 transition-colors"
-            >
-              Docs
-            </a>
-            <a
-              href="https://github.com/lazysuperheroes/hedera-multisig"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline decoration-gray-300 dark:decoration-gray-600 hover:text-gray-900 dark:hover:text-white hover:decoration-gray-500 transition-colors"
-            >
-              GitHub
-            </a>
-            <a
-              href="https://www.npmjs.com/package/@lazysuperheroes/hedera-multisig"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline decoration-gray-300 dark:decoration-gray-600 hover:text-gray-900 dark:hover:text-white hover:decoration-gray-500 transition-colors"
-            >
-              npm
-            </a>
-          </div>
-        </div>
-      </footer>
+      <Footer variant="full" />
     </main>
+  );
+}
+
+function SecurityPrinciple({ title, body }: { title: string; body: string }) {
+  return (
+    <div>
+      <dt className="font-heading text-lg font-bold text-foreground">{title}</dt>
+      <dd className="mt-1.5 text-foreground-muted leading-relaxed">{body}</dd>
+    </div>
   );
 }

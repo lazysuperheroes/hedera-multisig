@@ -67,24 +67,24 @@ export function SessionCountdown({ expiresAt, onExpired }: SessionCountdownProps
 
   const styles = {
     normal: {
-      container: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
-      icon: 'text-gray-500 dark:text-gray-400',
-      time: 'text-gray-800 dark:text-gray-200',
+      container: 'bg-surface-recessed text-foreground-muted',
+      icon: 'text-foreground-subtle',
+      time: 'text-foreground',
     },
     warning: {
-      container: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200',
-      icon: 'text-yellow-600 dark:text-yellow-400',
-      time: 'text-yellow-900 dark:text-yellow-200',
+      container: 'bg-warning-soft text-warning-soft-fg',
+      icon: 'text-warning',
+      time: 'text-warning-soft-fg',
     },
     critical: {
-      container: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 animate-pulse',
-      icon: 'text-red-600 dark:text-red-400',
-      time: 'text-red-900 dark:text-red-200',
+      container: 'bg-destructive-soft text-destructive-soft-fg animate-pulse',
+      icon: 'text-destructive',
+      time: 'text-destructive-soft-fg',
     },
     expired: {
-      container: 'bg-red-200 dark:bg-red-900/40 text-red-900 dark:text-red-200',
-      icon: 'text-red-700 dark:text-red-400',
-      time: 'text-red-900 dark:text-red-200',
+      container: 'bg-destructive-soft text-destructive-soft-fg',
+      icon: 'text-destructive',
+      time: 'text-destructive-soft-fg',
     },
   };
 

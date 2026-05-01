@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useTxHistory, TxHistoryEntry } from '../../hooks/useTxHistory';
 import { CopyButton } from '../../components/CopyButton';
+import { Footer } from '../../components/Footer';
 import { getHashScanTransactionUrl } from '../../lib/mirror-node';
 
 // ---------------------------------------------------------------------------
@@ -70,11 +71,11 @@ function txTypeLabel(raw: string): string {
 function StatusBadge({ status }: { status: TxHistoryEntry['status'] }) {
   const classes: Record<TxHistoryEntry['status'], string> = {
     SUCCESS:
-      'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border border-green-300 dark:border-green-700',
+      'bg-success-soft text-success-soft-fg border border-success/40',
     FAILURE:
-      'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border border-red-300 dark:border-red-700',
+      'bg-destructive-soft text-destructive-soft-fg border border-destructive/40',
     PENDING:
-      'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700',
+      'bg-warning-soft text-warning-soft-fg border border-warning/40',
   };
 
   return (
@@ -122,26 +123,21 @@ export default function HistoryPage() {
   // ------------------------------------------------------------------
 
   return (
-    <main className="min-h-screen p-4 sm:p-8 bg-[var(--background)]">
+    <main className="min-h-screen p-4 sm:p-8 bg-background">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white">
-            Transaction History
+          <h1 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+            Transaction history
           </h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-foreground-muted">
             Transactions this browser participated in.
           </p>
           {/* Phase C16: prevent the "where did my history go?" surprise on a different
               browser/device. Browser-local storage is the design choice (decentralized
               philosophy) but it needs to be explicit. */}
-          <div className="mt-3 inline-flex items-start gap-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-200">
-            <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>
-              <strong>Stored in this browser only.</strong> Switching devices, clearing site data, or using private browsing will reset this list. Use the CSV export below to keep a record.
-            </span>
+          <div className="mt-4 border-l-2 border-info/60 bg-info-soft/60 pl-4 py-2 text-xs text-info-soft-fg max-w-2xl">
+            <strong>Stored in this browser only.</strong> Switching devices, clearing site data, or using private browsing will reset this list. Use the CSV export below to keep a record.
           </div>
         </div>
 
@@ -447,6 +443,7 @@ export default function HistoryPage() {
         </div>
         </div>
       </div>
+      <Footer variant="compact" />
     </main>
   );
 }

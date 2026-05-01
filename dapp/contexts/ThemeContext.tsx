@@ -2,93 +2,125 @@
 
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 
-// Exported types for external use
 export type Theme = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
+
+/**
+ * Register controls the entire aesthetic register, not just colors:
+ *  - "treasury" — calm/precise/trustworthy. Heebo + Unbounded. Light-default.
+ *  - "dev"      — sharp/technical/confident. Geist + acid-lime accent. Dark-only.
+ *
+ * The register switch is the differentiator — it swaps tokens, fonts,
+ * and motion budget. Dev register forces dark resolved-theme regardless of
+ * the user's light/dark setting.
+ */
+export type Register = 'treasury' | 'dev';
 
 export interface ThemeContextType {
   theme: Theme;
   resolvedTheme: ResolvedTheme;
   setTheme: (theme: Theme) => void;
+  register: Register;
+  setRegister: (register: Register) => void;
 }
 
-// Type guard for localStorage validation
 const isValidTheme = (value: string | null): value is Theme =>
   value === 'light' || value === 'dark' || value === 'system';
+
+const isValidRegister = (value: string | null): value is Register =>
+  value === 'treasury' || value === 'dev';
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('system');
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light');
+  const [register, setRegisterState] = useState<Register>('treasury');
   const [mounted, setMounted] = useState(false);
 
-  // Track theme with ref for event listener (avoids stale closure)
   const themeRef = useRef<Theme>(theme);
-  useEffect(() => {
-    themeRef.current = theme;
-  }, [theme]);
+  const registerRef = useRef<Register>(register);
+  useEffect(() => { themeRef.current = theme; }, [theme]);
+  useEffect(() => { registerRef.current = register; }, [register]);
 
-  // Get system preference
   const getSystemTheme = (): ResolvedTheme => {
     if (typeof window === 'undefined') return 'light';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   };
 
-  // Resolve theme based on setting
-  const resolveTheme = (themeSetting: Theme): ResolvedTheme => {
-    if (themeSetting === 'system') {
-      return getSystemTheme();
-    }
+  const resolveTheme = (themeSetting: Theme, reg: Register): ResolvedTheme => {
+    // Dev register forces dark — terminal/punk has no light variant
+    if (reg === 'dev') return 'dark';
+    if (themeSetting === 'system') return getSystemTheme();
     return themeSetting;
   };
 
-  // Apply theme to document
-  const applyTheme = (resolved: ResolvedTheme) => {
+  const applyState = (resolved: ResolvedTheme, reg: Register) => {
     const root = document.documentElement;
     root.classList.remove('light', 'dark');
     root.classList.add(resolved);
+    root.setAttribute('data-register', reg);
     setResolvedTheme(resolved);
   };
 
-  // Set theme and persist
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem('theme', newTheme);
-    applyTheme(resolveTheme(newTheme));
+    try { localStorage.setItem('theme', newTheme); } catch {}
+    applyState(resolveTheme(newTheme, registerRef.current), registerRef.current);
   };
 
-  // Initialize on mount
+  const setRegister = (newRegister: Register) => {
+    setRegisterState(newRegister);
+    try { localStorage.setItem('register', newRegister); } catch {}
+    applyState(resolveTheme(themeRef.current, newRegister), newRegister);
+  };
+
   useEffect(() => {
-    const stored = localStorage.getItem('theme');
-    const initialTheme: Theme = isValidTheme(stored) ? stored : 'system';
+    let storedTheme: string | null = null;
+    let storedRegister: string | null = null;
+    try {
+      storedTheme = localStorage.getItem('theme');
+      storedRegister = localStorage.getItem('register');
+    } catch {}
+
+    const initialTheme: Theme = isValidTheme(storedTheme) ? storedTheme : 'system';
+    const initialRegister: Register = isValidRegister(storedRegister) ? storedRegister : 'treasury';
+
+    // Hydration setState: this is the canonical "synchronize state with an
+    // external system" pattern (localStorage + window.matchMedia, neither of
+    // which exist on the server). Single render after mount, then steady-state.
     setThemeState(initialTheme);
+    setRegisterState(initialRegister);
     themeRef.current = initialTheme;
-    applyTheme(resolveTheme(initialTheme));
+    registerRef.current = initialRegister;
+    applyState(resolveTheme(initialTheme, initialRegister), initialRegister);
     setMounted(true);
 
-    // Listen for system preference changes (uses ref to avoid stale closure)
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
-      if (themeRef.current === 'system') {
-        applyTheme(getSystemTheme());
+      if (themeRef.current === 'system' && registerRef.current === 'treasury') {
+        applyState(getSystemTheme(), registerRef.current);
       }
     };
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
+    // resolveTheme + applyState are stable closures over refs; safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Prevent hydration mismatch
   if (!mounted) {
     return (
-      <ThemeContext.Provider value={{ theme: 'system', resolvedTheme: 'light', setTheme }}>
+      <ThemeContext.Provider value={{
+        theme: 'system', resolvedTheme: 'light', setTheme,
+        register: 'treasury', setRegister,
+      }}>
         {children}
       </ThemeContext.Provider>
     );
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme, register, setRegister }}>
       {children}
     </ThemeContext.Provider>
   );

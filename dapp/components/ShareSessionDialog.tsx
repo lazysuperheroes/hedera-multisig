@@ -191,7 +191,7 @@ export function ShareSessionDialog({
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm text-gray-600 dark:text-gray-400 min-w-[80px]">PIN:</span>
                     <div className="flex-1 flex items-center gap-2 justify-end">
-                      <code className="text-sm font-mono bg-yellow-100 dark:bg-yellow-900/30 px-2 py-1 rounded font-bold text-yellow-800 dark:text-yellow-200">
+                      <code className="text-sm font-mono bg-warning-soft px-2 py-1 rounded font-bold text-warning-soft-fg">
                         {pin}
                       </code>
                       <CopyButton text={pin} label="PIN" size="sm" />

@@ -18,6 +18,7 @@ import {
   MetadataValidation,
   ExtractedAmount,
 } from '../lib/transaction-decoder';
+import { Icon } from './Icon';
 
 export interface TransactionReviewProps {
   frozenTransactionBase64: string;
@@ -253,26 +254,28 @@ export function TransactionReview({
 
       {/* Countdown Timer */}
       {secondsRemaining !== null && !isExpired && (
-        <div className={`border-2 rounded-lg p-3 ${
-          secondsRemaining <= 30 ? 'bg-red-50 dark:bg-red-950/30 border-red-400 dark:border-red-700' :
-          secondsRemaining <= 60 ? 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-400 dark:border-yellow-700' :
-          'bg-blue-50 dark:bg-blue-950/30 border-blue-400 dark:border-blue-700'
+        <div className={`border-l-2 rounded-md p-3 ${
+          secondsRemaining <= 30 ? 'bg-destructive-soft border-destructive' :
+          secondsRemaining <= 60 ? 'bg-warning-soft border-warning' :
+          'bg-info-soft border-info'
         }`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <svg className={`w-5 h-5 ${secondsRemaining <= 30 ? 'text-red-600 dark:text-red-400' : secondsRemaining <= 60 ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className={`font-semibold ${secondsRemaining <= 30 ? 'text-red-800 dark:text-red-200' : secondsRemaining <= 60 ? 'text-yellow-800 dark:text-yellow-200' : 'text-blue-800 dark:text-blue-200'}`}>
+              <Icon
+                name="schedule"
+                size={20}
+                className={secondsRemaining <= 30 ? 'text-destructive' : secondsRemaining <= 60 ? 'text-warning' : 'text-info'}
+              />
+              <span className={`font-semibold ${secondsRemaining <= 30 ? 'text-destructive-soft-fg' : secondsRemaining <= 60 ? 'text-warning-soft-fg' : 'text-info-soft-fg'}`}>
                 Time to Sign
               </span>
             </div>
-            <span className={`font-mono font-bold text-lg tabular-nums ${secondsRemaining <= 30 ? 'text-red-700 dark:text-red-300' : secondsRemaining <= 60 ? 'text-yellow-700 dark:text-yellow-300' : 'text-blue-700 dark:text-blue-300'}`}>
+            <span className={`font-mono font-bold text-lg tabular-nums ${secondsRemaining <= 30 ? 'text-destructive-soft-fg' : secondsRemaining <= 60 ? 'text-warning-soft-fg' : 'text-info-soft-fg'}`}>
               {formatTimeRemaining(secondsRemaining)}
             </span>
           </div>
           <div
-            className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"
+            className="w-full bg-surface-recessed rounded-full h-2"
             role="progressbar"
             aria-valuenow={secondsRemaining}
             aria-valuemin={0}
@@ -281,9 +284,9 @@ export function TransactionReview({
           >
             <div
               className={`h-2 rounded-full transition-all duration-1000 ${
-                secondsRemaining <= 30 ? 'bg-red-500' :
-                secondsRemaining <= 60 ? 'bg-yellow-500' :
-                'bg-blue-500'
+                secondsRemaining <= 30 ? 'bg-destructive' :
+                secondsRemaining <= 60 ? 'bg-warning' :
+                'bg-info'
               }`}
               style={{ width: `${100 - progressPercent}%` }}
             />
@@ -400,7 +403,7 @@ export function TransactionReview({
                   </span>
                 )
               ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-warning-soft text-warning-soft-fg border border-warning/40">
                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
@@ -447,22 +450,22 @@ export function TransactionReview({
                   technically-savvy participant can verify against 4byte.directory or
                   an expected value. Better than showing nothing. */}
               {!decoded.details.functionName && decoded.details.functionSelector && (
-                <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-200 dark:border-yellow-800">
-                  <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
+                <div className="mt-3 p-3 bg-warning-soft rounded-md border border-warning/40">
+                  <p className="text-xs font-semibold text-warning-soft-fg mb-2">
                     No ABI provided — function name and arguments cannot be decoded.
                   </p>
-                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mb-2">
+                  <p className="text-xs text-warning-soft-fg mb-2">
                     Verify the selector below matches the function you expect (look it up at <a href="https://www.4byte.directory" target="_blank" rel="noopener noreferrer" className="underline">4byte.directory</a> or compare against the contract source).
                   </p>
                   <div className="space-y-1 text-xs">
                     <div className="flex gap-2">
-                      <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">Selector:</span>
-                      <span className="font-mono break-all text-gray-800 dark:text-gray-200">{decoded.details.functionSelector}</span>
+                      <span className="text-foreground-subtle flex-shrink-0">Selector:</span>
+                      <span className="font-mono break-all text-foreground">{decoded.details.functionSelector}</span>
                     </div>
                     {decoded.details.encodedCalldata && decoded.details.encodedCalldata.length > 10 && (
                       <details>
-                        <summary className="cursor-pointer text-gray-500 dark:text-gray-400 text-xs">Show full calldata ({(decoded.details.encodedCalldata.length - 10) / 2} bytes of args)</summary>
-                        <div className="mt-1 font-mono break-all text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 p-2 rounded border border-yellow-200 dark:border-yellow-800">
+                        <summary className="cursor-pointer text-foreground-subtle text-xs">Show full calldata ({(decoded.details.encodedCalldata.length - 10) / 2} bytes of args)</summary>
+                        <div className="mt-1 font-mono break-all text-foreground-muted bg-surface p-2 rounded-md border border-warning/40">
                           {decoded.details.encodedCalldata}
                         </div>
                       </details>
@@ -476,16 +479,16 @@ export function TransactionReview({
 
         {/* Metadata from Coordinator (collapsed by default if no issues) */}
         {metadata && (
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-yellow-50 dark:bg-yellow-950/20">
+          <div className="p-4 border-b border-border bg-warning-soft/60">
             <details className={validation && !validation.valid ? 'open' : ''}>
-              <summary className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-yellow-800 dark:text-yellow-200">
+              <summary className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-warning-soft-fg">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
-                <span>Coordinator&apos;s Description (Not Verified)</span>
+                <span>Coordinator&apos;s description (not verified)</span>
               </summary>
-              <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border border-yellow-200 dark:border-yellow-800 text-xs">
-                <pre className="text-gray-600 dark:text-gray-300 whitespace-pre-wrap overflow-x-auto">
+              <div className="mt-3 p-3 bg-surface rounded-md border border-warning/40 text-xs">
+                <pre className="text-foreground-muted whitespace-pre-wrap overflow-x-auto">
                   {JSON.stringify(metadata, null, 2)}
                 </pre>
               </div>

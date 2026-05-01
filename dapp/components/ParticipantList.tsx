@@ -37,8 +37,8 @@ function getStatusBadge(status: Participant['status']): {
   switch (status) {
     case 'connected':
       return {
-        bg: 'bg-yellow-100 dark:bg-yellow-900/30',
-        text: 'text-yellow-800 dark:text-yellow-200',
+        bg: 'bg-warning-soft',
+        text: 'text-warning-soft-fg',
         label: 'Connected',
         icon: '🔗',
       };
@@ -192,7 +192,7 @@ export function ParticipantList({
       <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
         <div className="flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-yellow-400"></span> Connected
+            <span className="w-2 h-2 rounded-full bg-warning"></span> Connected
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-blue-400"></span> Ready

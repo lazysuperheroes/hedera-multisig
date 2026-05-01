@@ -230,21 +230,21 @@ function CredentialRow({
   large?: boolean;
 }) {
   const bg = {
-    neutral: 'bg-gray-50 dark:bg-gray-700/50',
-    warning: 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800',
-    danger: 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800',
+    neutral: 'bg-surface-recessed',
+    warning: 'bg-warning-soft border border-warning/40',
+    danger: 'bg-destructive-soft border border-destructive/40',
   }[variant];
 
   const labelColor = {
-    neutral: 'text-gray-500 dark:text-gray-400',
-    warning: 'text-yellow-700 dark:text-yellow-400',
-    danger: 'text-red-700 dark:text-red-400',
+    neutral: 'text-foreground-subtle',
+    warning: 'text-warning-soft-fg',
+    danger: 'text-destructive-soft-fg',
   }[variant];
 
   const valueColor = {
-    neutral: 'text-gray-900 dark:text-white',
-    warning: 'text-yellow-800 dark:text-yellow-200',
-    danger: 'text-red-800 dark:text-red-200',
+    neutral: 'text-foreground',
+    warning: 'text-warning-soft-fg',
+    danger: 'text-destructive-soft-fg',
   }[variant];
 
   return (

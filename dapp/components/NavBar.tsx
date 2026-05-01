@@ -1,9 +1,13 @@
 /**
- * NavBar Component
+ * NavBar — single shared shell, with an optional WalletPanel on routes that
+ * need a wallet. The landing page (`/`) skips the wallet panel entirely so
+ * the WalletConnect SDK chunk + polling intervals never load there
+ * (Phase C8 perf win, preserved).
  *
- * Top navigation with wallet connection controls
- * Shows: Connect button (disconnected) or Account info (connected)
- * Mobile: hamburger menu for navigation links
+ * Composition:
+ *   NavBar
+ *     └─ NavShell (logo · nav links · right-side: RegisterToggle + WalletPanel? + hamburger)
+ *           └─ WalletPanel (only on non-landing routes)
  */
 
 'use client';
@@ -13,361 +17,43 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useWallet } from '../hooks/useWallet';
 import { WalletSelectionDialog } from './WalletSelectionDialog';
-import { ThemeToggle } from './ThemeToggle';
+import { RegisterToggle } from './RegisterToggle';
+import { LSHLogo } from './LSHLogo';
 
 export function NavBar() {
   const pathname = usePathname();
-  // Phase C8: skip wallet initialization on the landing page. useWallet
-  // statically imports lib/walletconnect, which on mount calls
-  // initializeWalletConnect() and starts two 5s polling intervals — none of
-  // which is needed on `/`. Routes that actually need the wallet (/join,
-  // /create, /session, /history) get the full hook.
-  if (pathname === '/') {
-    return <NavBarMinimal />;
-  }
-  return <NavBarFull />;
+  const isLanding = pathname === '/';
+  return <NavShell showWalletPanel={!isLanding} />;
 }
 
-function NavBarFull() {
-  const { accountId, publicKey, publicKeyType, evmAddress, balance, isConnected, isConnecting, connect, disconnect } = useWallet();
-  const [showWalletDialog, setShowWalletDialog] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [copied, setCopied] = useState(false);
+// ---------------------------------------------------------------------------
+// Shell — owns layout, logo, nav links, mobile menu, register toggle
+// ---------------------------------------------------------------------------
 
-  const handleConnectClick = async () => {
-    if (isConnected) {
-      await disconnect();
-    } else {
-      setShowWalletDialog(true);
-    }
-  };
-
-  const handleCopyPublicKey = async () => {
-    if (publicKey) {
-      await navigator.clipboard.writeText(publicKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const getButtonText = () => {
-    if (isConnecting) return 'Connecting...';
-    if (isConnected) return 'Disconnect';
-    return 'Connect Wallet';
-  };
-
-  const network = process.env.NEXT_PUBLIC_DEFAULT_NETWORK || 'testnet';
-
-  const navLinkClass = "px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors";
-
-  return (
-    <>
-      <nav className="sticky top-0 left-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16 sm:h-20">
-            {/* Logo / Brand */}
-            <Link href="/" className="flex items-center space-x-3" onClick={() => setShowMobileMenu(false)}>
-              <div className="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
-                <svg
-                  className="w-6 h-6 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-900 dark:text-white">
-                  Hedera MultiSig
-                </h1>
-                <span className={`
-                  inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold
-                  ${network === 'mainnet'
-                    ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 border border-green-300 dark:border-green-700'
-                    : 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border border-orange-300 dark:border-orange-700'
-                  }
-                `}>
-                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                    network === 'mainnet' ? 'bg-green-500' : 'bg-orange-500 animate-pulse'
-                  }`}></span>
-                  {network.toUpperCase()}
-                </span>
-              </div>
-            </Link>
-
-            {/* Desktop Navigation Links */}
-            <div className="hidden sm:flex items-center gap-1">
-              <Link href="/join" className={navLinkClass}>
-                Join
-              </Link>
-              <Link href="/create" className={navLinkClass}>
-                Create
-              </Link>
-              <Link
-                href="/history"
-                className={`${navLinkClass} flex items-center gap-1.5`}
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                History
-              </Link>
-              <Link href="/learn" className={navLinkClass}>
-                Learn
-              </Link>
-            </div>
-
-            {/* Right Side: Theme Toggle + Wallet Info + Connect Button + Mobile Menu */}
-            <div className="flex items-center gap-3 sm:gap-4">
-              {/* Theme Toggle */}
-              <ThemeToggle />
-
-              {/* Connected Wallet Info - Mobile (compact) */}
-              {isConnected && accountId && (
-                <div className="lg:hidden flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                  <span className="text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">
-                    {accountId}
-                  </span>
-                </div>
-              )}
-
-              {/* Connected Wallet Info - Desktop (full) */}
-              {isConnected && accountId && (
-                <div className="hidden lg:flex items-start gap-3 px-4 py-2.5 bg-gray-100 dark:bg-gray-800 rounded-lg max-w-2xl">
-                  <div className="w-7 h-7 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg
-                      className="w-4 h-4 text-white"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1.5">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="text-sm font-mono font-semibold text-gray-900 dark:text-white">
-                        {accountId}
-                      </div>
-                      {publicKeyType && (
-                        <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 rounded">
-                          {publicKeyType}
-                        </div>
-                      )}
-                      {balance && (
-                        <div className="text-sm text-green-600 dark:text-green-400 font-semibold tabular-nums">
-                          {balance}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 text-xs">
-                      {publicKey && (
-                        <div className="font-mono text-gray-600 dark:text-gray-400 truncate" title={publicKey}>
-                          <span className="text-gray-500 dark:text-gray-500">PubKey:</span> {publicKey.substring(0, 16)}...{publicKey.substring(publicKey.length - 8)}
-                        </div>
-                      )}
-                      {evmAddress && (
-                        <div className="font-mono text-gray-600 dark:text-gray-400 truncate" title={evmAddress}>
-                          <span className="text-gray-500 dark:text-gray-500">EVM:</span> {evmAddress.substring(0, 10)}...{evmAddress.substring(evmAddress.length - 8)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {publicKey && (
-                    <button
-                      onClick={handleCopyPublicKey}
-                      className="px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap self-start mt-0.5"
-                      title="Copy Public Key"
-                    >
-                      {copied ? (
-                        <>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                          Copy Key
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Connect/Disconnect Button */}
-              <button
-                onClick={handleConnectClick}
-                disabled={isConnecting}
-                className={`
-                  hidden sm:flex px-4 py-2 rounded-lg font-medium transition-colors
-                  ${isConnected
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                  }
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  items-center gap-2
-                `}
-              >
-                {isConnecting && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                )}
-                {getButtonText()}
-              </button>
-
-              {/* Mobile Menu Button */}
-              <button
-                onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="sm:hidden p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
-                aria-expanded={showMobileMenu}
-              >
-                {showMobileMenu ? (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                ) : (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Menu Panel */}
-        {showMobileMenu && (
-          <div className="sm:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 animate-slide-down">
-            <div className="px-4 py-3 space-y-1">
-              <Link
-                href="/join"
-                onClick={() => setShowMobileMenu(false)}
-                className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                Join Session
-              </Link>
-              <Link
-                href="/create"
-                onClick={() => setShowMobileMenu(false)}
-                className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                Create Session
-              </Link>
-              <Link
-                href="/history"
-                onClick={() => setShowMobileMenu(false)}
-                className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                History
-              </Link>
-              <Link
-                href="/learn"
-                onClick={() => setShowMobileMenu(false)}
-                className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                Learn
-              </Link>
-            </div>
-
-            {/* Mobile Connect/Disconnect */}
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => {
-                  handleConnectClick();
-                  setShowMobileMenu(false);
-                }}
-                disabled={isConnecting}
-                className={`
-                  w-full px-4 py-3 rounded-lg font-medium transition-colors
-                  ${isConnected
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                  }
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  flex items-center justify-center gap-2
-                `}
-              >
-                {isConnecting && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                )}
-                {getButtonText()}
-              </button>
-            </div>
-          </div>
-        )}
-      </nav>
-
-      {/* Wallet Selection Dialog */}
-      <WalletSelectionDialog
-        open={showWalletDialog}
-        onClose={() => setShowWalletDialog(false)}
-      />
-    </>
-  );
-}
-
-/**
- * Phase C8: minimal landing-page nav. No wallet hook — no WalletConnect chunk,
- * no polling intervals, no mount cost. The "Connect Wallet" button routes to
- * /join, where the full nav (with useWallet) takes over.
- */
-function NavBarMinimal() {
+function NavShell({ showWalletPanel }: { showWalletPanel: boolean }) {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const network = process.env.NEXT_PUBLIC_DEFAULT_NETWORK || 'testnet';
-  const navLinkClass = "px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors";
+
+  const navLinkClass =
+    'px-3 py-2 text-sm font-medium text-foreground-muted ' +
+    'hover:text-foreground hover:bg-surface-recessed rounded-md transition-colors';
 
   return (
-    <nav className="sticky top-0 left-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+    <nav className="sticky top-0 left-0 z-40 bg-background/85 backdrop-blur-sm border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16 sm:h-20">
-          <Link href="/" className="flex items-center space-x-3">
-            <div className="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 dark:text-white">Hedera MultiSig</h1>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${network === 'mainnet'
-                ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 border border-green-300 dark:border-green-700'
-                : 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border border-orange-300 dark:border-orange-700'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${network === 'mainnet' ? 'bg-green-500' : 'bg-orange-500 animate-pulse'}`}></span>
-                {network.toUpperCase()}
-              </span>
-            </div>
+        <div className="flex justify-between items-center h-16 sm:h-[68px] gap-4">
+          {/* Brand lock-up */}
+          <Link
+            href="/"
+            className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-md"
+            onClick={() => setShowMobileMenu(false)}
+            aria-label="Hedera MultiSig — by Lazy Superheroes"
+          >
+            <LSHLogo variant="lockup" />
+            <NetworkBadge network={network} />
           </Link>
 
+          {/* Desktop nav */}
           <div className="hidden sm:flex items-center gap-1">
             <Link href="/join" className={navLinkClass}>Join</Link>
             <Link href="/create" className={navLinkClass}>Create</Link>
@@ -375,53 +61,308 @@ function NavBarMinimal() {
             <Link href="/learn" className={navLinkClass}>Learn</Link>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-4">
-            <ThemeToggle />
-            <Link
-              href="/join"
-              className="hidden sm:flex px-4 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors items-center gap-2"
-            >
-              Connect Wallet
-            </Link>
+          {/* Right: register toggle, wallet panel (when applicable), mobile menu */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <RegisterToggle />
+            {showWalletPanel && <WalletPanel />}
+            {!showWalletPanel && (
+              <Link
+                href="/join"
+                className="
+                  hidden sm:inline-flex items-center px-4 py-2 rounded-md text-sm font-semibold
+                  bg-accent text-accent-fg hover:bg-accent-hover transition-colors
+                "
+              >
+                Join Session
+              </Link>
+            )}
             <button
               onClick={() => setShowMobileMenu(!showMobileMenu)}
-              className="sm:hidden p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="sm:hidden p-2 rounded-md text-foreground-muted hover:bg-surface-recessed transition-colors"
               aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
               aria-expanded={showMobileMenu}
             >
-              {showMobileMenu ? (
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              )}
+              {showMobileMenu ? <CloseIcon /> : <MenuIcon />}
             </button>
           </div>
         </div>
       </div>
 
+      {/* Mobile drawer */}
       {showMobileMenu && (
-        <div className="sm:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        <div className="sm:hidden border-t border-border bg-background animate-slide-down">
           <div className="px-4 py-3 space-y-1">
-            <Link href="/join" onClick={() => setShowMobileMenu(false)} className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">Join Session</Link>
-            <Link href="/create" onClick={() => setShowMobileMenu(false)} className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">Create Session</Link>
-            <Link href="/history" onClick={() => setShowMobileMenu(false)} className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">History</Link>
-            <Link href="/learn" onClick={() => setShowMobileMenu(false)} className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">Learn</Link>
+            <MobileLink href="/join" onClick={() => setShowMobileMenu(false)}>Join Session</MobileLink>
+            <MobileLink href="/create" onClick={() => setShowMobileMenu(false)}>Create Session</MobileLink>
+            <MobileLink href="/history" onClick={() => setShowMobileMenu(false)}>History</MobileLink>
+            <MobileLink href="/learn" onClick={() => setShowMobileMenu(false)}>Learn</MobileLink>
           </div>
-          <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-            <Link
-              href="/join"
-              onClick={() => setShowMobileMenu(false)}
-              className="w-full px-4 py-3 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center justify-center gap-2"
-            >
-              Connect Wallet
-            </Link>
-          </div>
+          {showWalletPanel && (
+            <div className="px-4 py-3 border-t border-border">
+              <WalletButton mobile />
+            </div>
+          )}
         </div>
       )}
     </nav>
+  );
+}
+
+function MobileLink({ href, onClick, children }: { href: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className="block px-3 py-2.5 text-base font-medium text-foreground-muted hover:bg-surface-recessed rounded-md transition-colors"
+    >
+      {children}
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Network badge — neither network pulses (calmer; previous testnet-only
+// pulse implied alarm). Network state is communicated by colour token.
+// ---------------------------------------------------------------------------
+
+function NetworkBadge({ network }: { network: string }) {
+  const isMainnet = network === 'mainnet';
+  return (
+    <span
+      className={`
+        hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px]
+        font-semibold uppercase tracking-wider border
+        ${isMainnet
+          ? 'border-success/40 bg-success-soft text-success-soft-fg'
+          : 'border-warning/40 bg-warning-soft text-warning-soft-fg'}
+      `}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${isMainnet ? 'bg-success' : 'bg-warning'}`}
+        aria-hidden="true"
+      />
+      {network}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// WalletPanel — renders the wallet hook (which mounts WalletConnect chunk
+// + polling intervals). Only included on routes that actually need it.
+// ---------------------------------------------------------------------------
+
+function WalletPanel() {
+  const wallet = useWallet();
+  const [showWalletDialog, setShowWalletDialog] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleConnectClick = async () => {
+    if (wallet.isConnected) {
+      await wallet.disconnect();
+    } else {
+      setShowWalletDialog(true);
+    }
+  };
+
+  const handleCopyPublicKey = async () => {
+    if (wallet.publicKey) {
+      await navigator.clipboard.writeText(wallet.publicKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  if (!wallet.isConnected) {
+    return (
+      <>
+        <button
+          onClick={handleConnectClick}
+          disabled={wallet.isConnecting}
+          className="
+            hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold
+            bg-accent text-accent-fg hover:bg-accent-hover
+            disabled:opacity-50 disabled:cursor-not-allowed transition-colors
+          "
+        >
+          {wallet.isConnecting && <Spinner />}
+          {wallet.isConnecting ? 'Connecting…' : 'Connect Wallet'}
+        </button>
+        <WalletSelectionDialog open={showWalletDialog} onClose={() => setShowWalletDialog(false)} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="hidden sm:flex items-center gap-2 relative">
+        {/* Compact pill: account ID + balance only. Click to expand details. */}
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          aria-expanded={showDetails}
+          aria-label="Toggle wallet details"
+          className="
+            flex items-center gap-2 px-3 py-1.5 rounded-md
+            bg-surface-recessed border border-border
+            hover:border-border-strong transition-colors
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+          "
+        >
+          <span className="w-2 h-2 rounded-full bg-success flex-shrink-0" aria-hidden="true" />
+          <span className="text-xs font-mono font-semibold text-foreground tabular-nums">
+            {wallet.accountId}
+          </span>
+          {wallet.balance && (
+            <>
+              <span className="text-foreground-subtle" aria-hidden="true">·</span>
+              <span className="text-xs text-success-soft-fg font-semibold tabular-nums">
+                {wallet.balance}
+              </span>
+            </>
+          )}
+          <Caret open={showDetails} />
+        </button>
+
+        <button
+          onClick={handleConnectClick}
+          className="
+            text-xs px-2 py-1 rounded-md text-foreground-subtle
+            hover:text-destructive hover:bg-destructive-soft transition-colors
+          "
+          title="Disconnect"
+        >
+          Disconnect
+        </button>
+
+        {/* Expandable details panel */}
+        {showDetails && (
+          <div
+            role="dialog"
+            aria-label="Wallet details"
+            className="
+              absolute right-0 top-full mt-2 w-80 z-50
+              bg-surface border border-border rounded-md shadow-lg
+              p-4 animate-slide-down
+            "
+          >
+            <dl className="space-y-3 text-xs">
+              <div>
+                <dt className="text-foreground-subtle uppercase tracking-wider mb-1">Account</dt>
+                <dd className="font-mono text-foreground tabular-nums">{wallet.accountId}</dd>
+              </div>
+              {wallet.publicKeyType && (
+                <div>
+                  <dt className="text-foreground-subtle uppercase tracking-wider mb-1">Key type</dt>
+                  <dd className="font-mono text-accent-soft-fg">{wallet.publicKeyType}</dd>
+                </div>
+              )}
+              {wallet.publicKey && (
+                <div>
+                  <dt className="text-foreground-subtle uppercase tracking-wider mb-1">Public key</dt>
+                  <dd className="font-mono text-foreground break-all">
+                    {wallet.publicKey.substring(0, 24)}…{wallet.publicKey.substring(wallet.publicKey.length - 12)}
+                  </dd>
+                  <button
+                    onClick={handleCopyPublicKey}
+                    className="mt-1 text-xs text-accent hover:underline"
+                  >
+                    {copied ? 'Copied!' : 'Copy full key'}
+                  </button>
+                </div>
+              )}
+              {wallet.evmAddress && (
+                <div>
+                  <dt className="text-foreground-subtle uppercase tracking-wider mb-1">EVM address</dt>
+                  <dd className="font-mono text-foreground break-all">
+                    {wallet.evmAddress.substring(0, 14)}…{wallet.evmAddress.substring(wallet.evmAddress.length - 8)}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
+      </div>
+
+      <WalletSelectionDialog open={showWalletDialog} onClose={() => setShowWalletDialog(false)} />
+    </>
+  );
+}
+
+function WalletButton({ mobile }: { mobile?: boolean }) {
+  const wallet = useWallet();
+  const [showWalletDialog, setShowWalletDialog] = useState(false);
+
+  const handleClick = async () => {
+    if (wallet.isConnected) await wallet.disconnect();
+    else setShowWalletDialog(true);
+  };
+
+  return (
+    <>
+      <button
+        onClick={handleClick}
+        disabled={wallet.isConnecting}
+        className={`
+          ${mobile ? 'w-full px-4 py-3' : 'px-4 py-2'}
+          inline-flex items-center justify-center gap-2 rounded-md font-semibold transition-colors
+          ${wallet.isConnected
+            ? 'bg-destructive-soft text-destructive-soft-fg hover:bg-destructive hover:text-accent-fg'
+            : 'bg-accent text-accent-fg hover:bg-accent-hover'}
+          disabled:opacity-50 disabled:cursor-not-allowed
+        `}
+      >
+        {wallet.isConnecting && <Spinner />}
+        {wallet.isConnecting ? 'Connecting…' : wallet.isConnected ? 'Disconnect' : 'Connect Wallet'}
+      </button>
+      <WalletSelectionDialog open={showWalletDialog} onClose={() => setShowWalletDialog(false)} />
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inline icons — kept tight + stroke-based; consistent with RegisterToggle.
+// ---------------------------------------------------------------------------
+
+function MenuIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
+  );
+}
+
+function Spinner() {
+  return (
+    <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-current border-r-transparent animate-spin" aria-hidden="true" />
+  );
+}
+
+function Caret({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`text-foreground-subtle transition-transform ${open ? 'rotate-180' : ''}`}
+      aria-hidden="true"
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   );
 }

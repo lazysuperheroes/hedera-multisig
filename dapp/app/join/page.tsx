@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { Footer } from '../../components/Footer';
 
 // Lazy load QR scanner to avoid SSR issues
 const QRScanner = lazy(() => import('../../components/QRScanner'));
@@ -25,84 +25,47 @@ function JoinPageContent() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [showQRScanner, setShowQRScanner] = useState(false);
 
-  // Check for URL parameters on load
+  // Check for URL parameters on load. Hydrating form state from query
+  // strings is "sync external system → React" — useEffect is the right tool.
   useEffect(() => {
     const server = searchParams.get('server') || searchParams.get('s');
     const session = searchParams.get('session') || searchParams.get('id') || searchParams.get('i');
     const pin = searchParams.get('pin') || searchParams.get('p');
 
     if (server && session) {
-      setFormData({
-        serverUrl: server,
-        sessionId: session,
-        pin: pin || '',
-      });
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFormData({ serverUrl: server, sessionId: session, pin: pin || '' });
       setShowManualForm(true);
-
-      // If all fields are provided via URL, show a message
-      if (pin) {
-        // Auto-submit after a brief delay to show the user what's happening
-        // Or just show filled form for confirmation
-      }
     }
   }, [searchParams]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.serverUrl || !formData.sessionId || !formData.pin) return;
 
-    // Validate
-    if (!formData.serverUrl || !formData.sessionId || !formData.pin) {
-      return;
-    }
-
-    // Phase B2: Hand off PIN to the session page via sessionStorage instead of
-    // localStorage. sessionStorage is per-tab and clears when the tab closes,
-    // so a forgotten/abandoned PIN cannot leak via shared device or DevTools
-    // long after the ceremony ended. The session page reads, AUTHs (which
-    // returns a reconnection token), then deletes this key.
+    // Phase B2: per-tab handoff via sessionStorage (clears on tab close).
     try {
       sessionStorage.setItem('hedera-multisig-pending-join', JSON.stringify(formData));
-    } catch {
-      // sessionStorage unavailable in some private-browsing modes; fall through
-    }
-    // Belt-and-braces: also purge the legacy localStorage key in case any old
-    // build wrote one before the migration.
+    } catch {}
     try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
 
-    // Navigate to session page
     router.push(`/session/${formData.sessionId}`);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   /**
    * Phase C18: classify the coordinator URL by trust signal.
-   * - 'hosted'    — known well-known coordinator domain (currently none; the
-   *                 hosted dApp is a UI, not a coordinator). Reserved for future use.
-   * - 'tunnel'    — ngrok / localtunnel / cloudflared — third-party relay
-   * - 'localhost' — local-only (dev or LAN-only ceremony)
-   * - 'unknown'   — anything else (custom domain or self-hosted WSS)
    */
   const hostTrust = (() => {
     const url = formData.serverUrl.trim();
     if (!url) return null;
     let host: string;
-    try {
-      host = new URL(url).host;
-    } catch {
-      return null;
-    }
-    if (/^(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|0\.0\.0\.0(:\d+)?)$/i.test(host)) {
-      return 'localhost' as const;
-    }
-    if (/(\.|^)(ngrok\.io|ngrok-free\.app|loca\.lt|trycloudflare\.com|serveo\.net)(:\d+)?$/i.test(host)) {
-      return 'tunnel' as const;
-    }
+    try { host = new URL(url).host; } catch { return null; }
+    if (/^(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|0\.0\.0\.0(:\d+)?)$/i.test(host)) return 'localhost' as const;
+    if (/(\.|^)(ngrok\.io|ngrok-free\.app|loca\.lt|trycloudflare\.com|serveo\.net)(:\d+)?$/i.test(host)) return 'tunnel' as const;
     return 'unknown' as const;
   })();
 
@@ -110,10 +73,7 @@ function JoinPageContent() {
     const value = e.target.value.trim();
     setConnectionString(value);
     setParseError(null);
-
-    if (!value) {
-      return;
-    }
+    if (!value) return;
 
     const parsed = parseConnectionString(value);
     if (parsed) {
@@ -123,10 +83,8 @@ function JoinPageContent() {
         pin: parsed.pin || '',
       });
       setShowManualForm(true);
-
-      // If PIN is included, we could auto-submit, but let's show the form for confirmation
     } else {
-      setParseError('This doesn\u0027t look like a valid connection string. It should start with hmsc:');
+      setParseError("This doesn't look like a valid connection string. It should start with hmsc:");
     }
   };
 
@@ -145,7 +103,7 @@ function JoinPageContent() {
           setShowManualForm(true);
           setParseError(null);
         } else {
-          setParseError('The clipboard text isn\u0027t a valid connection string. Ask your coordinator for a new one.');
+          setParseError("The clipboard text isn't a valid connection string. Ask your coordinator for a new one.");
         }
       }
     } catch {
@@ -166,22 +124,27 @@ function JoinPageContent() {
       setShowManualForm(true);
       setParseError(null);
     } else {
-      setParseError('This QR code doesn\u0027t contain session details. Make sure you\u0027re scanning the coordinator\u0027s QR code.');
+      setParseError("This QR code doesn't contain session details. Make sure you're scanning the coordinator's QR code.");
     }
   };
 
   return (
-    <main className="min-h-screen p-6 sm:p-8 bg-[var(--background)]">
+    <main className="min-h-screen bg-background">
       {/* QR Scanner Modal */}
       {showQRScanner && (
-        <Suspense fallback={
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading camera...</p>
+        <Suspense
+          fallback={
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center"
+              style={{ background: 'var(--scrim)' }}
+            >
+              <div className="bg-surface border border-border p-8 rounded-md">
+                <Spinner large />
+                <p className="mt-4 text-foreground-muted">Loading camera…</p>
+              </div>
             </div>
-          </div>
-        }>
+          }
+        >
           <QRScanner
             onScan={handleQRScan}
             onClose={() => setShowQRScanner(false)}
@@ -189,223 +152,272 @@ function JoinPageContent() {
         </Suspense>
       )}
 
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white">
-            Join Signing Session
-          </h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Paste a connection string or enter session details manually.
-          </p>
-        </div>
+      <section className="max-w-2xl mx-auto px-6 py-12 sm:py-16">
+        {/* Header — H1 only, no redundant subtitle */}
+        <h1 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-12 leading-[1.1]">
+          Join a signing session
+        </h1>
 
-        {/* Quick Connect - Connection String */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Quick Connect</h2>
+        <form onSubmit={handleSubmit} className="space-y-12">
 
-          <div className="space-y-4">
-            {/* Connection String Input */}
-            <div>
-              <label htmlFor="connectionString" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Connection String
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  id="connectionString"
-                  value={connectionString}
-                  onChange={handleConnectionStringChange}
-                  placeholder="Paste connection string here"
-                  className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 font-mono text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={handlePaste}
-                  className="px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center gap-2"
-                  title="Paste from clipboard"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                  Paste
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowQRScanner(true)}
-                  className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                  title="Scan QR code"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                  </svg>
-                  Scan
-                </button>
-              </div>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Paste the connection string from your coordinator, or scan the QR code
-              </p>
-              {parseError && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{parseError}</p>
-              )}
-            </div>
+          {/* Section 1 — Quick connect */}
+          <section aria-labelledby="quick-heading">
+            <p id="quick-heading" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-4">
+              Quick connect
+            </p>
 
-            {/* Toggle for manual entry */}
-            {!showManualForm && (
+            <label htmlFor="connectionString" className="block text-sm font-medium text-foreground mb-2">
+              Connection string
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                id="connectionString"
+                value={connectionString}
+                onChange={handleConnectionStringChange}
+                placeholder="Paste connection string (hmsc:…)"
+                className="
+                  flex-1 px-4 py-3 rounded-md font-mono text-sm
+                  bg-surface text-foreground placeholder:text-foreground-subtle
+                  border border-border focus:border-accent
+                  focus:outline-none focus:ring-2 focus:ring-accent
+                "
+              />
               <button
                 type="button"
-                onClick={() => setShowManualForm(true)}
-                className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
+                onClick={handlePaste}
+                className="px-3 py-3 rounded-md text-sm text-foreground hover:bg-surface-recessed border border-border transition-colors"
+                title="Paste from clipboard"
               >
-                Enter details manually instead
+                Paste
               </button>
-            )}
-          </div>
-        </div>
-
-        {/* Manual Form */}
-        {showManualForm && (
-          <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Session Details</h2>
-              {connectionString && (
-                <span className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Auto-filled from connection string
-                </span>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowQRScanner(true)}
+                className="px-3 py-3 rounded-md text-sm bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
+                title="Scan QR code"
+              >
+                Scan QR
+              </button>
             </div>
+            <p className="mt-2 text-sm text-foreground-subtle">
+              Paste the connection string from your coordinator, or scan the QR code.
+            </p>
+            {parseError && (
+              <p role="alert" className="mt-2 text-sm text-destructive">{parseError}</p>
+            )}
+          </section>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Phase C18: trust signal for the coordinator URL */}
+          {/* Toggle between auto-filled view and manual entry */}
+          {!showManualForm && (
+            <button
+              type="button"
+              onClick={() => setShowManualForm(true)}
+              className="text-sm text-accent hover:underline"
+            >
+              Or enter session details manually →
+            </button>
+          )}
+
+          {/* Section 2 — Manual / details */}
+          {showManualForm && (
+            <section aria-labelledby="details-heading" className="space-y-6 pt-2">
+              <div className="flex items-baseline justify-between gap-4">
+                <p id="details-heading" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
+                  Session details
+                </p>
+                {connectionString && (
+                  <span className="text-xs text-success-soft-fg flex items-center gap-1.5">
+                    <CheckIcon /> Auto-filled from connection string
+                  </span>
+                )}
+              </div>
+
+              {/* Trust signal for the coordinator URL */}
               {hostTrust && (
                 <div
-                  className={
-                    hostTrust === 'tunnel'
-                      ? 'rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 p-3 text-sm text-yellow-800 dark:text-yellow-200'
+                  role="status"
+                  className={`
+                    rounded-md border-l-2 pl-4 py-3 text-sm
+                    ${hostTrust === 'tunnel'
+                      ? 'border-warning bg-warning-soft text-warning-soft-fg'
                       : hostTrust === 'localhost'
-                      ? 'rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/40 p-3 text-sm text-gray-700 dark:text-gray-300'
-                      : 'rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200'
-                  }
+                      ? 'border-border-strong bg-surface-recessed text-foreground-muted'
+                      : 'border-info bg-info-soft text-info-soft-fg'}
+                  `}
                 >
                   {hostTrust === 'tunnel' && (
                     <>
-                      <strong>Tunnel coordinator detected.</strong> This URL points to a public tunnel (ngrok / localtunnel / cloudflared) relaying to someone else&apos;s computer. The tunnel provider can observe transaction metadata in transit. Only join if you trust the coordinator personally.
+                      <strong>Tunnel coordinator detected.</strong> This URL points to a public tunnel
+                      (ngrok / localtunnel / cloudflared) relaying to someone else&apos;s computer. The tunnel
+                      provider can observe transaction metadata in transit. Only join if you trust the
+                      coordinator personally.
                     </>
                   )}
                   {hostTrust === 'localhost' && (
                     <>
-                      <strong>Local coordinator.</strong> This URL points to your own machine — fine for testing or LAN-only ceremonies.
+                      <strong>Local coordinator.</strong> This URL points to your own machine — fine for
+                      testing or LAN-only ceremonies.
                     </>
                   )}
                   {hostTrust === 'unknown' && (
                     <>
-                      <strong>Custom coordinator.</strong> Verify with the coordinator that this URL is correct. Look for <code className="font-mono text-xs">wss://</code> for encrypted connections.
+                      <strong>Custom coordinator.</strong> Verify with the coordinator that this URL is
+                      correct. Look for <code className="font-mono text-xs">wss://</code> for encrypted
+                      connections.
                     </>
                   )}
                 </div>
               )}
 
-              {/* Server URL */}
-              <div>
-                <label htmlFor="serverUrl" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Server URL
-                </label>
-                <input
-                  type="text"
-                  id="serverUrl"
-                  name="serverUrl"
-                  value={formData.serverUrl}
-                  onChange={handleChange}
-                  placeholder="wss://multisig.example.com or ws://localhost:3001"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                  required
-                />
-              </div>
+              <Field
+                id="serverUrl" name="serverUrl"
+                label="Server URL"
+                placeholder="wss://multisig.example.com or ws://localhost:3001"
+                value={formData.serverUrl}
+                onChange={handleChange}
+                required
+              />
 
-              {/* Session ID */}
-              <div>
-                <label htmlFor="sessionId" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Session ID
-                </label>
-                <input
-                  type="text"
-                  id="sessionId"
-                  name="sessionId"
-                  value={formData.sessionId}
-                  onChange={handleChange}
-                  placeholder="abc123def456"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 font-mono"
-                  required
-                />
-              </div>
+              <Field
+                id="sessionId" name="sessionId"
+                label="Session ID"
+                placeholder="abc123def456"
+                mono
+                value={formData.sessionId}
+                onChange={handleChange}
+                required
+              />
 
-              {/* PIN */}
               <div>
-                <label htmlFor="pin" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Session PIN
-                </label>
-                <input
+                <Field
+                  id="pin" name="pin"
+                  label="Session PIN"
                   type="password"
-                  id="pin"
-                  name="pin"
+                  placeholder="Enter session PIN"
                   value={formData.pin}
                   onChange={handleChange}
-                  placeholder="Enter session PIN"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   required
                 />
                 {!formData.pin && connectionString && (
-                  <p className="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
-                    PIN not included in connection string - please enter it manually
+                  <p className="mt-1 text-sm text-warning-soft-fg">
+                    PIN not included in connection string — please enter it manually.
                   </p>
                 )}
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={!formData.serverUrl || !formData.sessionId || !formData.pin}
-                className="w-full px-6 py-4 bg-blue-600 text-white font-semibold rounded-lg shadow-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="
+                  w-full px-6 py-3.5 rounded-md text-base font-semibold
+                  bg-accent text-accent-fg hover:bg-accent-hover
+                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors
+                "
               >
                 Join Session
               </button>
-              {/* Phase C17: first-time-user one-liner — sets expectations
-                  before the wallet-connect step on /session/[id] */}
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                You&apos;ll need a Hedera wallet (HashPack, Blade, or Kabila) on the next page. After joining, you&apos;ll review the transaction before signing — nothing executes until you approve.
+              <p className="text-xs text-foreground-subtle">
+                You&apos;ll need a Hedera wallet (HashPack, Blade, or Kabila) on the next page. After joining,
+                you&apos;ll review the transaction before signing — nothing executes until you approve.
               </p>
-            </form>
-          </div>
-        )}
+            </section>
+          )}
+        </form>
 
         {/* Connection string format hint — collapsed, minimal */}
-        <div className="mt-8 border-t border-gray-200 dark:border-gray-800 pt-6">
-          <details className="text-xs text-gray-500 dark:text-gray-400">
-            <summary className="cursor-pointer font-medium text-gray-600 dark:text-gray-400">About connection strings</summary>
-            <p className="mt-2">
-              Connection strings start with <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">hmsc:</code> followed by encoded session data.
-              They contain the server URL, session ID, and optionally the PIN. Your coordinator will provide this when creating a session.
-            </p>
-          </details>
-        </div>
-      </div>
+        <details className="mt-12 text-xs text-foreground-subtle">
+          <summary className="cursor-pointer font-medium text-foreground-muted hover:text-foreground">
+            About connection strings
+          </summary>
+          <p className="mt-2 leading-relaxed">
+            Connection strings start with{' '}
+            <code className="bg-surface-recessed px-1 rounded font-mono">hmsc:</code>{' '}
+            followed by encoded session data. They contain the server URL, session ID, and optionally
+            the PIN. Your coordinator will provide this when creating a session.
+          </p>
+        </details>
+      </section>
+
+      <Footer variant="compact" />
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Local sub-components
+// ---------------------------------------------------------------------------
+
+interface FieldProps {
+  id: string;
+  name: string;
+  label: string;
+  placeholder?: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  type?: string;
+  mono?: boolean;
+  required?: boolean;
+}
+
+function Field({ id, name, label, placeholder, value, onChange, type = 'text', mono, required }: FieldProps) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-foreground mb-2">
+        {label}
+      </label>
+      <input
+        id={id}
+        name={name}
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        className={`
+          w-full px-4 py-3 rounded-md
+          bg-surface text-foreground placeholder:text-foreground-subtle
+          border border-border focus:border-accent
+          focus:outline-none focus:ring-2 focus:ring-accent
+          ${mono ? 'font-mono' : ''}
+        `}
+      />
+    </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function Spinner({ large }: { large?: boolean }) {
+  return (
+    <div
+      className={`
+        ${large ? 'h-12 w-12 border-2' : 'h-5 w-5 border-2'}
+        rounded-full border-current border-r-transparent animate-spin text-accent mx-auto
+      `}
+      aria-hidden="true"
+    />
   );
 }
 
 export default function JoinPage() {
   return (
-    <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center p-8 bg-[var(--background)]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
-        </div>
-      </main>
-    }>
+    <Suspense
+      fallback={
+        <main className="min-h-screen flex items-center justify-center p-8 bg-background">
+          <div className="text-center">
+            <Spinner large />
+            <p className="mt-4 text-foreground-muted">Loading…</p>
+          </div>
+        </main>
+      }
+    >
       <JoinPageContent />
     </Suspense>
   );

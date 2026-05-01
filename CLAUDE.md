@@ -121,6 +121,28 @@ Three roles: `coordinator` (session creator), `participant` (human signer), `age
 
 Session states: `waiting` → `transaction-received` → `signing` → `executing` → `completed`
 
+## Design Context
+
+Brand and aesthetic direction for any UI work in this repo (primarily
+`dapp/`) is captured in [`.impeccable.md`](.impeccable.md). **Read it before
+making visual changes** — it covers brand-family context (LSH umbrella),
+users, brand personality, anti-references, and design principles.
+
+Quick summary:
+- Hosted on the lazysuperheroes domain; ships under the **Lazy Superheroes
+  (LSH)** umbrella with sister product `lazylotto-agent`. Footer attribution
+  + logo required; LAZY Gold `#e5a800` is reserved for that attribution and
+  never appears in functional UI.
+- Two switchable themes — *treasury* (calm/precise/trustworthy,
+  Stripe-Mercury-Linear feel; default) and *dev* (sharp/technical/confident,
+  Vercel-Railway-Resend feel; punk-terminal register).
+- Strongest no: the AI-generated 2024-2025 look (cyan-on-dark, glassmorphism,
+  identical card grids, gradient hero text, Inter everywhere). Tinted
+  neutrals only — never pure `#fff` or `#000`.
+- Shared LSH semantics: blue `#3b82f6` for primary action, `#16a34a`/`#f59e0b`/
+  `#0ea5e9`/`#dc2626` for success/warning/info/destructive (sacred — never
+  decorative).
+
 ## Environment Variables
 
 ```bash

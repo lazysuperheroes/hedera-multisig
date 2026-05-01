@@ -21,6 +21,7 @@ import {
   TransactionStatus,
 } from '../lib/mirror-node';
 import { CopyButton } from './CopyButton';
+import { Icon } from './Icon';
 
 export interface PostSigningStatusProps {
   transactionId: string;
@@ -221,39 +222,23 @@ export function PostSigningStatus({
             : status === 'error'
             ? 'bg-red-50 dark:bg-red-950/30 border-red-500 dark:border-red-700'
             : status === 'timeout'
-            ? 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-500 dark:border-yellow-700'
+            ? 'bg-warning-soft border-warning'
             : 'bg-blue-50 dark:bg-blue-950/30 border-blue-500 dark:border-blue-700'
         }`}
       >
         {/* Status Icon */}
         <div className="flex items-center justify-center mb-4">
           {status === 'success' && (
-            <div className="text-green-600 dark:text-green-400">
-              <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
+            <Icon name="check_circle" size={48} fill={1} className="text-success" />
           )}
           {status === 'error' && (
-            <div className="text-red-600 dark:text-red-400">
-              <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
+            <Icon name="error" size={48} fill={1} className="text-destructive" />
           )}
           {status === 'timeout' && (
-            <div className="text-yellow-600 dark:text-yellow-400">
-              <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
+            <Icon name="schedule" size={48} className="text-warning" />
           )}
           {(status === 'polling' || status === 'still-checking') && (
-            <div className="animate-pulse text-blue-600 dark:text-blue-400">
-              <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </div>
+            <Icon name="autorenew" size={48} className="text-info animate-spin" style={{ animationDuration: '2s' }} />
           )}
         </div>
 
@@ -306,13 +291,13 @@ export function PostSigningStatus({
             if (thresholdNotMet) {
               return (
                 <>
-                  <h2 className="text-xl font-bold text-yellow-800 dark:text-yellow-200 mb-2">
+                  <h2 className="font-heading text-xl font-bold text-warning-soft-fg mb-2">
                     Only {signaturesCollected} of {signaturesRequired} signatures arrived
                   </h2>
-                  <p className="text-yellow-700 dark:text-yellow-300 mb-2">
+                  <p className="text-warning-soft-fg mb-2">
                     The signing threshold was not met within the {Math.floor(POLLING_TIMEOUT_MS / 1000)}-second window. The transaction was never submitted to the network.
                   </p>
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  <p className="text-sm text-warning-soft-fg">
                     <strong>What to do:</strong> Coordinate with the missing signers and have the coordinator create a new session — or switch to <a href="https://docs.hedera.com/hedera/core-concepts/scheduled-transaction" className="underline" target="_blank" rel="noopener noreferrer">scheduled transactions</a> if signers can&apos;t be online together.
                   </p>
                 </>
@@ -321,11 +306,11 @@ export function PostSigningStatus({
 
             return (
               <>
-                <h2 className="text-xl font-bold text-yellow-800 dark:text-yellow-200 mb-2">Transaction Not Found</h2>
-                <p className="text-yellow-700 dark:text-yellow-300 mb-2">
+                <h2 className="font-heading text-xl font-bold text-warning-soft-fg mb-2">Transaction not found</h2>
+                <p className="text-warning-soft-fg mb-2">
                   The transaction wasn&apos;t found on the network after {Math.floor(POLLING_TIMEOUT_MS / 1000)} seconds.
                 </p>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                <p className="text-sm text-warning-soft-fg">
                   This usually means the signing threshold wasn&apos;t met (so the transaction never executed) or the network is briefly behind. Check HashScan below to confirm.
                 </p>
               </>
@@ -561,15 +546,15 @@ function IntentVsActualDiff({
   const anyDiscrepancy = rows.some((r) => r.status === 'missing' || r.status === 'diff');
 
   return (
-    <div className="mt-4 rounded-lg border border-green-200 dark:border-green-800 bg-white dark:bg-gray-800 p-4 text-left">
+    <div className="mt-4 rounded-md border border-success/30 bg-surface p-4 text-left">
       <div className="flex items-center gap-2 mb-3">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Verified on Mirror Node</h3>
+        <h3 className="text-sm font-semibold text-foreground-muted">Verified on Mirror Node</h3>
         {anyDiscrepancy ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-warning-soft text-warning-soft-fg border border-warning/40">
             Discrepancy
           </span>
         ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-success-soft text-success-soft-fg border border-success/40">
             Matches signed intent
           </span>
         )}
@@ -602,10 +587,10 @@ function IntentVsActualDiff({
                     </span>
                   )}
                   {r.status === 'missing' && (
-                    <span className="text-yellow-700 dark:text-yellow-400">expected but not in mirror</span>
+                    <span className="text-warning-soft-fg">expected but not in mirror</span>
                   )}
                   {r.status === 'diff' && (
-                    <span className="text-yellow-700 dark:text-yellow-400">
+                    <span className="text-warning-soft-fg">
                       differs by {formatTinybarsWithHbar(r.delta ?? 0)}
                     </span>
                   )}
