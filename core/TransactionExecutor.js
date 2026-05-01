@@ -30,6 +30,8 @@ class TransactionExecutor {
    * @param {string} [options.network] - Hedera network ('mainnet'/'testnet'/'previewnet').
    *   Defaults to process.env.HEDERA_NETWORK or 'testnet'. Required for mirror verification.
    * @param {Object} [options.mirrorClient] - Pre-built MirrorNodeClient instance (optional, for testing)
+   * @param {number} [options.mirrorPollMaxAttempts] - Max mirror-poll attempts (default 8 → ~24s)
+   * @param {number} [options.mirrorPollIntervalMs] - Mirror-poll cadence (default 3000ms)
    * @returns {Promise<ExecutionResult>} Execution result with receipt
    *
    * @typedef {Object} ExecutionResult
@@ -126,7 +128,10 @@ class TransactionExecutor {
           const MirrorNodeClient = require('../shared/mirror-node-client');
           const mirror = options.mirrorClient || new MirrorNodeClient(network);
           log.info('Verifying execution on mirror node...');
-          const verification = await mirror.verifyExecution(result.transactionId);
+          const verification = await mirror.verifyExecution(result.transactionId, {
+            maxAttempts: options.mirrorPollMaxAttempts,
+            pollIntervalMs: options.mirrorPollIntervalMs,
+          });
           result.mirrorConfirmed = verification.mirrorConfirmed;
           result.mirrorRecord = verification.record;
           if (verification.mirrorConfirmed) {

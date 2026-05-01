@@ -122,16 +122,21 @@ async function loadBase64(options) {
     const filePath = path.resolve(options.base64File);
     if (!fs.existsSync(filePath)) failArgs(`File not found: ${filePath}`);
     const raw = fs.readFileSync(filePath, 'utf8').trim();
-    // Accept either a raw base64 file or a JSON file with frozenBase64 field
-    try {
-      const parsed = JSON.parse(raw);
+    // F1b: only attempt JSON parse when the file LOOKS like JSON (starts with `{`).
+    // Previous heuristic try-parsed everything — a partially-valid JSON file
+    // would fall through to "treat as raw base64" silently. With the leading-`{`
+    // gate, malformed JSON now fails loudly instead of being mis-treated.
+    if (raw.startsWith('{')) {
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (err) {
+        failArgs(`File ${filePath} starts with '{' but is not valid JSON: ${err.message}`);
+      }
       if (typeof parsed.frozenBase64 === 'string') return parsed.frozenBase64.trim();
-      // JSON without frozenBase64 — error
       failArgs(`File ${filePath} is JSON but has no \`frozenBase64\` field.`);
-    } catch {
-      // Not JSON — assume raw base64
-      return raw;
     }
+    return raw; // Plain base64 file
   }
   failArgs('Provide --base64 <data> or --base64-file <path>.');
 }

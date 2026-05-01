@@ -311,12 +311,36 @@ export default function CreatePage() {
                 Inject Transaction
               </h2>
 
-              {/* Phase D13a: mode tabs */}
-              <div className="mb-6 flex gap-2 border-b border-gray-200 dark:border-gray-700">
+              {/* Phase D13a + F4: mode tabs with WAI-ARIA tablist semantics +
+                  arrow-key navigation. Roving tabindex (active tab = 0,
+                  inactive = -1) ensures keyboard users can Tab into the tablist
+                  once and then arrow between tabs. */}
+              <div
+                className="mb-6 flex gap-2 border-b border-gray-200 dark:border-gray-700"
+                role="tablist"
+                aria-label="Transaction injection mode"
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    setTxMode(txMode === 'build' ? 'paste' : 'build');
+                  } else if (e.key === 'Home') {
+                    e.preventDefault();
+                    setTxMode('build');
+                  } else if (e.key === 'End') {
+                    e.preventDefault();
+                    setTxMode('paste');
+                  }
+                }}
+              >
                 <button
                   type="button"
+                  role="tab"
+                  id="build-tab"
+                  aria-selected={txMode === 'build'}
+                  aria-controls="build-panel"
+                  tabIndex={txMode === 'build' ? 0 : -1}
                   onClick={() => setTxMode('build')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 rounded-t ${
                     txMode === 'build'
                       ? 'border-blue-600 text-blue-700 dark:text-blue-400'
                       : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -326,8 +350,13 @@ export default function CreatePage() {
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  id="paste-tab"
+                  aria-selected={txMode === 'paste'}
+                  aria-controls="paste-panel"
+                  tabIndex={txMode === 'paste' ? 0 : -1}
                   onClick={() => setTxMode('paste')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 rounded-t ${
                     txMode === 'paste'
                       ? 'border-blue-600 text-blue-700 dark:text-blue-400'
                       : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -338,7 +367,7 @@ export default function CreatePage() {
               </div>
 
               {txMode === 'build' && (
-                <>
+                <div role="tabpanel" id="build-panel" aria-labelledby="build-tab">
                   <div className="mb-6">
                     <label htmlFor="txType" className={labelClass}>
                       Transaction Type
@@ -390,11 +419,11 @@ export default function CreatePage() {
                     )}
                     {injection.isInjecting ? 'Building & Injecting...' : 'Build & Inject Transaction'}
                   </button>
-                </>
+                </div>
               )}
 
               {txMode === 'paste' && (
-                <>
+                <div role="tabpanel" id="paste-panel" aria-labelledby="paste-tab">
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                     Paste a pre-frozen transaction (base64) from the CLI prep
                     scripts (e.g.{' '}
@@ -441,7 +470,7 @@ export default function CreatePage() {
                     )}
                     {injection.isInjecting ? 'Injecting...' : 'Inject Pre-Frozen Transaction'}
                   </button>
-                </>
+                </div>
               )}
             </div>
           </section>

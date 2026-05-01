@@ -126,6 +126,10 @@ export class TransactionExecutor {
     network?: 'mainnet' | 'testnet' | 'previewnet';
     /** Phase B11: pre-built MirrorNodeClient (testing) */
     mirrorClient?: unknown;
+    /** Phase F1a: max mirror-poll attempts (default 8 ≈ 24s budget) */
+    mirrorPollMaxAttempts?: number;
+    /** Phase F1a: cadence between mirror polls in ms (default 3000) */
+    mirrorPollIntervalMs?: number;
   }): Promise<ExecutionResult>;
 }
 

@@ -19,7 +19,8 @@ module.exports = function(program) {
     .option('-p, --participants <n>', 'Expected number of participants', parseInt)
     .option('--port <port>', 'Server port', parseInt, 3000)
     .option('--host <host>', 'Server host', 'localhost')
-    .option('--timeout <minutes>', 'Session timeout in minutes', parseInt, 30)
+    .option('--timeout <minutes>', 'Session timeout in minutes (default: 30 for realtime sessions)', parseInt, 30)
+    .option('--session-timeout <input>', 'Ceremony-session timeout for scheduled-mode sessions. ISO-8601 ("2026-06-30T12:00:00Z") or duration ("30d", "2h"). Default 24h. Match this to your --expiration-time on `schedule create` so the dApp coordinator session doesn\'t expire mid-window. Max ~62 days (HIP-423).')
     .option('--no-tunnel', 'Disable automatic tunnel (local-only)')
     .option('--pin <token>', 'Custom session token (auto-generated if not provided)')
     .option('-n, --network <network>', 'Hedera network (testnet|mainnet)', getDefaultNetwork())
@@ -91,9 +92,24 @@ Examples:
         }
 
         console.log(chalk.white('Network: ') + chalk.yellow(options.network));
+        // Phase F2: parse the optional --session-timeout for scheduled-mode
+        // ceremonies (uses the same parser as `schedule create --expiration-time`).
+        let scheduledDefaultTimeoutMs;
+        if (options.sessionTimeout) {
+          const { parseExpirationTime } = require('../utils/timeParser');
+          const parsedDate = parseExpirationTime(options.sessionTimeout);
+          if (parsedDate) {
+            scheduledDefaultTimeoutMs = parsedDate.getTime() - Date.now();
+          }
+        }
+
         console.log(chalk.white('Threshold: ') + chalk.yellow(`${options.threshold} of ${eligibleKeys.length}`));
         console.log(chalk.white('Expected Participants: ') + chalk.yellow(participants));
-        console.log(chalk.white('Session Timeout: ') + chalk.yellow(`${options.timeout} minutes`));
+        console.log(chalk.white('Session Timeout: ') + chalk.yellow(`${options.timeout} minutes (realtime)`));
+        if (scheduledDefaultTimeoutMs) {
+          const days = (scheduledDefaultTimeoutMs / 86400000).toFixed(1);
+          console.log(chalk.white('Scheduled Session Timeout: ') + chalk.yellow(`${days} days (overrides 24h default)`));
+        }
 
         // Create session store
         const store = createSessionStore({
@@ -122,6 +138,7 @@ Examples:
         // Create session manager
         const sessionManager = new SigningSessionManager(client, {
           defaultTimeout: timeoutMs,
+          scheduledDefaultTimeout: scheduledDefaultTimeoutMs, // F2: undefined = 24h fallback inside manager
           verbose: true,
           store: store
         });

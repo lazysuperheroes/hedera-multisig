@@ -505,6 +505,21 @@ export function PostSigningStatus({
 }
 
 /**
+ * Phase F5: humanize raw tinybars for the IntentVsActualDiff table.
+ * Tinybars are precise but unreadable; HBAR is the user's mental model.
+ * Returns "100 tℏ (~0.000001 ℏ)" for non-zero values, or "0 tℏ" for zero.
+ */
+function formatTinybarsWithHbar(tinybars: number | null): string {
+  if (tinybars === null) return '—';
+  if (tinybars === 0) return '0 tℏ';
+  const hbar = tinybars / 100_000_000;
+  // Show enough fractional digits to capture small amounts; trim trailing zeros
+  const hbarStr = hbar.toFixed(8).replace(/\.?0+$/, '');
+  const tinybarStr = tinybars.toLocaleString();
+  return `${tinybarStr} tℏ (~${hbarStr} ℏ)`;
+}
+
+/**
  * Phase C1: render expected vs actual transfers side by side. The payer
  * account legitimately differs by the network fee — that case is highlighted
  * as expected, not as a discrepancy.
@@ -524,9 +539,10 @@ function IntentVsActualDiff({
     actualByAccount.set(t.account, (actualByAccount.get(t.account) || 0) + t.amount);
   }
 
-  // Compare each expected transfer
+  // Phase F3: shared decoder now emits raw tinybars (string) — direct parse,
+  // no regex extraction needed.
   const rows = expected.map((e) => {
-    const expectedTinybars = parseInt(String(e.amount).match(/-?\d+/)?.[0] || '0', 10);
+    const expectedTinybars = parseInt(String(e.amount), 10) || 0;
     const actualTinybars = actualByAccount.get(e.accountId);
     if (actualTinybars === undefined) {
       return { account: e.accountId, expected: expectedTinybars, actual: null, status: 'missing' as const };
@@ -558,45 +574,49 @@ function IntentVsActualDiff({
           </span>
         )}
       </div>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-gray-500 dark:text-gray-400">
-            <th className="text-left py-1">Account</th>
-            <th className="text-right py-1">Signed</th>
-            <th className="text-right py-1">Actual</th>
-            <th className="text-left py-1 pl-4">Note</th>
-          </tr>
-        </thead>
-        <tbody className="font-mono">
-          {rows.map((r) => (
-            <tr key={r.account} className="border-t border-gray-100 dark:border-gray-700">
-              <td className="py-1">{r.account}</td>
-              <td className="text-right tabular-nums">{r.expected.toLocaleString()}</td>
-              <td className="text-right tabular-nums">
-                {r.actual === null ? '—' : r.actual.toLocaleString()}
-              </td>
-              <td className="pl-4 font-sans">
-                {r.status === 'match' && (
-                  <span className="text-green-700 dark:text-green-400">exact match</span>
-                )}
-                {r.status === 'fee-only' && (
-                  <span className="text-gray-600 dark:text-gray-400">fee deducted ({chargedFee?.toLocaleString()} tℏ)</span>
-                )}
-                {r.status === 'missing' && (
-                  <span className="text-yellow-700 dark:text-yellow-400">expected but not in mirror</span>
-                )}
-                {r.status === 'diff' && (
-                  <span className="text-yellow-700 dark:text-yellow-400">
-                    differs by {((r.delta ?? 0)).toLocaleString()} tℏ
-                  </span>
-                )}
-              </td>
+      {/* Phase F5: overflow-x-auto wrapper — table has 4 cols of variable
+          width, narrow viewports need horizontal scroll instead of wrap */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[480px]">
+          <thead>
+            <tr className="text-gray-500 dark:text-gray-400">
+              <th className="text-left py-1">Account</th>
+              <th className="text-right py-1">Signed</th>
+              <th className="text-right py-1">Actual</th>
+              <th className="text-left py-1 pl-4">Note</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="font-mono">
+            {rows.map((r) => (
+              <tr key={r.account} className="border-t border-gray-100 dark:border-gray-700">
+                <td className="py-1">{r.account}</td>
+                <td className="text-right tabular-nums whitespace-nowrap">{formatTinybarsWithHbar(r.expected)}</td>
+                <td className="text-right tabular-nums whitespace-nowrap">{formatTinybarsWithHbar(r.actual)}</td>
+                <td className="pl-4 font-sans">
+                  {r.status === 'match' && (
+                    <span className="text-green-700 dark:text-green-400">exact match</span>
+                  )}
+                  {r.status === 'fee-only' && (
+                    <span className="text-gray-600 dark:text-gray-400">
+                      fee deducted ({formatTinybarsWithHbar(chargedFee || 0)})
+                    </span>
+                  )}
+                  {r.status === 'missing' && (
+                    <span className="text-yellow-700 dark:text-yellow-400">expected but not in mirror</span>
+                  )}
+                  {r.status === 'diff' && (
+                    <span className="text-yellow-700 dark:text-yellow-400">
+                      differs by {formatTinybarsWithHbar(r.delta ?? 0)}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        All values in tinybars. Anything other than &quot;exact match&quot; or &quot;fee deducted&quot; warrants investigation.
+        Tinybars are the engineering precision (1 ℏ = 100 000 000 tℏ); HBAR equivalents in parentheses. Anything other than &quot;exact match&quot; or &quot;fee deducted&quot; warrants investigation.
       </p>
     </div>
   );

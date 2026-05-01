@@ -1,0 +1,7 @@
+{
+  "description": "Delete 0.0.1001, sweep balance to 0.0.1002",
+  "inputBase64": "CkgqRgpCChkKDAiDxtLPBhCej+/8ARIHCAAQABjpBxgAEgYIABAAGAMYgISvXyICCHgyAGISCgcIABAAGOoHEgcIABAAGOkHEgAKSCpGCkIKGQoMCIPG0s8GEJ6P7/wBEgcIABAAGOkHGAASBggAEAAYBBiAhK9fIgIIeDIAYhIKBwgAEAAY6gcSBwgAEAAY6QcSAApIKkYKQgoZCgwIg8bSzwYQno/v/AESBwgAEAAY6QcYABIGCAAQABgFGICEr18iAgh4MgBiEgoHCAAQABjqBxIHCAAQABjpBxIA",
+  "expectedShape": {
+    "type": "AccountDeleteTransaction"
+  }
+}

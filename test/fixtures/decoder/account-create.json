@@ -1,6 +1,6 @@
 {
   "description": "Create new account with 10000 tinybars initial balance",
-  "inputBase64": "Cnwqegp2ChgKCwjlgNLPBhDg9owtEgcIABAAGOkHGAASBggAEAAYAxiAhK9fIgIIeDIAWkcKIhIgX1jYECgz2LdrNPFHIO9bn9XtUjFYAzKnkan5aG3cUfkQkE4w//////////9/OP//////////f0AASgUIgM7aA4gBABIACnwqegp2ChgKCwjlgNLPBhDg9owtEgcIABAAGOkHGAASBggAEAAYBBiAhK9fIgIIeDIAWkcKIhIgX1jYECgz2LdrNPFHIO9bn9XtUjFYAzKnkan5aG3cUfkQkE4w//////////9/OP//////////f0AASgUIgM7aA4gBABIACnwqegp2ChgKCwjlgNLPBhDg9owtEgcIABAAGOkHGAASBggAEAAYBRiAhK9fIgIIeDIAWkcKIhIgX1jYECgz2LdrNPFHIO9bn9XtUjFYAzKnkan5aG3cUfkQkE4w//////////9/OP//////////f0AASgUIgM7aA4gBABIA",
+  "inputBase64": "Cn0qewp3ChkKDAiExtLPBhD8sPHhARIHCAAQABjpBxgAEgYIABAAGAMYgISvXyICCHgyAFpHCiISILT+XZegnznt2ZiIorWWIk8toYLHD+3wgHg6Rq0FrJ2cEJBOMP//////////fzj//////////39AAEoFCIDO2gOIAQASAAp9KnsKdwoZCgwIhMbSzwYQ/LDx4QESBwgAEAAY6QcYABIGCAAQABgEGICEr18iAgh4MgBaRwoiEiC0/l2XoJ857dmYiKK1liJPLaGCxw/t8IB4OkatBaydnBCQTjD//////////384//////////9/QABKBQiAztoDiAEAEgAKfSp7CncKGQoMCITG0s8GEPyw8eEBEgcIABAAGOkHGAASBggAEAAYBRiAhK9fIgIIeDIAWkcKIhIgtP5dl6CfOe3ZmIiitZYiTy2hgscP7fCAeDpGrQWsnZwQkE4w//////////9/OP//////////f0AASgUIgM7aA4gBABIA",
   "expectedShape": {
     "type": "AccountCreateTransaction"
   }

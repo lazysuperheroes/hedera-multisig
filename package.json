@@ -68,7 +68,7 @@
 		"test:workflows": "mocha test/workflows.test.js --timeout 120000",
 		"test:networked": "mocha test/networked-workflow.test.js --timeout 120000",
 		"test:coverage": "c8 --reporter=text --reporter=lcov mocha test/sessionStore.test.js test/websocket.test.js test/offline.test.js --timeout 120000",
-		"test:coverage:check": "c8 --reporter=text --check-coverage --lines 45 --functions 35 --branches 55 mocha test/sessionStore.test.js test/websocket.test.js test/offline.test.js test/coordinator-authorization.test.js test/reconnection-token.test.js test/redis-session-store.test.js test/timeParser.test.js test/security.test.js --timeout 120000 --exit",
+		"test:coverage:check": "c8 --reporter=text --check-coverage --lines 56 --functions 50 --branches 63 mocha test/coordinator-authorization.test.js test/reconnection-token.test.js test/redis-session-store.test.js test/timeParser.test.js test/decoder-fixtures.test.js test/policy-engine.test.js test/transaction-executor.test.js test/transaction-freezer.test.js test/cli-utils.test.js test/crypto-utils.test.js test/security.test.js test/sessionStore.test.js test/websocket.test.js test/offline.test.js --timeout 120000 --exit",
 		"sign": "node cli/sign.js",
 		"create-key-file": "node cli/createKeyFile.js",
 		"test-key-file": "node cli/testKeyFile.js",

@@ -286,13 +286,19 @@ class TransactionDecoder {
    */
   static _decodeTransferTransaction(tx, details) {
     // Hbar transfers - _hbarTransfers is an array of Transfer objects
+    // Phase F3: amount is now raw tinybars (string-typed for big-int safety),
+    // not the SDK's "1000 tℏ" formatted toString(). Use formatHbarTinybars()
+    // exported from this module for display.
     const hbarTransfers = tx._hbarTransfers;
     if (hbarTransfers && Array.isArray(hbarTransfers) && hbarTransfers.length > 0) {
       details.transfers = [];
       for (const transfer of hbarTransfers) {
+        const tinybars = typeof transfer.amount?.toTinybars === 'function'
+          ? transfer.amount.toTinybars().toString()
+          : transfer.amount.toString();
         details.transfers.push({
           accountId: transfer.accountId.toString(),
-          amount: transfer.amount.toString(),
+          amount: tinybars,
         });
       }
     }
@@ -917,10 +923,46 @@ class TransactionDecoder {
   }
 }
 
+/**
+ * Format raw tinybars as a human-readable HBAR string.
+ *
+ * Phase F3: canonical formatter shared between Node and dApp callers.
+ * The decoder always emits raw tinybars (string-typed, big-int safe);
+ * UI layers call this when they need user-facing copy.
+ *
+ * @param {string|number|bigint} tinybars - Raw tinybars (string-typed for safety)
+ * @param {Object} [options]
+ * @param {boolean} [options.showSign=true] - Prefix non-negative values with "+"
+ * @param {boolean} [options.showUnit=true] - Append " ℏ"
+ * @param {number} [options.precision=8] - Fractional digits (1 ℏ = 10^8 tinybars)
+ * @returns {string} e.g. "+10.00000000 ℏ", "-1.50000000 ℏ", or raw integer if parse fails
+ */
+function formatHbarTinybars(tinybars, options = {}) {
+  const showSign = options.showSign !== false;
+  const showUnit = options.showUnit !== false;
+  const precision = options.precision ?? 8;
+
+  try {
+    const tinybarsBig = BigInt(tinybars);
+    const negative = tinybarsBig < 0n;
+    const abs = negative ? -tinybarsBig : tinybarsBig;
+    const integerPart = abs / 100_000_000n;
+    const fractionPart = abs % 100_000_000n;
+    const fractionStr = fractionPart.toString().padStart(8, '0').slice(0, precision);
+    const signStr = negative ? '-' : (showSign ? '+' : '');
+    const unit = showUnit ? ' ℏ' : '';
+    if (precision === 0) return `${signStr}${integerPart.toString()}${unit}`;
+    return `${signStr}${integerPart.toString()}.${fractionStr}${unit}`;
+  } catch {
+    return String(tinybars);
+  }
+}
+
 // Export both the class and helper functions
 module.exports = {
   TransactionDecoder,
   getTransactionTypeName,
+  formatHbarTinybars,
   sha256,
   generateChecksum,
   bufferToHex

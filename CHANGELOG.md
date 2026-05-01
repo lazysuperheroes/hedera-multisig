@@ -57,6 +57,23 @@ straightforward — see notes inline.
   **Migrate:** code that handled the old `'active'` rollback should
   detect `'execution-failed'` and create a new session instead of
   retrying.
+- **Decoder transfer amounts are now raw tinybar integer strings, not
+  pre-formatted display strings.** The shared decoder's
+  `txDetails.transfers[].amount` previously emitted a formatted value
+  (e.g. `"1000 tℏ"`); it now emits the raw signed tinybar integer as
+  a string (e.g. `"100000000"`). This unifies the decoder shape across
+  Node and the dApp so both consumers can apply the same display rule.
+  A new `formatHbarTinybars(tinybars, opts)` helper is exported
+  alongside `TransactionDecoder` for callers that want the old
+  human-friendly form. **Migrate:** if you read
+  `details.transfers[i].amount` directly:
+  ```js
+  // Before:
+  const display = details.transfers[0].amount; // "+10 ℏ" or "1000 tℏ"
+  // After:
+  const { formatHbarTinybars } = require('@lazysuperheroes/hedera-multisig').SharedTransactionDecoder;
+  const display = formatHbarTinybars(details.transfers[0].amount); // "+10.00000000 ℏ"
+  ```
 
 ### Security
 
@@ -144,21 +161,16 @@ Plus 8 HIGH-severity hardening fixes:
   Parser is in `cli/utils/timeParser.js` with 21 unit tests; horizon
   enforcement rejects values beyond ~62 days. (`cli/commands/schedule.js`,
   `workflows/ScheduledWorkflow.js`)
-- **Known limitation — coordinator-side ceremony session is capped at
-  24 hours regardless of `--expiration-time`.** The on-chain schedule
-  itself runs for the full window you configured (up to ~62 days,
-  HIP-423). The coordinator's *signing-ceremony session* — the
-  WebSocket session that hands out reconnection tokens, runs the
-  TransactionReview UI, and tracks signature progress — expires after
-  24 hours via `SigningSessionManager.scheduledDefaultTimeout`. Late
-  signers joining on day 2+ of a multi-day schedule will see "session
-  expired" in the dApp; they can still sign by running
-  `npx hedera-multisig schedule sign --schedule-id <id> --keyfile ... --passphrase ...`
-  directly against the on-chain Schedule entity. The multi-sig
-  completes correctly either way; only the dApp coordination
-  experience degrades. **v2.2 will honor a `--session-timeout` flag at
-  server-create time so the ceremony session can match the on-chain
-  schedule's expiration.**
+- **`server --session-timeout` flag for long-window schedules.** The
+  dApp coordinator ceremony session previously expired at 24 hours
+  regardless of `--expiration-time` — late signers on multi-day
+  schedules saw "session expired" mid-window. Now configurable:
+  `npx hedera-multisig server -t 2 -k "..." --session-timeout 30d`
+  matches the ceremony session to a 30-day on-chain schedule. Same
+  input format as `schedule create --expiration-time` (ISO-8601 or
+  duration suffix). Capped at ~62 days (HIP-423 limit). Default 24h
+  preserved for back-compat. (`cli/commands/server.js`,
+  `server/SigningSessionManager.js`)
 - **Stale "30 minute" docs scrubbed** across ROADMAP, BLOG_POST,
   TREASURY_GUIDE, COORDINATOR_GUIDE, dApp landing, `cli/commands/schedule.js`,
   `workflows/ScheduledWorkflow.js`. Replaced with "hours, days, or up
@@ -171,8 +183,24 @@ Plus 8 HIGH-severity hardening fixes:
 - **`/create` ABI editor** — coordinator pastes a contract ABI JSON,
   the dApp parses it via `ethers.Interface`, presents a function
   dropdown, renders typed inputs per argument, and auto-encodes the
-  calldata. Falls back to raw-hex paste when no ABI provided.
+  calldata. Falls back to raw-hex paste when no ABI provided. Now
+  accepts complex Solidity types (arrays, tuples, structs) via a
+  per-argument JSON-input mode, with inline parse errors per argument
+  and a top-level encoding-error banner when ABI coercion fails.
   (`dapp/components/create/TransactionFields.tsx`)
+- **Build/Paste tabs are accessible.** The `/create` page mode-switch
+  now uses full WAI-ARIA `tablist` / `tab` / `tabpanel` semantics with
+  roving `tabindex`, ArrowLeft/ArrowRight/Home/End keyboard navigation,
+  visible focus rings, and `aria-selected` / `aria-controls` /
+  `aria-labelledby` wiring so screen readers announce mode changes
+  correctly. (`dapp/app/create/page.tsx`)
+- **PostSigningStatus tinybar humanization + mobile overflow.** The
+  intent-vs-actual diff table renders raw decoder amounts through
+  `formatTinybarsWithHbar` (e.g. `100000000 (1.00000000 ℏ)`), so
+  mainnet-scale values are readable instead of opaque integers. The
+  table is wrapped in `overflow-x-auto` with `min-w-[480px]` and
+  `whitespace-nowrap` cells so account IDs don't wrap into
+  unreadable shapes on narrow viewports. (`dapp/components/PostSigningStatus.tsx`)
 - **Three injection paths** for multi-sig ceremonies:
   1. **Build from form** in dApp (the existing path, now polished).
   2. **Paste frozen base64** in dApp `/create` — tabbed UI; no wallet
@@ -182,6 +210,11 @@ Plus 8 HIGH-severity hardening fixes:
      --connect ... --base64 ... --coordinator-token ...`. Reads JSON
      output of walkthrough prep scripts directly via `--base64-file`.
      For automation pipelines and fully-CLI-driven workflows.
+     `--base64-file` only attempts JSON parsing when the file actually
+     starts with `{`, so plain-base64 inputs containing stray
+     punctuation no longer get mis-parsed and a JSON file missing
+     `frozenBase64` produces an explicit error instead of being
+     silently treated as opaque base64.
      (`cli/commands/inject.js`)
 
 #### Failure UX
@@ -198,6 +231,13 @@ Plus 8 HIGH-severity hardening fixes:
 - **Mirror retry + exponential backoff** (1s / 2s / 4s) on 5xx + network
   errors + timeouts. Never retries 4xx or JSON parse failures.
   (`shared/mirror-node-client.js`)
+- **Mirror confirmation poll knobs.** `TransactionExecutor.execute()`
+  now accepts `mirrorPollMaxAttempts` and `mirrorPollIntervalMs` and
+  threads them through `MirrorNodeClient.verifyExecution()` so callers
+  (dApp, CLI, agents) can tune confirmation latency vs. cost. Defaults
+  unchanged. Mirrors the existing knobs on `SigningSessionManager`.
+  (`core/TransactionExecutor.js`, `server/SigningSessionManager.js`,
+  `types/index.d.ts`)
 
 #### Observability + operations
 
@@ -250,15 +290,18 @@ Plus 8 HIGH-severity hardening fixes:
 
 #### Tests
 
-- 130+ new test cases across 5 new test files:
+- 200+ new test cases across 10 new test files:
   `coordinator-authorization.test.js`, `reconnection-token.test.js`,
   `redis-session-store.test.js`, `timeParser.test.js`,
-  `decoder-fixtures.test.js`. 7 decoder fixture JSON snapshots in
-  `test/fixtures/decoder/` that the dApp's TS decoder tests can
-  compare against.
-- **Coverage gate** in CI at the realistic floor (lines 45 / functions
-  35 / branches 55 — actual is 50/39/60). Catches regressions; raising
-  to 70/70 is tracked as v2.2 work.
+  `decoder-fixtures.test.js`, `policy-engine.test.js`,
+  `transaction-executor.test.js`, `transaction-freezer.test.js`,
+  `cli-utils.test.js`, `crypto-utils.test.js`. 13 decoder fixture
+  JSON snapshots in `test/fixtures/decoder/` that the dApp's TS
+  decoder tests can compare against.
+- **Coverage gate raised** in CI to lines 56 / functions 50 /
+  branches 63 (actual measured 58.65 / 51.36 / 65.4 with the expanded
+  unit suite). 70/70 remains the long-term target but requires
+  network-mocking infrastructure beyond the v2.1.0 scope.
 
 #### Type declarations
 

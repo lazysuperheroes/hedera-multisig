@@ -57,9 +57,13 @@ class SigningSessionManager {
       // Generate agent API key for programmatic access
       const agentApiKey = crypto.randomBytes(16).toString('hex');
 
-      // Determine session timeout based on mode
-      // Scheduled sessions get a much longer default timeout (24 hours)
-      const scheduledDefaultTimeout = 86400000; // 24 hours
+      // Phase F2: ceremony-session timeout for `mode === 'scheduled'` is now
+      // configurable via the constructor's `scheduledDefaultTimeout` option
+      // (wired up to the server CLI's `--session-timeout` flag). Default
+      // remains 24h for backward compat. Set to e.g. 30 days to match a
+      // 30-day on-chain Schedule expiration so the dApp ceremony session
+      // doesn't expire while the schedule is still collecting signatures.
+      const scheduledDefaultTimeout = this.options.scheduledDefaultTimeout || 86400000; // 24h fallback
       const effectiveTimeout = config.timeout ||
         (config.mode === 'scheduled' ? scheduledDefaultTimeout : this.options.defaultTimeout);
 
@@ -667,7 +671,10 @@ class SigningSessionManager {
           const network = this.options.network || process.env.HEDERA_NETWORK || 'testnet';
           const MirrorNodeClient = require('../shared/mirror-node-client');
           const mirror = this.options.mirrorClient || new MirrorNodeClient(network);
-          const verification = await mirror.verifyExecution(result.transactionId);
+          const verification = await mirror.verifyExecution(result.transactionId, {
+            maxAttempts: this.options.mirrorPollMaxAttempts,
+            pollIntervalMs: this.options.mirrorPollIntervalMs,
+          });
           result.mirrorConfirmed = verification.mirrorConfirmed;
           result.mirrorRecord = verification.record;
           if (verification.mirrorConfirmed) {

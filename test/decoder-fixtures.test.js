@@ -20,16 +20,22 @@ const {
   TokenAssociateTransaction,
   TokenDissociateTransaction,
   TokenMintTransaction,
+  TokenBurnTransaction,
   TokenCreateTransaction,
   ContractExecuteTransaction,
+  ContractCreateTransaction,
   ScheduleSignTransaction,
   AccountCreateTransaction,
+  AccountUpdateTransaction,
+  AccountDeleteTransaction,
+  AccountAllowanceApproveTransaction,
   Hbar,
   AccountId,
   TokenId,
   ContractId,
   TransactionId,
   PrivateKey,
+  KeyList,
 } = require('@hashgraph/sdk');
 
 const {
@@ -77,12 +83,13 @@ describe('Decoder Regression Fixtures (Phase C13)', function() {
     expect(details.transfers).to.be.an('array').with.lengthOf(2);
     const accounts = details.transfers.map((t) => t.accountId).sort();
     expect(accounts).to.deep.equal(['0.0.1001', '0.0.1002']);
-    // amount is formatted as "-1000 tℏ" / "1000 tℏ" — the decoder calls Hbar.toString()
-    // which yields the SDK's human-readable form. Just assert the numeric prefix.
-    const amounts = details.transfers
-      .map((t) => parseInt(String(t.amount).match(/-?\d+/)?.[0] || '0', 10))
-      .sort((a, b) => a - b);
+    // Phase F3: amount is now raw tinybars (string), not "-1000 tℏ" formatted form.
+    const amounts = details.transfers.map((t) => parseInt(t.amount, 10)).sort((a, b) => a - b);
     expect(amounts).to.deep.equal([-1000, 1000]);
+    // Verify amount string is digits only (or leading minus) — no formatting cruft
+    for (const t of details.transfers) {
+      expect(t.amount).to.match(/^-?\d+$/);
+    }
 
     writeFixture('transfer-hbar', {
       description: 'Simple HBAR transfer 0.0.1001 → 0.0.1002 (1000 tinybars)',
@@ -242,9 +249,118 @@ describe('Decoder Regression Fixtures (Phase C13)', function() {
     });
   });
 
-  it('produces 7 fixture JSON files', function() {
+  it('AccountUpdateTransaction (key rotation)', function() {
+    const newKey = PrivateKey.generateED25519().publicKey;
+    const tx = new AccountUpdateTransaction()
+      .setAccountId(AccountId.fromString('0.0.1001'))
+      .setKey(newKey);
+    const frozen = freezeOffline(tx);
+    const typeName = getTransactionTypeName(frozen);
+    const details = SharedDecoder.extractTransactionDetails(frozen, typeName);
+    expect(typeName).to.equal('AccountUpdateTransaction');
+    expect(details.type).to.equal('AccountUpdateTransaction');
+
+    writeFixture('account-update', {
+      description: 'Account-update for 0.0.1001 (single-key rotation)',
+      inputBase64: Buffer.from(frozen.toBytes()).toString('base64'),
+      expectedShape: { type: details.type },
+    });
+  });
+
+  it('AccountDeleteTransaction', function() {
+    const tx = new AccountDeleteTransaction()
+      .setAccountId(AccountId.fromString('0.0.1001'))
+      .setTransferAccountId(AccountId.fromString('0.0.1002'));
+    const frozen = freezeOffline(tx);
+    const typeName = getTransactionTypeName(frozen);
+    const details = SharedDecoder.extractTransactionDetails(frozen, typeName);
+    expect(typeName).to.equal('AccountDeleteTransaction');
+    expect(details.type).to.equal('AccountDeleteTransaction');
+
+    writeFixture('account-delete', {
+      description: 'Delete 0.0.1001, sweep balance to 0.0.1002',
+      inputBase64: Buffer.from(frozen.toBytes()).toString('base64'),
+      expectedShape: { type: details.type },
+    });
+  });
+
+  it('TokenCreateTransaction', function() {
+    const tx = new TokenCreateTransaction()
+      .setTokenName('WalkthroughToken')
+      .setTokenSymbol('WTK')
+      .setDecimals(8)
+      .setInitialSupply(1000000)
+      .setTreasuryAccountId(AccountId.fromString('0.0.1001'));
+    const frozen = freezeOffline(tx);
+    const typeName = getTransactionTypeName(frozen);
+    const details = SharedDecoder.extractTransactionDetails(frozen, typeName);
+    expect(typeName).to.equal('TokenCreateTransaction');
+    expect(details.type).to.equal('TokenCreateTransaction');
+
+    writeFixture('token-create', {
+      description: 'Create fungible token WTK with 1M initial supply',
+      inputBase64: Buffer.from(frozen.toBytes()).toString('base64'),
+      expectedShape: { type: details.type },
+    });
+  });
+
+  it('TokenBurnTransaction (fungible)', function() {
+    const tx = new TokenBurnTransaction()
+      .setTokenId(TokenId.fromString('0.0.5000'))
+      .setAmount(500);
+    const frozen = freezeOffline(tx);
+    const typeName = getTransactionTypeName(frozen);
+    const details = SharedDecoder.extractTransactionDetails(frozen, typeName);
+    expect(typeName).to.equal('TokenBurnTransaction');
+    expect(details.type).to.equal('TokenBurnTransaction');
+
+    writeFixture('token-burn', {
+      description: 'Burn 500 of token 0.0.5000',
+      inputBase64: Buffer.from(frozen.toBytes()).toString('base64'),
+      expectedShape: { type: details.type },
+    });
+  });
+
+  it('ContractCreateTransaction (with bytecode)', function() {
+    const tx = new ContractCreateTransaction()
+      .setBytecode(Buffer.from('608060405234801561001057600080fd5b50', 'hex'))
+      .setGas(100000);
+    const frozen = freezeOffline(tx);
+    const typeName = getTransactionTypeName(frozen);
+    const details = SharedDecoder.extractTransactionDetails(frozen, typeName);
+    expect(typeName).to.equal('ContractCreateTransaction');
+    expect(details.type).to.equal('ContractCreateTransaction');
+
+    writeFixture('contract-create', {
+      description: 'ContractCreate with inline bytecode (Counter-style)',
+      inputBase64: Buffer.from(frozen.toBytes()).toString('base64'),
+      expectedShape: { type: details.type },
+    });
+  });
+
+  it('AccountAllowanceApproveTransaction (HBAR allowance)', function() {
+    const tx = new AccountAllowanceApproveTransaction()
+      .approveHbarAllowance(
+        AccountId.fromString('0.0.1001'),
+        AccountId.fromString('0.0.1002'),
+        Hbar.fromTinybars(1000)
+      );
+    const frozen = freezeOffline(tx);
+    const typeName = getTransactionTypeName(frozen);
+    const details = SharedDecoder.extractTransactionDetails(frozen, typeName);
+    expect(typeName).to.equal('AccountAllowanceApproveTransaction');
+    expect(details.type).to.equal('AccountAllowanceApproveTransaction');
+
+    writeFixture('account-allowance-approve', {
+      description: 'HBAR allowance: 0.0.1001 → 0.0.1002 for 1000 tinybars',
+      inputBase64: Buffer.from(frozen.toBytes()).toString('base64'),
+      expectedShape: { type: details.type },
+    });
+  });
+
+  it('produces 13 fixture JSON files', function() {
     ensureFixtureDir();
     const files = fs.readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.json'));
-    expect(files.length).to.be.at.least(7);
+    expect(files.length).to.be.at.least(13);
   });
 });

@@ -58,14 +58,13 @@ class TransactionDecoder {
       });
     }
 
-    // HBAR transfers (canonical shape: array of { accountId, amount })
+    // HBAR transfers (canonical shape: array of { accountId, amount in raw tinybars })
     if (Array.isArray(txDetails.transfers) && txDetails.transfers.length > 0) {
+      const { formatHbarTinybars } = require('../shared/transaction-decoder');
       console.log('\n💰 HBAR TRANSFERS:');
       txDetails.transfers.forEach((t) => {
-        const tinybars = t.amount;
-        const hbar = (parseInt(tinybars, 10) / 100000000).toFixed(8);
-        const direction = parseInt(tinybars, 10) > 0 ? 'to' : 'from';
-        console.log(`   ${hbar} HBAR ${direction} ${t.accountId}`);
+        const direction = BigInt(t.amount) > 0n ? 'to' : 'from';
+        console.log(`   ${formatHbarTinybars(t.amount, { showSign: false })} ${direction} ${t.accountId}`);
       });
     }
 

@@ -653,25 +653,41 @@ use this in production.
 
 ---
 
-## Long-window scheduled transactions: a 24-hour caveat
+## Long-window scheduled transactions: matching the ceremony window
 
 Scheduled transactions (HIP-423) can live on-chain for up to ~62 days.
-The `schedule create --expiration-time 30d` flag sets the on-chain
-schedule's expiration to 30 days. **The on-chain schedule runs for the
-full window** — signatures collected via `ScheduleSignTransaction` are
-accepted up to that expiration, and the network auto-executes when the
-threshold is met.
+By default the dApp coordinator ceremony session expires after 24 hours
+— shorter than the on-chain schedule. To prevent the dApp's
+`/session/[id]` view from showing "session expired" mid-window, match
+the ceremony session to the schedule expiration via
+`--session-timeout`:
 
-But the coordinator-side **ceremony session** (the WebSocket session
-the dApp connects to, which hands out reconnection tokens and tracks
-signature progress in the UI) is capped at 24 hours in v2.1.0. After
-24 hours:
+```bash
+# 30-day schedule with matching ceremony session
+npx hedera-multisig server \
+  -t 2 -k "key1,key2,key3" \
+  --session-timeout 30d \
+  --port 3001 --no-tunnel
+```
 
-- The dApp's `/session/[id]` view shows "session expired"
-- New participants cannot join via the dApp
-- Existing reconnection tokens stop working
+The flag accepts the same input format as `schedule create
+--expiration-time`: ISO-8601 (`2026-06-30T12:00:00Z`) or duration
+suffixes (`30d`, `8w`, `2h`). Capped at ~62 days (HIP-423 limit). When
+omitted, the ceremony session falls back to the historical 24-hour
+default for back-compat.
 
-**The signing itself still works.** Late signers run, on their own machine:
+**Why this matters:** participants that join the ceremony session via
+the dApp on day 1 can still review signature progress, see the
+intent-vs-actual diff once execution lands, and reconnect with their
+session-scoped reconnection token any time within the configured
+window. Without `--session-timeout`, late joiners on day 2+ would have
+seen "session expired" in the dApp.
+
+### CLI fallback for late signers
+
+If you didn't set `--session-timeout` (or your value was too short and
+late signers want in anyway), they can always sign by talking to the
+on-chain Schedule entity directly — no coordinator session required:
 
 ```bash
 npx hedera-multisig schedule sign \
@@ -680,25 +696,15 @@ npx hedera-multisig schedule sign \
   --passphrase ...
 ```
 
-This submits a `ScheduleSignTransaction` directly to the network — no
-coordinator session required. The multi-sig completes correctly when
-the threshold is met, regardless of whether anyone is connected to the
-dApp.
+This submits a `ScheduleSignTransaction` to Hedera directly. The
+multi-sig completes correctly when the threshold is met, with or
+without the dApp.
 
-**Practical guidance:**
-
-- For schedules expected to complete within 24 hours: use the dApp
-  ceremony flow as documented.
-- For longer windows: tell late signers up front that they will need
-  to use the CLI `schedule sign` path. Share the schedule ID through
-  your normal team channel; they don't need anything else.
-- Consider the alternate flow: have *all* signers use `schedule sign`
-  from the start, and skip the dApp ceremony for long-window
-  transactions. The dApp is most valuable for the 120-second realtime
-  ceremony shape; for 30-day async signing, CLI is the natural fit.
-
-**v2.2 will honor a `--session-timeout` flag** so the ceremony session
-matches the schedule expiration. Tracked as a v2.2 backlog item.
+**Storage note for Redis-backed deployments:** raising the ceremony
+timeout to 30 days means Redis holds session state for up to 30 days
+per active schedule. The footprint is small (~10 KB per session) so
+even thousands of long-window sessions stay well under 100 MB. Plan
+your Redis sizing accordingly if you run a busy mainnet coordinator.
 
 ---
 

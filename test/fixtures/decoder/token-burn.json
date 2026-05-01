@@ -1,0 +1,7 @@
+{
+  "description": "Burn 500 of token 0.0.5000",
+  "inputBase64": "CkIqQAo8ChgKCwiGxtLPBhDwhPgbEgcIABAAGOkHGAASBggAEAAYAxiAhK9fIgIIeDIAsgIMCgcIABAAGIgnEPQDEgAKQipACjwKGAoLCIbG0s8GEPCE+BsSBwgAEAAY6QcYABIGCAAQABgEGICEr18iAgh4MgCyAgwKBwgAEAAYiCcQ9AMSAApCKkAKPAoYCgsIhsbSzwYQ8IT4GxIHCAAQABjpBxgAEgYIABAAGAUYgISvXyICCHgyALICDAoHCAAQABiIJxD0AxIA",
+  "expectedShape": {
+    "type": "TokenBurnTransaction"
+  }
+}

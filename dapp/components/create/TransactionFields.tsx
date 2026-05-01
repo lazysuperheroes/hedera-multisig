@@ -275,6 +275,12 @@ function ContractAbiEditor({
   const [abiText, setAbiText] = useState(txFields.abiJson || '');
   const [selectedFn, setSelectedFn] = useState<string>(txFields.functionName || '');
   const [argValues, setArgValues] = useState<Record<string, string>>({});
+  // Phase F6: per-argument parse/encode errors surfaced inline so a coordinator
+  // pasting an array/tuple/struct ABI sees what went wrong for each arg
+  // independently. Previously a silent catch swallowed all encoding errors and
+  // left functionData stale.
+  const [argErrors, setArgErrors] = useState<Record<string, string>>({});
+  const [encodingError, setEncodingError] = useState<string | null>(null);
 
   const { iface, fnList, parseError } = useMemo(() => {
     if (!abiText.trim()) return { iface: null, fnList: [], parseError: null };
@@ -306,28 +312,42 @@ function ContractAbiEditor({
     }
   }, [iface, selectedFn]);
 
-  // Encode calldata when args change
+  // Phase F6: encode calldata, capturing per-arg parse errors and any
+  // ethers encode error. Complex types (arrays, tuples, structs) get
+  // JSON-parsed; primitives use lightweight coercion. Empty fragment
+  // inputs are still encodable (no-op for nullary functions).
   useEffect(() => {
     if (!iface || !selectedFragment) return;
+    const newArgErrors: Record<string, string> = {};
+    const orderedArgs: unknown[] = [];
+    let hasParseError = false;
+
+    selectedFragment.inputs.forEach((input, idx) => {
+      const key = input.name || `arg${idx}`;
+      const raw = (argValues[key] || '').trim();
+      try {
+        orderedArgs.push(coerceArg(input.type, raw));
+      } catch (err) {
+        newArgErrors[key] = (err as Error).message;
+        hasParseError = true;
+        orderedArgs.push(null); // placeholder so the index lines up
+      }
+    });
+
+    setArgErrors(newArgErrors);
+    if (hasParseError) {
+      setEncodingError(null);
+      return; // Don't try to encode if any arg failed to parse
+    }
+
     try {
-      const orderedArgs = selectedFragment.inputs.map((input, idx) => {
-        const key = input.name || `arg${idx}`;
-        const raw = argValues[key] || '';
-        // Light coercion for common types — ethers handles strings well otherwise
-        if (input.type.startsWith('uint') || input.type.startsWith('int')) {
-          return raw.trim() === '' ? '0' : raw.trim();
-        }
-        if (input.type === 'bool') {
-          return raw.toLowerCase() === 'true' || raw === '1';
-        }
-        return raw;
-      });
       const encoded = iface.encodeFunctionData(selectedFn, orderedArgs);
       setTxField('functionData', encoded);
       setTxField('abiJson', abiText);
       setTxField('functionName', selectedFn);
-    } catch {
-      // Encoding errors (bad arg values) — leave functionData as-is so user sees the error in build step
+      setEncodingError(null);
+    } catch (err) {
+      setEncodingError((err as Error).message);
     }
   }, [iface, selectedFragment, selectedFn, argValues, abiText, setTxField]);
 
@@ -396,25 +416,53 @@ function ContractAbiEditor({
           </p>
           {selectedFragment.inputs.map((input, idx) => {
             const key = input.name || `arg${idx}`;
+            const isComplex = isComplexType(input.type);
+            const argError = argErrors[key];
             return (
               <div key={key}>
                 <label htmlFor={`arg-${key}`} className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
                   <code className="font-mono">{input.name || `arg${idx}`}</code>
                   <span className="ml-2 text-gray-400">({input.type})</span>
+                  {isComplex && (
+                    <span className="ml-2 text-blue-600 dark:text-blue-400 italic">— JSON value</span>
+                  )}
                 </label>
-                <input
-                  id={`arg-${key}`}
-                  type="text"
-                  className={inputClassLocal + ' text-sm font-mono'}
-                  placeholder={argPlaceholder(input.type)}
-                  value={argValues[key] || ''}
-                  onChange={(e) =>
-                    setArgValues({ ...argValues, [key]: e.target.value })
-                  }
-                />
+                {isComplex ? (
+                  <textarea
+                    id={`arg-${key}`}
+                    className={inputClassLocal + ' text-xs font-mono'}
+                    rows={2}
+                    placeholder={argPlaceholder(input.type)}
+                    value={argValues[key] || ''}
+                    onChange={(e) =>
+                      setArgValues({ ...argValues, [key]: e.target.value })
+                    }
+                  />
+                ) : (
+                  <input
+                    id={`arg-${key}`}
+                    type="text"
+                    className={inputClassLocal + ' text-sm font-mono'}
+                    placeholder={argPlaceholder(input.type)}
+                    value={argValues[key] || ''}
+                    onChange={(e) =>
+                      setArgValues({ ...argValues, [key]: e.target.value })
+                    }
+                  />
+                )}
+                {argError && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    Parse error: {argError}
+                  </p>
+                )}
               </div>
             );
           })}
+          {encodingError && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              Encoding error: {encodingError}
+            </p>
+          )}
         </div>
       )}
 
@@ -441,7 +489,46 @@ function ContractAbiEditor({
   );
 }
 
+/**
+ * Phase F6: detect complex Solidity types that need JSON-value encoding.
+ * Arrays: `address[]`, `uint256[3]`. Tuples / structs: `tuple` keyword,
+ * or anonymous tuple syntax starting with `(`.
+ */
+function isComplexType(type: string): boolean {
+  if (type.includes('[')) return true; // arrays
+  if (type.startsWith('tuple') || type.startsWith('(')) return true; // tuples / structs
+  return false;
+}
+
+/**
+ * Phase F6: coerce a single argument string into the value `ethers` expects.
+ * Throws on JSON parse failure for complex types — caller catches and
+ * surfaces the error per-arg.
+ */
+function coerceArg(type: string, raw: string): unknown {
+  if (isComplexType(type)) {
+    if (raw === '') {
+      throw new Error('value required (JSON array/tuple)');
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      throw new Error(`not valid JSON: ${(err as Error).message}`);
+    }
+  }
+  if (type.startsWith('uint') || type.startsWith('int')) {
+    return raw === '' ? '0' : raw;
+  }
+  if (type === 'bool') {
+    return raw.toLowerCase() === 'true' || raw === '1';
+  }
+  return raw;
+}
+
 function argPlaceholder(type: string): string {
+  if (type.endsWith('[]')) return `JSON array, e.g. ["0x...", "0x..."]`;
+  if (type.includes('[')) return `JSON array (length matches type)`;
+  if (type.startsWith('tuple') || type.startsWith('(')) return `JSON array of tuple values, e.g. ["0x...", 100]`;
   if (type.startsWith('uint') || type.startsWith('int')) return '0';
   if (type === 'address') return '0x...';
   if (type === 'bool') return 'true / false';

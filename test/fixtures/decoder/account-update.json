@@ -1,0 +1,7 @@
+{
+  "description": "Account-update for 0.0.1001 (single-key rotation)",
+  "inputBase64": "CmIqYApcChgKCwiGxtLPBhDr+YkYEgcIABAAGOkHGAASBggAEAAYAxiAhK9fIgIIeDIAei0SBwgAEAAY6QcaIhIgzke+jsHIjwoGzgXWYoBJJZTEgr0wNqDRtSpkML484VwSAApiKmAKXAoYCgsIhsbSzwYQ6/mJGBIHCAAQABjpBxgAEgYIABAAGAQYgISvXyICCHgyAHotEgcIABAAGOkHGiISIM5Hvo7ByI8KBs4F1mKASSWUxIK9MDag0bUqZDC+POFcEgAKYipgClwKGAoLCIbG0s8GEOv5iRgSBwgAEAAY6QcYABIGCAAQABgFGICEr18iAgh4MgB6LRIHCAAQABjpBxoiEiDOR76OwciPCgbOBdZigEkllMSCvTA2oNG1KmQwvjzhXBIA",
+  "expectedShape": {
+    "type": "AccountUpdateTransaction"
+  }
+}
