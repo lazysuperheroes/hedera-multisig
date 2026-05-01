@@ -47,11 +47,9 @@ export interface TransactionDetails {
   [key: string]: unknown;
 }
 
-export class TransactionDecoder {
-  /** @deprecated Use SharedTransactionDecoder instead */
-  static decode(transaction: Transaction, contractInterface?: unknown): TransactionDetails;
-  static display(txDetails: TransactionDetails, options?: { verbose?: boolean; compact?: boolean }): void;
-}
+// Note: `TransactionDecoder` (the legacy decoder class) was removed in v2.1.0.
+// For decoding, use `SharedTransactionDecoder` from `@lazysuperheroes/hedera-multisig/shared/transaction-decoder`.
+// For terminal display only, see `core/TransactionDecoder` (display utility, not exported from the package root).
 
 export interface SignatureData {
   publicKey: string;
@@ -90,8 +88,26 @@ export class SignatureVerifier {
   static generateChecksum(input: { bytes: Uint8Array } | Uint8Array): string;
 }
 
+export interface MirrorTransactionRecord {
+  transactionId: string;
+  consensusTimestamp?: string;
+  result?: string;
+  chargedTxFee?: number;
+  memoBase64?: string;
+  transfers?: Array<{ account: string; amount: number }>;
+  tokenTransfers?: unknown[];
+  nftTransfers?: unknown[];
+  scheduled?: boolean;
+  entityId?: string | null;
+  name?: string | null;
+}
+
 export interface ExecutionResult {
   success: boolean;
+  /** Phase B11: true if mirror node confirmed the transaction landed */
+  mirrorConfirmed?: boolean;
+  /** Phase B11: full mirror-node record when confirmed, null otherwise */
+  mirrorRecord?: MirrorTransactionRecord | null;
   transactionId?: string;
   receipt?: unknown;
   status?: string;
@@ -104,6 +120,12 @@ export class TransactionExecutor {
     skipAuditLog?: boolean;
     auditLogPath?: string;
     metadata?: Record<string, unknown>;
+    /** Phase B11: confirm on mirror node after consensus receipt (default true) */
+    verifyOnMirror?: boolean;
+    /** Phase B11: Hedera network for mirror lookups; defaults to env HEDERA_NETWORK or 'testnet' */
+    network?: 'mainnet' | 'testnet' | 'previewnet';
+    /** Phase B11: pre-built MirrorNodeClient (testing) */
+    mirrorClient?: unknown;
   }): Promise<ExecutionResult>;
 }
 
@@ -181,11 +203,35 @@ export class OfflineWorkflow {
   run(transaction: Transaction, signatureFiles: Array<string | SignatureData>, options?: { threshold?: number }): Promise<WorkflowResult>;
 }
 
+export interface ScheduleCreateOptions {
+  payerAccountId?: unknown;
+  /** Phase A12: schedule expiration time (Date). Up to ~62 days (HIP-423). */
+  expirationTime?: Date;
+  /** Phase A12: HIP-423 long-term mode — wait until expirationTime even after threshold met */
+  waitForExpiry?: boolean;
+  /** Phase A12: admin public key authorized to delete the schedule before execution */
+  adminKey?: unknown;
+}
+
+export interface ScheduleCreateResult {
+  success: boolean;
+  scheduleId?: string;
+  transactionId?: string;
+  error?: string;
+}
+
+export class ScheduledWorkflow {
+  constructor(client: Client, options?: { verbose?: boolean; scheduleMemo?: string });
+  createSchedule(innerTransaction: Transaction, options?: ScheduleCreateOptions): Promise<ScheduleCreateResult>;
+  signSchedule(scheduleId: string, privateKey: PrivateKey): Promise<{ success: boolean; transactionId?: string; status?: string; executed?: boolean; error?: string }>;
+  getScheduleInfo(scheduleId: string): Promise<{ success: boolean; scheduleId?: string; executed?: boolean; deleted?: boolean; memo?: string; signatories?: string[]; creatorAccountId?: string; payerAccountId?: string; expirationTime?: string | null; executedAt?: string | null; error?: string }>;
+}
+
 // ============================================================================
 // Server Components
 // ============================================================================
 
-export type SessionStatus = 'waiting' | 'transaction-received' | 'signing' | 'executing' | 'completed' | 'transaction-expired' | 'expired' | 'cancelled';
+export type SessionStatus = 'waiting' | 'transaction-received' | 'signing' | 'executing' | 'completed' | 'execution-failed' | 'transaction-expired' | 'expired' | 'cancelled';
 
 export interface SessionStats {
   participantsConnected: number;

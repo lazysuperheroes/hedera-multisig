@@ -173,6 +173,161 @@ describe('Networked Workflow Error Handling', function() {
 
 ## End-to-End Testing
 
+> **Walkthrough scenarios first.** For v2.1.0 the recommended way to do
+> a manual end-to-end test is to run the two scripted walkthroughs
+> (Scenarios 11 and 12 below). They cover the same paths as the older
+> ad-hoc scenarios (1-10) but are reproducible from clean state, write
+> their own tracking files, and double as user-facing documentation.
+> Run those first; treat the older scenarios as supplemental coverage.
+
+### Scenario 11: HBAR walkthrough end-to-end (v2.1.0)
+
+**Source:** `examples/walkthrough-hbar/` — see its [README.md](./examples/walkthrough-hbar/README.md) for the user-facing walkthrough.
+
+**What it tests:**
+- Threshold-key account creation via `KeyList` with threshold = 2
+- Coordinator server start with `--no-tunnel`
+- dApp `/create` injection of an HBAR transfer
+- CLI `participant` flow signing with encrypted-file keys
+- Mirror-node confirmation via `06-verify-on-mirror.js`
+
+**Steps:**
+
+```bash
+# Repo root, with .env containing OPERATOR_ID/OPERATOR_KEY/HEDERA_NETWORK=testnet
+cd examples/walkthrough-hbar
+
+# Terminal 1 — prep + coordinator
+node 00-precheck.js
+node 01-generate-keys.js
+node 02-create-threshold-account.js     # creates the 2-of-3 account, prints account ID
+
+npx hedera-multisig server \
+  -t 2 \
+  -k "$(node -p "require('./walkthrough-state.json').publicKeys.join(',')")" \
+  --port 3001 \
+  --no-tunnel
+
+# Terminal 2 — dApp (if not already running)
+cd ../../dapp && npm run dev
+
+# Browser — open http://localhost:3000/create
+#  - Connect with credentials from terminal 1
+#  - Build "HBAR transfer": from = threshold account, to = operator, amount = 1 ℏ
+#  - Click Inject Transaction
+
+# Terminal 3 — alice
+cd examples/walkthrough-hbar
+npx hedera-multisig participant \
+  --connect "<connection string from terminal 1>" \
+  --label alice \
+  --key-file ./walkthrough-keys.alice.json
+# review and approve
+
+# Terminal 4 — bob
+npx hedera-multisig participant \
+  --connect "..." --label bob \
+  --key-file ./walkthrough-keys.bob.json
+# review and approve
+
+# Coordinator submits the signed tx; copy the transaction ID
+
+# Terminal 1 (coordinator output) — verify
+node 06-verify-on-mirror.js <transactionId>
+```
+
+**Expected results:**
+- ✅ `00-precheck.js` reports operator balance ≥ 2 ℏ
+- ✅ `02-create-threshold-account.js` prints a new account ID; HashScan shows it as a threshold key (2/3)
+- ✅ Coordinator server starts and prints session ID + PIN + coordinator token + connection string
+- ✅ dApp `/create` connects with the coordinator's credentials
+- ✅ Transaction injection succeeds within 120 s
+- ✅ Both participants see the transaction details in TransactionReview (verified amounts, recipient, fee)
+- ✅ After 2 signatures, coordinator submits and prints transaction ID
+- ✅ `06-verify-on-mirror.js` reports `mirrorConfirmed: true` with consensus timestamp
+- ✅ Final balance: threshold account = 4 ℏ (5 initial - 1 sent), operator credited
+
+**Time:** ~30 minutes from cold start. **HBAR cost:** ~6 ℏ in network fees + the 5 ℏ funding the threshold account.
+
+---
+
+### Scenario 12: Smart-contract walkthrough (v2.1.0)
+
+**Source:** `examples/walkthrough-contract/` — see its [README.md](./examples/walkthrough-contract/README.md). Requires Scenario 11's keys.
+
+**What it tests:**
+- `ContractCreateFlow()` deployment as an EOA
+- `ContractExecuteTransaction` calling `increment()` single-sig
+- `AccountUpdateTransaction` converting a single-key account to a 2-of-3 KeyList (dual-signature rule: old key + new threshold key both sign)
+- Negative test: the same single-sig call now returns `INVALID_SIGNATURE` after conversion
+- Multi-sig ceremony for `increment()` and admin-only `withdraw()`
+- Three injection paths into a multi-sig session: dApp build-from-form, dApp paste-frozen-base64, CLI `inject` (Phase D13)
+
+**Steps:**
+
+```bash
+cd examples/walkthrough-contract
+
+# EOA stage
+node 00-precheck.js
+node 01-create-demo-eoa.js
+node 02-deploy-as-eoa.js
+node 03-fund-contract.js
+node 04-call-increment-as-eoa.js   # counter = 1
+
+# Conversion stage
+node 05-convert-eoa-to-multisig.js
+node 06-prove-eoa-rejected.js       # MUST exit 0 (single-sig rejected as expected)
+
+# Multi-sig ceremony stage — pick ONE of the three injection paths per ceremony
+
+# (Path A) Build-from-form in dApp:
+#   - Open dApp /create, paste Counter.json ABI in the contract-call form,
+#     pick the function from the dropdown, click Inject.
+#
+# (Path B) Paste frozen base64 in dApp /create:
+#   - node 07-prepare-multisig-increment.js   # prints base64
+#   - In dApp /create, switch to "Paste Frozen TX" tab, paste, optionally
+#     paste Counter.json ABI for verified function review, Inject.
+#
+# (Path C) CLI inject:
+#   - node 07-prepare-multisig-increment.js  # writes multisig-increment-tx.json
+#   - npx hedera-multisig inject \
+#       --connect "<connection string>" \
+#       --base64-file multisig-increment-tx.json
+#   (or pass --base64 directly)
+
+# Two participants sign (alice + bob), coordinator submits, mirror verifies
+node ../walkthrough-hbar/06-verify-on-mirror.js <txId>
+
+# Withdraw — same shape:
+node 08-prepare-multisig-withdraw.js
+# inject (any of the three paths) + sign + verify
+```
+
+**Expected results:**
+- ✅ `02-deploy-as-eoa.js` prints contract ID; HashScan shows the contract created by the demo account
+- ✅ `04-call-increment-as-eoa.js` shows counter = 1
+- ✅ `05-convert-eoa-to-multisig.js` succeeds; `AccountInfoQuery` confirms `KeyList` with `threshold = 2`
+- ✅ **`06-prove-eoa-rejected.js` exits 0** (single-sig rejection is the expected outcome)
+- ✅ Multi-sig increment ceremony executes; counter = 2
+- ✅ Multi-sig withdraw ceremony executes; contract balance returns to 0; demo account credited (minus fee)
+- ✅ TransactionReview in dApp shows green "ABI Verified ✓" badge for both contract calls when ABI is provided
+- ✅ Test all three injection paths (A/B/C) at least once across the ceremonies
+
+**Time:** ~30 minutes after Scenario 11. **HBAR cost:** ~10 ℏ in network fees + 8 ℏ funding the demo account + 2 ℏ funding the contract.
+
+**Failure-mode coverage to add (optional but valuable):**
+- Try `withdraw()` from an account that is NOT the deployer → expect `not admin` revert (Solidity-level, not Hedera-level)
+- Try the multi-sig ceremony with only 1 signature instead of 2 → expect `INVALID_SIGNATURE` after the 120 s window times out
+- Run `npx hedera-multisig schedule create -b <base64> --expiration-time 7d` for the increment call → expect a Schedule entity that anyone can sign asynchronously (HIP-423 path)
+
+---
+
+### Legacy ad-hoc scenarios (1-10)
+
+These pre-date the scripted walkthroughs and remain useful for targeted regression testing of specific paths.
+
 ### Scenario 1: Simple Transfer with 2-of-3 Multi-Sig
 
 **Setup:**

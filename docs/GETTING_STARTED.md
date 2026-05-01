@@ -7,6 +7,26 @@
 
 ---
 
+## Pick your path
+
+Hedera MultiSig has three entry points. Choose the one that matches what
+you want to do:
+
+| Want to… | Path | Time | What runs where |
+|---|---|---|---|
+| **Try the dApp without installing anything** | Open [`testnet-multisig.lazysuperheroes.com`](https://testnet-multisig.lazysuperheroes.com) | 2 min | Vercel hosts the UI in your browser. Coordinator (the WebSocket server that holds session state) **must still be self-hosted** — paste a coordinator URL when you join, or jump to "Run a session" below first. |
+| **Run a real session** | Self-host the coordinator with `npx hedera-multisig server`, then connect via the hosted dApp or CLI | 5–15 min | You run the coordinator on your machine; the hosted dApp (or your participants' CLIs) connect to it. Use ngrok/localtunnel for remote signers, or `--tls-cert` for direct WSS. Continue with this guide. |
+| **Embed it in your app** | `npm install @lazysuperheroes/hedera-multisig` | varies | Library + agent SDK. See [AGENT_INTEGRATION.md](AGENT_INTEGRATION.md). |
+
+> **Architectural note:** Vercel does not host a coordinator process. Every
+> multi-sig session needs a WebSocket server, and that server is always run
+> by you (or someone you trust). The hosted dApp at `multisig.lazysuperheroes.com`
+> is a static client that connects to a coordinator URL you provide. Keys
+> never leave the signer's device — only frozen transaction bytes and
+> signatures flow over the wire.
+
+---
+
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)

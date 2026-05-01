@@ -1,0 +1,8 @@
+{
+  "description": "Schedule sign for 0.0.7000",
+  "inputBase64": "CkAqPgo6ChgKCwjlgNLPBhDLp4heEgcIABAAGOkHGAASBggAEAAYAxiAyrXuASICCHgyAOICCQoHCAAQABjYNhIACkAqPgo6ChgKCwjlgNLPBhDLp4heEgcIABAAGOkHGAASBggAEAAYBBiAyrXuASICCHgyAOICCQoHCAAQABjYNhIACkAqPgo6ChgKCwjlgNLPBhDLp4heEgcIABAAGOkHGAASBggAEAAYBRiAyrXuASICCHgyAOICCQoHCAAQABjYNhIA",
+  "expectedShape": {
+    "type": "ScheduleSignTransaction",
+    "scheduleId": "0.0.7000"
+  }
+}

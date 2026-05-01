@@ -150,6 +150,22 @@ class SessionStore {
   }
 
   /**
+   * Persist a reconnection-token entry for a participant.
+   * Mirrors the RedisSessionStore method of the same name so callers (notably
+   * SigningSessionManager.generateReconnectionToken) are store-agnostic.
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string} participantId - Participant identifier
+   * @param {Object} tokenEntry - { token, publicKey, createdAt }
+   */
+  async setReconnectionToken(sessionId, participantId, tokenEntry) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    if (!session.reconnectionTokens) session.reconnectionTokens = new Map();
+    session.reconnectionTokens.set(participantId, tokenEntry);
+  }
+
+  /**
    * Rejoin an existing participant by public key (identity preservation on reconnect).
    * If a participant with this public key already exists, returns their existing participantId.
    *

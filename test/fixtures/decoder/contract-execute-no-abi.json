@@ -1,0 +1,9 @@
+{
+  "description": "ContractExecute increment() with no ABI provided",
+  "inputBase64": "CkkqRwpDChkKDAjngNLPBhCE0sr3AhIHCAAQABjpBxgAEgYIABAAGAMYgISvXyICCHgyADoTCgcIABAAGPAuEKCNBiIE0J3gihIACkkqRwpDChkKDAjngNLPBhCE0sr3AhIHCAAQABjpBxgAEgYIABAAGAQYgISvXyICCHgyADoTCgcIABAAGPAuEKCNBiIE0J3gihIACkkqRwpDChkKDAjngNLPBhCE0sr3AhIHCAAQABjpBxgAEgYIABAAGAUYgISvXyICCHgyADoTCgcIABAAGPAuEKCNBiIE0J3gihIA",
+  "expectedShape": {
+    "type": "ContractExecuteTransaction",
+    "contractId": "0.0.6000",
+    "gas": 100000
+  }
+}

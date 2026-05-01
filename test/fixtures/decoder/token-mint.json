@@ -1,0 +1,8 @@
+{
+  "description": "Mint 1000 of token 0.0.5000",
+  "inputBase64": "CkMqQQo9ChkKDAjkgNLPBhDt/d7IAxIHCAAQABjpBxgAEgYIABAAGAMYgISvXyICCHgyAKoCDAoHCAAQABiIJxDoBxIACkMqQQo9ChkKDAjkgNLPBhDt/d7IAxIHCAAQABjpBxgAEgYIABAAGAQYgISvXyICCHgyAKoCDAoHCAAQABiIJxDoBxIACkMqQQo9ChkKDAjkgNLPBhDt/d7IAxIHCAAQABjpBxgAEgYIABAAGAUYgISvXyICCHgyAKoCDAoHCAAQABiIJxDoBxIA",
+  "expectedShape": {
+    "type": "TokenMintTransaction",
+    "tokenId": "0.0.5000"
+  }
+}

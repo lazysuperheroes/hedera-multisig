@@ -344,6 +344,57 @@ Behavior:
 
 ---
 
+## Known Limitations
+
+These behaviors are documented rather than fixed because they require
+trusted-time / persistent-state infrastructure that an embedded agent
+SDK can&apos;t universally provide. Layer your own controls accordingly.
+
+### `RateLimitRule` resets on agent restart
+
+The rule tracks recent approval timestamps in process memory only. If
+the agent process restarts, the counter resets to zero — so an attacker
+who can trigger restarts (via OOM, deploy churn, or scheduled pod
+recycling) can bypass the per-window cap.
+
+**Mitigation:** treat `RateLimitRule` as a defense-in-depth signal, not
+a hard limit. Pair it with an external rate-limit at the orchestration
+layer (e.g. a Redis token bucket the agent reads, or a sidecar that
+gates outbound signing requests).
+
+### `TimeWindowRule` trusts the local clock
+
+The rule reads `Date.now()` on the agent host. An attacker with NTP
+hijack on the host (or who controls the container clock) can sign
+outside the configured window.
+
+**Mitigation:** run agents on hosts with cryptographic NTP (NTS,
+chronyc with authenticated sources) when the window is load-bearing.
+For high-stakes time gates, replicate the check server-side using a
+trusted time source.
+
+### Reconnection-token persistence
+
+When an agent reconnects, the server re-validates the bound public key
+against the current eligible-keys set (Phase A6). However, the
+reconnection token itself is held in process memory; an agent restart
+forces a fresh PIN/API-key authentication. This is intentional — there
+is no on-disk credential cache by default — but means agents need their
+auth credentials available at startup, not just at first launch.
+
+**Mitigation:** load API keys from a secret manager (Vault, AWS Secrets
+Manager) on agent startup. Don&apos;t persist them to local files.
+
+### PolicyEngine context is single-transaction
+
+Each transaction is evaluated in isolation. Cross-transaction
+correlation (e.g. &quot;don&apos;t approve more than 50,000 HBAR across all
+transactions in 24 hours&quot;) is not built in — `RateLimitRule` counts
+approvals, not amounts. Implement a custom rule with external state if
+you need cumulative-amount limits.
+
+---
+
 ## Example: Treasury Bot
 
 A complete example of a treasury bot that approves HBAR transfers under 1000 HBAR to whitelisted accounts.

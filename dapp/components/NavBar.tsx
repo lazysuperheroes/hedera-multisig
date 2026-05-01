@@ -10,11 +10,25 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useWallet } from '../hooks/useWallet';
 import { WalletSelectionDialog } from './WalletSelectionDialog';
 import { ThemeToggle } from './ThemeToggle';
 
 export function NavBar() {
+  const pathname = usePathname();
+  // Phase C8: skip wallet initialization on the landing page. useWallet
+  // statically imports lib/walletconnect, which on mount calls
+  // initializeWalletConnect() and starts two 5s polling intervals — none of
+  // which is needed on `/`. Routes that actually need the wallet (/join,
+  // /create, /session, /history) get the full hook.
+  if (pathname === '/') {
+    return <NavBarMinimal />;
+  }
+  return <NavBarFull />;
+}
+
+function NavBarFull() {
   const { accountId, publicKey, publicKeyType, evmAddress, balance, isConnected, isConnecting, connect, disconnect } = useWallet();
   const [showWalletDialog, setShowWalletDialog] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -115,6 +129,9 @@ export function NavBar() {
                   />
                 </svg>
                 History
+              </Link>
+              <Link href="/learn" className={navLinkClass}>
+                Learn
               </Link>
             </div>
 
@@ -273,6 +290,13 @@ export function NavBar() {
               >
                 History
               </Link>
+              <Link
+                href="/learn"
+                onClick={() => setShowMobileMenu(false)}
+                className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                Learn
+              </Link>
             </div>
 
             {/* Mobile Connect/Disconnect */}
@@ -309,5 +333,95 @@ export function NavBar() {
         onClose={() => setShowWalletDialog(false)}
       />
     </>
+  );
+}
+
+/**
+ * Phase C8: minimal landing-page nav. No wallet hook — no WalletConnect chunk,
+ * no polling intervals, no mount cost. The "Connect Wallet" button routes to
+ * /join, where the full nav (with useWallet) takes over.
+ */
+function NavBarMinimal() {
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const network = process.env.NEXT_PUBLIC_DEFAULT_NETWORK || 'testnet';
+  const navLinkClass = "px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors";
+
+  return (
+    <nav className="sticky top-0 left-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16 sm:h-20">
+          <Link href="/" className="flex items-center space-x-3">
+            <div className="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white">Hedera MultiSig</h1>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${network === 'mainnet'
+                ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 border border-green-300 dark:border-green-700'
+                : 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border border-orange-300 dark:border-orange-700'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${network === 'mainnet' ? 'bg-green-500' : 'bg-orange-500 animate-pulse'}`}></span>
+                {network.toUpperCase()}
+              </span>
+            </div>
+          </Link>
+
+          <div className="hidden sm:flex items-center gap-1">
+            <Link href="/join" className={navLinkClass}>Join</Link>
+            <Link href="/create" className={navLinkClass}>Create</Link>
+            <Link href="/history" className={navLinkClass}>History</Link>
+            <Link href="/learn" className={navLinkClass}>Learn</Link>
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            <ThemeToggle />
+            <Link
+              href="/join"
+              className="hidden sm:flex px-4 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors items-center gap-2"
+            >
+              Connect Wallet
+            </Link>
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="sm:hidden p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+              aria-expanded={showMobileMenu}
+            >
+              {showMobileMenu ? (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {showMobileMenu && (
+        <div className="sm:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+          <div className="px-4 py-3 space-y-1">
+            <Link href="/join" onClick={() => setShowMobileMenu(false)} className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">Join Session</Link>
+            <Link href="/create" onClick={() => setShowMobileMenu(false)} className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">Create Session</Link>
+            <Link href="/history" onClick={() => setShowMobileMenu(false)} className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">History</Link>
+            <Link href="/learn" onClick={() => setShowMobileMenu(false)} className="block px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">Learn</Link>
+          </div>
+          <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+            <Link
+              href="/join"
+              onClick={() => setShowMobileMenu(false)}
+              className="w-full px-4 py-3 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center justify-center gap-2"
+            >
+              Connect Wallet
+            </Link>
+          </div>
+        </div>
+      )}
+    </nav>
   );
 }

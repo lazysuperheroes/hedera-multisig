@@ -7,7 +7,10 @@
 
 const crypto = require('crypto');
 const SessionStore = require('./SessionStore');
-const TransactionDecoder = require('../core/TransactionDecoder');
+const {
+  TransactionDecoder: SharedDecoder,
+  getTransactionTypeName
+} = require('../shared/transaction-decoder');
 const SignatureVerifier = require('../core/SignatureVerifier');
 const { normalizePublicKey, isKeyEligible } = require('./utils/keyUtils');
 const { PublicKey, Transaction } = require('@hashgraph/sdk');
@@ -124,8 +127,12 @@ class SigningSessionManager {
         throw new Error('Transaction must be frozen before creating session');
       }
 
-      // Decode transaction details
-      const txDetails = TransactionDecoder.decode(transaction, config.contractInterface);
+      // Decode transaction details (canonical shared decoder — 20+ TX types)
+      const txDetails = SharedDecoder.extractTransactionDetails(
+        transaction,
+        getTransactionTypeName(transaction),
+        config.contractInterface
+      );
 
       // Extract eligible public keys from transaction
       const eligiblePublicKeys = await this._extractEligiblePublicKeys(
@@ -286,25 +293,50 @@ class SigningSessionManager {
   /**
    * Generate reconnection token for a participant
    *
+   * Binds the token to the participant's public key (when available) so that
+   * subsequent reconnection-token AUTH can re-validate eligibility against the
+   * current eligible-keys set. Without this binding, a stale token would
+   * bypass eligibility changes made after token issuance.
+   *
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
+   * @param {string} [publicKey] - Public key the participant authenticated with (optional)
    * @returns {string} Reconnection token
    */
-  async generateReconnectionToken(sessionId, participantId) {
+  async generateReconnectionToken(sessionId, participantId, publicKey = null) {
     const token = crypto.randomBytes(16).toString('hex');
-    const session = await this.store.getSession(sessionId);
-    if (session) {
-      session.reconnectionTokens.set(participantId, token);
+    const normalizedKey = publicKey ? normalizePublicKey(publicKey) : null;
+    const entry = {
+      token,
+      publicKey: normalizedKey,
+      createdAt: Date.now()
+    };
+    // Use the store's write-through method so Redis-backed sessions persist.
+    // (The in-memory store's getSession() returns the live object, so direct
+    // Map mutation worked there; Redis returns a copy on every read, so the
+    // mutation was lost. Routing through setReconnectionToken fixes both.)
+    if (typeof this.store.setReconnectionToken === 'function') {
+      await this.store.setReconnectionToken(sessionId, participantId, entry);
+    } else {
+      const session = await this.store.getSession(sessionId);
+      if (session) {
+        session.reconnectionTokens.set(participantId, entry);
+      }
     }
     return token;
   }
 
   /**
-   * Authenticate with reconnection token (alternative to PIN for returning participants)
+   * Authenticate with reconnection token (alternative to PIN for returning participants).
+   *
+   * If the token was originally issued with a bound public key, the key is
+   * re-validated against the current eligible-keys set. This closes the gap
+   * where a coordinator rotated the eligible set mid-session and a stale
+   * reconnection token could otherwise rejoin.
    *
    * @param {string} sessionId - Session identifier
    * @param {string} reconnectionToken - Previously issued reconnection token
-   * @returns {{ valid: boolean, participantId?: string }}
+   * @returns {{ valid: boolean, participantId?: string, publicKey?: string|null, reason?: string }}
    */
   async authenticateWithReconnectionToken(sessionId, reconnectionToken) {
     const session = await this.store.getSession(sessionId);
@@ -312,9 +344,19 @@ class SigningSessionManager {
       return { valid: false };
     }
 
-    for (const [participantId, token] of session.reconnectionTokens) {
-      if (this.store._timingSafeCompare(reconnectionToken, token)) {
-        return { valid: true, participantId };
+    for (const [participantId, entry] of session.reconnectionTokens) {
+      // Tolerate the legacy shape (string token) as well as the new {token, publicKey} shape
+      const storedToken = typeof entry === 'string' ? entry : entry.token;
+      const storedPublicKey = typeof entry === 'string' ? null : entry.publicKey;
+
+      if (this.store._timingSafeCompare(reconnectionToken, storedToken)) {
+        if (storedPublicKey && session.eligiblePublicKeys && session.eligiblePublicKeys.length > 0) {
+          const stillEligible = isKeyEligible(storedPublicKey, session.eligiblePublicKeys);
+          if (!stillEligible) {
+            return { valid: false, reason: 'KEY_NO_LONGER_ELIGIBLE' };
+          }
+        }
+        return { valid: true, participantId, publicKey: storedPublicKey };
       }
     }
 
@@ -514,6 +556,18 @@ class SigningSessionManager {
    * @returns {Object} Execution result
    */
   async executeTransaction(sessionId) {
+    // Phase B5: serialize execution under the same per-session lock as
+    // signature submission. Without this, a coordinator-triggered EXECUTE
+    // racing with auto-execute on threshold-met could double-fire (the
+    // status='completed' check has read-modify-write window). The lock also
+    // prevents concurrent executes from a re-trigger after a transient failure.
+    const prevLock = this._signatureLocks.get(sessionId) || Promise.resolve();
+    const lockPromise = prevLock.then(() => this._executeTransactionLocked(sessionId));
+    this._signatureLocks.set(sessionId, lockPromise.catch(() => {}));
+    return lockPromise;
+  }
+
+  async _executeTransactionLocked(sessionId) {
     try {
       const session = await this.store.getSession(sessionId);
 
@@ -521,12 +575,21 @@ class SigningSessionManager {
         throw new Error('Session not found');
       }
 
-      if (!await this.store.isThresholdMet(sessionId)) {
-        throw new Error('Threshold not met, cannot execute transaction');
-      }
-
+      // Reject execute on terminal states. 'execution-failed' is intentionally
+      // terminal — requires operator intervention before retry, otherwise any
+      // authenticated client could re-trigger after a transient failure.
       if (session.status === 'completed') {
         throw new Error('Transaction already executed');
+      }
+      if (session.status === 'execution-failed') {
+        throw new Error('Session is in execution-failed state and cannot be retried automatically. Cancel and create a new session.');
+      }
+      if (session.status === 'cancelled' || session.status === 'expired' || session.status === 'transaction-expired') {
+        throw new Error(`Session is in terminal state '${session.status}' and cannot be executed.`);
+      }
+
+      if (!await this.store.isThresholdMet(sessionId)) {
+        throw new Error('Threshold not met, cannot execute transaction');
       }
 
       // Update session status
@@ -590,10 +653,40 @@ class SigningSessionManager {
 
       const result = {
         success: true,
+        mirrorConfirmed: false,
+        mirrorRecord: null,
         transactionId: txResponse.transactionId.toString(),
         receipt: receipt,
         status: receipt.status.toString()
       };
+
+      // Phase B11: confirm on mirror node so callers get a real "executed and
+      // externalized" guarantee rather than just receipt acceptance.
+      if (this.options.verifyOnMirror !== false) {
+        try {
+          const network = this.options.network || process.env.HEDERA_NETWORK || 'testnet';
+          const MirrorNodeClient = require('../shared/mirror-node-client');
+          const mirror = this.options.mirrorClient || new MirrorNodeClient(network);
+          const verification = await mirror.verifyExecution(result.transactionId);
+          result.mirrorConfirmed = verification.mirrorConfirmed;
+          result.mirrorRecord = verification.record;
+          if (verification.mirrorConfirmed) {
+            this.log.info('Mirror confirmed transaction', {
+              sessionId,
+              transactionId: result.transactionId,
+              consensusTimestamp: verification.record?.consensusTimestamp
+            });
+          } else {
+            this.log.warn('Mirror node did not confirm transaction within polling window', {
+              sessionId, transactionId: result.transactionId
+            });
+          }
+        } catch (mirrorErr) {
+          this.log.warn('Mirror verification failed (non-fatal)', {
+            sessionId, error: mirrorErr.message
+          });
+        }
+      }
 
       // Emit execution event
       const handlers = this.eventHandlers.get(sessionId);
@@ -613,7 +706,30 @@ class SigningSessionManager {
       return result;
 
     } catch (error) {
-      await this.store.updateStatus(sessionId, 'active'); // Revert to active on error
+      // Phase B5: transition to a TERMINAL execution-failed state instead of
+      // reverting to 'active'. The previous behavior left the session executable
+      // again, which combined with the post-AUTH role gap (Phase A1) could let
+      // a malicious participant re-trigger after a transient failure. Operator
+      // must cancel and create a new session to retry.
+      try {
+        const session = await this.store.getSession(sessionId);
+        // Don't transition if we never made it to 'executing' (pre-flight check failure).
+        // Those sessions stay in their prior state — the error is informational only.
+        if (session && session.status === 'executing') {
+          await this.store.updateStatus(sessionId, 'execution-failed');
+        }
+      } catch (transitionError) {
+        this.log.error('Failed to transition session to execution-failed', {
+          sessionId,
+          original: error.message,
+          transitionError: transitionError.message
+        });
+      }
+
+      this.log.error('Transaction execution failed', {
+        sessionId,
+        error: error.message
+      });
 
       const handlers = this.eventHandlers.get(sessionId);
       if (handlers && handlers.onError) {
@@ -723,8 +839,12 @@ class SigningSessionManager {
         throw new Error('Transaction must be frozen before injection');
       }
 
-      // Decode transaction details
-      const txDetails = TransactionDecoder.decode(transaction, options.contractInterface);
+      // Decode transaction details (canonical shared decoder)
+      const txDetails = SharedDecoder.extractTransactionDetails(
+        transaction,
+        getTransactionTypeName(transaction),
+        options.contractInterface
+      );
 
       // Serialize frozen transaction
       const frozenTxBytes = transaction.toBytes();

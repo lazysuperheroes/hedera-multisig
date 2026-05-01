@@ -46,11 +46,18 @@ class TransactionFreezer {
       const frozenAt = new Date();
       const expiresAt = new Date(frozenAt.getTime() + (this.MAX_SAFE_AGE_SECONDS * 1000));
 
-      // Decode transaction details if interface provided
+      // Decode transaction details if interface provided (canonical shared decoder)
       let txDetails = null;
       if (options.contractInterface) {
-        const TransactionDecoder = require('./TransactionDecoder');
-        txDetails = TransactionDecoder.decode(transaction, options.contractInterface);
+        const {
+          TransactionDecoder: SharedDecoder,
+          getTransactionTypeName
+        } = require('../shared/transaction-decoder');
+        txDetails = SharedDecoder.extractTransactionDetails(
+          transaction,
+          getTransactionTypeName(transaction),
+          options.contractInterface
+        );
       }
 
       return {

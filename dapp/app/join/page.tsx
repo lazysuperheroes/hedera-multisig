@@ -55,8 +55,19 @@ function JoinPageContent() {
       return;
     }
 
-    // Store session info in localStorage for the session page
-    localStorage.setItem('hedera-multisig-session-info', JSON.stringify(formData));
+    // Phase B2: Hand off PIN to the session page via sessionStorage instead of
+    // localStorage. sessionStorage is per-tab and clears when the tab closes,
+    // so a forgotten/abandoned PIN cannot leak via shared device or DevTools
+    // long after the ceremony ended. The session page reads, AUTHs (which
+    // returns a reconnection token), then deletes this key.
+    try {
+      sessionStorage.setItem('hedera-multisig-pending-join', JSON.stringify(formData));
+    } catch {
+      // sessionStorage unavailable in some private-browsing modes; fall through
+    }
+    // Belt-and-braces: also purge the legacy localStorage key in case any old
+    // build wrote one before the migration.
+    try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
 
     // Navigate to session page
     router.push(`/session/${formData.sessionId}`);
@@ -68,6 +79,32 @@ function JoinPageContent() {
       [e.target.name]: e.target.value,
     });
   };
+
+  /**
+   * Phase C18: classify the coordinator URL by trust signal.
+   * - 'hosted'    — known well-known coordinator domain (currently none; the
+   *                 hosted dApp is a UI, not a coordinator). Reserved for future use.
+   * - 'tunnel'    — ngrok / localtunnel / cloudflared — third-party relay
+   * - 'localhost' — local-only (dev or LAN-only ceremony)
+   * - 'unknown'   — anything else (custom domain or self-hosted WSS)
+   */
+  const hostTrust = (() => {
+    const url = formData.serverUrl.trim();
+    if (!url) return null;
+    let host: string;
+    try {
+      host = new URL(url).host;
+    } catch {
+      return null;
+    }
+    if (/^(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|0\.0\.0\.0(:\d+)?)$/i.test(host)) {
+      return 'localhost' as const;
+    }
+    if (/(\.|^)(ngrok\.io|ngrok-free\.app|loca\.lt|trycloudflare\.com|serveo\.net)(:\d+)?$/i.test(host)) {
+      return 'tunnel' as const;
+    }
+    return 'unknown' as const;
+  })();
 
   const handleConnectionStringChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.trim();
@@ -242,6 +279,35 @@ function JoinPageContent() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Phase C18: trust signal for the coordinator URL */}
+              {hostTrust && (
+                <div
+                  className={
+                    hostTrust === 'tunnel'
+                      ? 'rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 p-3 text-sm text-yellow-800 dark:text-yellow-200'
+                      : hostTrust === 'localhost'
+                      ? 'rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/40 p-3 text-sm text-gray-700 dark:text-gray-300'
+                      : 'rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200'
+                  }
+                >
+                  {hostTrust === 'tunnel' && (
+                    <>
+                      <strong>Tunnel coordinator detected.</strong> This URL points to a public tunnel (ngrok / localtunnel / cloudflared) relaying to someone else&apos;s computer. The tunnel provider can observe transaction metadata in transit. Only join if you trust the coordinator personally.
+                    </>
+                  )}
+                  {hostTrust === 'localhost' && (
+                    <>
+                      <strong>Local coordinator.</strong> This URL points to your own machine — fine for testing or LAN-only ceremonies.
+                    </>
+                  )}
+                  {hostTrust === 'unknown' && (
+                    <>
+                      <strong>Custom coordinator.</strong> Verify with the coordinator that this URL is correct. Look for <code className="font-mono text-xs">wss://</code> for encrypted connections.
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Server URL */}
               <div>
                 <label htmlFor="serverUrl" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -253,7 +319,7 @@ function JoinPageContent() {
                   name="serverUrl"
                   value={formData.serverUrl}
                   onChange={handleChange}
-                  placeholder="ws://localhost:3001 or wss://example.com"
+                  placeholder="wss://multisig.example.com or ws://localhost:3001"
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   required
                 />
@@ -306,6 +372,11 @@ function JoinPageContent() {
               >
                 Join Session
               </button>
+              {/* Phase C17: first-time-user one-liner — sets expectations
+                  before the wallet-connect step on /session/[id] */}
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                You&apos;ll need a Hedera wallet (HashPack, Blade, or Kabila) on the next page. After joining, you&apos;ll review the transaction before signing — nothing executes until you approve.
+              </p>
             </form>
           </div>
         )}

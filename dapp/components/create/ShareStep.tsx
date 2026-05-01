@@ -23,6 +23,9 @@ interface ShareStepProps {
   connectionString: string;
   shareableUrl: string;
   injectionDone: boolean;
+  /** Phase B1: opt-in to including PIN in shareable URL (default false) */
+  includePinInLink?: boolean;
+  onTogglePinInLink?: (next: boolean) => void;
 }
 
 export function ShareStep({
@@ -31,6 +34,8 @@ export function ShareStep({
   connectionString,
   shareableUrl,
   injectionDone,
+  includePinInLink = false,
+  onTogglePinInLink,
 }: ShareStepProps) {
   return (
     <section aria-label="Share session" className="space-y-6">
@@ -118,11 +123,31 @@ export function ShareStep({
             <CopyableField label="Connection String" value={connectionString} />
 
             {shareableUrl && (
-              <CopyableField
-                label="Shareable Link"
-                value={shareableUrl}
-                hint="This link auto-fills session details on the Join page."
-              />
+              <div className="w-full space-y-3">
+                <CopyableField
+                  label="Shareable Link"
+                  value={shareableUrl}
+                  hint={
+                    includePinInLink
+                      ? 'This link includes the PIN — anyone with the URL can join. Treat it like a credential.'
+                      : 'This link auto-fills server + session ID. Participants type the PIN themselves.'
+                  }
+                />
+                {onTogglePinInLink && (
+                  <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includePinInLink}
+                      onChange={(e) => onTogglePinInLink(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <strong>Include PIN in link</strong> (less secure — only enable for low-risk testnet demos).
+                      The PIN is base64-encoded, not encrypted, so anyone who sees the URL can join.
+                    </span>
+                  </label>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -140,9 +165,12 @@ export function ShareStep({
         <Link
           href={`/session/${sessionCredentials.sessionId}`}
           onClick={() => {
+            // Phase B2: per-tab handoff via sessionStorage. The session page
+            // reads, AUTHs, then deletes it immediately. PIN no longer
+            // persists in localStorage.
             try {
-              localStorage.setItem(
-                'hedera-multisig-session-info',
+              sessionStorage.setItem(
+                'hedera-multisig-pending-join',
                 JSON.stringify({
                   serverUrl,
                   sessionId: sessionCredentials.sessionId,
@@ -150,8 +178,10 @@ export function ShareStep({
                 })
               );
             } catch {
-              // localStorage unavailable in private browsing
+              // sessionStorage unavailable in private browsing
             }
+            // Best-effort purge of any legacy key that may still be around.
+            try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
           }}
           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >

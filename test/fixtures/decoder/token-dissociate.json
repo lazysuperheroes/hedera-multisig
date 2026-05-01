@@ -1,0 +1,11 @@
+{
+  "description": "Dissociate 0.0.1001 from one token",
+  "inputBase64": "CkoqSApEChkKDAjmgNLPBhCkrqWrARIHCAAQABjpBxgAEgYIABAAGAMYgMq17gEiAgh4MgDKAhIKBwgAEAAY6QcSBwgAEAAYiCcSAApKKkgKRAoZCgwI5oDSzwYQpK6lqwESBwgAEAAY6QcYABIGCAAQABgEGIDKte4BIgIIeDIAygISCgcIABAAGOkHEgcIABAAGIgnEgAKSipICkQKGQoMCOaA0s8GEKSupasBEgcIABAAGOkHGAASBggAEAAYBRiAyrXuASICCHgyAMoCEgoHCAAQABjpBxIHCAAQABiIJxIA",
+  "expectedShape": {
+    "type": "TokenDissociateTransaction",
+    "accountId": "0.0.1001",
+    "tokenIds": [
+      "0.0.5000"
+    ]
+  }
+}

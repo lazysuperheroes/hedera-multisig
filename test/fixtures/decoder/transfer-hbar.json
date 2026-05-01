@@ -1,0 +1,12 @@
+{
+  "description": "Simple HBAR transfer 0.0.1001 → 0.0.1002 (1000 tinybars)",
+  "inputBase64": "ClgqVgpSChkKDAjkgNLPBhDW+6u2AhIHCAAQABjpBxgAEgYIABAAGAMYgMLXLyICCHgyAHIiCiAKDgoHCAAQABjpBxDPDxgACg4KBwgAEAAY6gcQ0A8YABIAClgqVgpSChkKDAjkgNLPBhDW+6u2AhIHCAAQABjpBxgAEgYIABAAGAQYgMLXLyICCHgyAHIiCiAKDgoHCAAQABjpBxDPDxgACg4KBwgAEAAY6gcQ0A8YABIAClgqVgpSChkKDAjkgNLPBhDW+6u2AhIHCAAQABjpBxgAEgYIABAAGAUYgMLXLyICCHgyAHIiCiAKDgoHCAAQABjpBxDPDxgACg4KBwgAEAAY6gcQ0A8YABIA",
+  "expectedShape": {
+    "type": "TransferTransaction",
+    "transferCount": 2,
+    "accountIds": [
+      "0.0.1001",
+      "0.0.1002"
+    ]
+  }
+}

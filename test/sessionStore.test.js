@@ -79,6 +79,12 @@ require.cache[timerModulePath] = {
   exports: { timerController: mockTimers, TimerController: MockTimerController }
 };
 
+// Force a fresh SessionStore load — earlier test files (e.g. coordinator-authorization,
+// reconnection-token) transitively load SessionStore via SigningSessionManager, and
+// the cached copy retains a reference to the REAL timerController. Without this,
+// `npm test` ordering breaks the mock injection above.
+const sessionStoreModulePath = require.resolve('../server/SessionStore');
+delete require.cache[sessionStoreModulePath];
 const SessionStore = require('../server/SessionStore');
 
 describe('SessionStore', function() {

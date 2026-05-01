@@ -2,7 +2,8 @@
  * Schedule Command
  *
  * CLI commands for Hedera scheduled transactions (ScheduleCreate/ScheduleSign).
- * Enables async multi-sig signing over hours/days instead of the 120-second window.
+ * Enables async multi-sig signing over hours, days, or up to ~62 days (HIP-423)
+ * instead of the 120-second real-time window.
  *
  * Subcommands:
  *   - create: Create a scheduled transaction from frozen TX bytes
@@ -27,25 +28,40 @@ module.exports = function(program) {
     .requiredOption('-b, --base64 <string>', 'Base64-encoded inner transaction')
     .option('--memo <text>', 'Schedule memo')
     .option('--payer <accountId>', 'Payer account for the scheduled transaction')
+    .option('--expiration-time <input>', 'Schedule expiration: duration ("30d", "2h") or ISO-8601 ("2026-06-30T12:00:00Z"). Max ~62 days (HIP-423).')
+    .option('--wait-for-expiry', 'If set, schedule waits until expirationTime to execute even after threshold is met (HIP-423 long-term mode)')
+    .option('--admin-key <hex>', 'Admin public key authorized to delete the schedule before execution')
     .option('-j, --json', 'Output as JSON')
     .addHelpText('after', `
 Creates a ScheduleCreateTransaction wrapping the inner transaction.
 Signers can sign at their convenience using 'schedule sign'.
+
+HIP-423 enables expiration windows up to ~62 days on mainnet/testnet
+(scheduling.maxExpirationFutureSeconds = 5,356,800s). Without
+--expiration-time, the network's default short window applies.
 
 Examples:
   # Create schedule from frozen transfer
   $ hedera-multisig offline freeze -t transfer -f 0.0.1 -T 0.0.2 -a 10 --raw | \\
     hedera-multisig schedule create -b "$(cat)"
 
-  # With memo
-  $ hedera-multisig schedule create -b "CgQQ..." --memo "Q1 payroll"
+  # 30-day window for cross-timezone treasury approval
+  $ hedera-multisig schedule create -b "CgQQ..." --memo "Q1 payroll" --expiration-time 30d
+
+  # Pinned to specific date, waits until then to execute
+  $ hedera-multisig schedule create -b "CgQQ..." \\
+      --expiration-time 2026-06-30T17:00:00Z --wait-for-expiry
+
+  # With admin key (deletable before execution)
+  $ hedera-multisig schedule create -b "CgQQ..." --admin-key 302a300506...
     `)
     .action(async (options, command) => {
       const {
-        Client, AccountId, PrivateKey, Transaction
+        Client, AccountId, PrivateKey, PublicKey, Transaction
       } = require('@hashgraph/sdk');
       const ScheduledWorkflow = require('../../workflows/ScheduledWorkflow');
       const { ExitCodes, JsonOutput } = require('../utils/cliUtils');
+      const { parseExpirationTime } = require('../utils/timeParser');
 
       const globalOpts = command.optsWithGlobals();
       const jsonOutput = new JsonOutput(options.json || globalOpts.json);
@@ -67,6 +83,14 @@ Examples:
         const txBytes = Buffer.from(options.base64.trim(), 'base64');
         const innerTransaction = Transaction.fromBytes(txBytes);
 
+        // Parse new HIP-423 long-term-schedule flags
+        const expirationTime = options.expirationTime
+          ? parseExpirationTime(options.expirationTime)
+          : undefined;
+        const adminKey = options.adminKey
+          ? PublicKey.fromString(options.adminKey)
+          : undefined;
+
         const workflow = new ScheduledWorkflow(client, {
           verbose: !jsonOutput.enabled,
           scheduleMemo: options.memo || '',
@@ -74,6 +98,9 @@ Examples:
 
         const result = await workflow.createSchedule(innerTransaction, {
           payerAccountId: options.payer ? AccountId.fromString(options.payer) : undefined,
+          expirationTime,
+          waitForExpiry: options.waitForExpiry === true,
+          adminKey,
         });
 
         if (jsonOutput.enabled) {

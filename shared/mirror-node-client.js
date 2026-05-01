@@ -36,13 +36,17 @@ class MirrorNodeClient {
   }
 
   /**
-   * Fetch JSON from mirror node REST API
+   * Single-attempt fetch from mirror node REST API.
    *
-   * @param {string} path - API path (e.g., '/api/v1/network/exchangerate')
+   * Errors are tagged with `retryable: boolean` so the retry wrapper can
+   * distinguish transient failures (network, 5xx, timeout) from terminal ones
+   * (4xx client errors, JSON parse failures).
+   *
+   * @param {string} path - API path
    * @returns {Promise<Object>} Parsed JSON response
    * @private
    */
-  _fetch(path) {
+  _fetchOnce(path) {
     return new Promise((resolve, reject) => {
       const options = {
         hostname: this.baseHost,
@@ -63,31 +67,80 @@ class MirrorNodeClient {
 
         res.on('end', () => {
           if (res.statusCode < 200 || res.statusCode >= 300) {
-            reject(new Error(`Mirror node request failed: HTTP ${res.statusCode} for ${path}`));
+            const err = new Error(`Mirror node request failed: HTTP ${res.statusCode} for ${path}`);
+            err.statusCode = res.statusCode;
+            err.retryable = res.statusCode >= 500; // retry 5xx only — 4xx is a client problem
+            reject(err);
             return;
           }
 
           try {
             const parsed = JSON.parse(data);
             resolve(parsed);
-          } catch (err) {
-            reject(new Error(`Failed to parse mirror node response for ${path}: ${err.message}`));
+          } catch (parseErr) {
+            const err = new Error(`Failed to parse mirror node response for ${path}: ${parseErr.message}`);
+            err.retryable = false;
+            reject(err);
           }
         });
       });
 
-      req.on('error', (err) => {
-        reject(new Error(`Mirror node connection error for ${path}: ${err.message}`));
+      req.on('error', (netErr) => {
+        const err = new Error(`Mirror node connection error for ${path}: ${netErr.message}`);
+        err.retryable = true;
+        err.code = netErr.code;
+        reject(err);
       });
 
-      // 15 second timeout
       req.setTimeout(15000, () => {
         req.destroy();
-        reject(new Error(`Mirror node request timed out for ${path}`));
+        const err = new Error(`Mirror node request timed out for ${path}`);
+        err.retryable = true;
+        err.code = 'ETIMEDOUT';
+        reject(err);
       });
 
       req.end();
     });
+  }
+
+  /**
+   * Fetch with exponential backoff (Phase B14).
+   *
+   * Retries up to 3 times with 1s, 2s, 4s backoff on:
+   * - Network errors (ECONNRESET, ETIMEDOUT, etc.)
+   * - HTTP 5xx server errors
+   * - Request timeouts
+   *
+   * Does NOT retry 4xx (client-side errors) or JSON parse failures.
+   * This matters because Phase B11's verifyExecution path treats mirror
+   * confirmation as correctness-critical — a single transient blip should
+   * not turn a successful Hedera transaction into "unconfirmed".
+   *
+   * @param {string} path - API path
+   * @param {Object} [options]
+   * @param {number} [options.maxRetries=3]
+   * @returns {Promise<Object>} Parsed JSON response
+   * @private
+   */
+  async _fetch(path, options = {}) {
+    const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 3;
+    const backoffMs = [1000, 2000, 4000, 8000];
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await this._fetchOnce(path);
+      } catch (err) {
+        lastError = err;
+        if (!err.retryable || attempt === maxRetries) {
+          throw err;
+        }
+        const delay = backoffMs[Math.min(attempt, backoffMs.length - 1)];
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+    throw lastError;
   }
 
   /**
@@ -158,6 +211,80 @@ class MirrorNodeClient {
         balance: t.balance,
       })),
     };
+  }
+
+  /**
+   * Look up an executed transaction on the mirror node (Phase B11).
+   *
+   * Hedera SDK transaction IDs have the form `0.0.X@123456789.000000000`. The
+   * mirror REST API expects them transformed to `0.0.X-123456789-000000000`.
+   *
+   * Mirror node has ~3–5 second eventual-consistency lag. Callers should
+   * either accept a `null` result or poll via `verifyExecution`.
+   *
+   * @param {string} transactionId - SDK-format transaction ID
+   * @returns {Promise<Object|null>} Transaction record, or null if not yet on mirror
+   */
+  async getTransaction(transactionId) {
+    const mirrorId = String(transactionId).replace('@', '-').replace(/\.(?=\d+$)/, '-');
+    try {
+      const response = await this._fetch(`/api/v1/transactions/${mirrorId}`);
+      const tx = Array.isArray(response.transactions) && response.transactions.length > 0
+        ? response.transactions[0]
+        : null;
+      if (!tx) return null;
+      return {
+        transactionId: tx.transaction_id,
+        consensusTimestamp: tx.consensus_timestamp,
+        result: tx.result,
+        chargedTxFee: tx.charged_tx_fee,
+        memoBase64: tx.memo_base64,
+        transfers: tx.transfers || [],
+        tokenTransfers: tx.token_transfers || [],
+        nftTransfers: tx.nft_transfers || [],
+        scheduled: tx.scheduled || false,
+        entityId: tx.entity_id || null,
+        name: tx.name || null,
+      };
+    } catch (err) {
+      // 404: not (yet) on mirror — caller decides whether to retry
+      if (err.statusCode === 404) return null;
+      throw err;
+    }
+  }
+
+  /**
+   * Confirm a transaction's mirror-node execution (Phase B11).
+   *
+   * Polls the mirror node up to `maxAttempts` times with `pollIntervalMs`
+   * between attempts. Returns immediately on first hit. Tolerates the
+   * ~3–5s mirror lag without turning successful TXs into "unconfirmed".
+   *
+   * @param {string} transactionId - SDK-format transaction ID
+   * @param {Object} [options]
+   * @param {number} [options.maxAttempts=8] - Poll at most this many times (~24s default)
+   * @param {number} [options.pollIntervalMs=3000] - Delay between attempts
+   * @returns {Promise<{mirrorConfirmed: boolean, record: Object|null, result: string|null}>}
+   */
+  async verifyExecution(transactionId, options = {}) {
+    const maxAttempts = options.maxAttempts || 8;
+    const pollIntervalMs = options.pollIntervalMs || 3000;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const record = await this.getTransaction(transactionId);
+      if (record) {
+        return {
+          mirrorConfirmed: true,
+          record,
+          result: record.result || null,
+        };
+      }
+      if (attempt < maxAttempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      }
+    }
+
+    return { mirrorConfirmed: false, record: null, result: null };
   }
 
   /**

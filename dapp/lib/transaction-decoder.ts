@@ -145,6 +145,10 @@ export interface TransactionDetails {
   functionParams?: any;
   amount?: string;
   selectorVerified?: boolean; // true if function selector was cryptographically verified
+  /** Phase B9: 4-byte function selector (0x + 8 hex). Always present for contract-execute. */
+  functionSelector?: string;
+  /** Phase B9: full encoded calldata (selector + ABI args). Always present for contract-execute. */
+  encodedCalldata?: string;
 }
 
 export interface MetadataValidation {
@@ -375,6 +379,16 @@ export class TransactionDecoder {
     details.contractId = tx._contractId?.toString();
     details.gas = tx._gas?.toNumber();
     details.amount = tx._payableAmount?.toString() || '0';
+
+    // Phase B9: always surface raw selector + calldata so the UI can show
+    // *something* even without an ABI. A participant can paste the selector
+    // into 4byte.directory or compare it against an expected value.
+    if (tx._functionParameters && tx._functionParameters.length >= 4) {
+      const fnBytes: Uint8Array = tx._functionParameters;
+      const fullHex = '0x' + Array.from(fnBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+      details.functionSelector = fullHex.slice(0, 10); // 0x + 8 hex chars
+      details.encodedCalldata = fullHex;
+    }
 
     // Decode function call if ABI provided
     if (contractInterface && tx._functionParameters) {
@@ -730,6 +744,23 @@ export class TransactionDecoder {
           `but transaction calls "${txDetails.functionName}"`
         );
       }
+    }
+
+    // Phase C15: close the bypass where a coordinator omitted the
+    // metadata.functionName field entirely. Previously this skipped the
+    // cross-check silently. Now: if the ABI decoded a real function name and
+    // metadata exists but is missing functionName, emit an informational
+    // warning so the participant knows the coordinator's metadata was
+    // incomplete (vs deliberately verified-matching).
+    if (
+      txDetails.functionName &&
+      !metadata.functionName &&
+      Object.keys(metadata).length > 0
+    ) {
+      warnings.push(
+        `ℹ️ Metadata did not declare a function name; ABI decoded "${txDetails.functionName}". ` +
+        `Coordinator did not cross-attest this — verify the function matches what was promised.`
+      );
     }
 
     // General warning about metadata trust

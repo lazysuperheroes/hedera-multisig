@@ -63,6 +63,7 @@ const SESSION_STATES = {
   SIGNING: 'signing',
   EXECUTING: 'executing',
   COMPLETED: 'completed',
+  EXECUTION_FAILED: 'execution-failed', // Phase B5: terminal state on execute failure
   TRANSACTION_EXPIRED: 'transaction-expired',
   EXPIRED: 'expired',
   CANCELLED: 'cancelled',
@@ -92,9 +93,10 @@ const SESSION_TRANSITIONS = {
   ],
   [SESSION_STATES.EXECUTING]: [
     SESSION_STATES.COMPLETED,
-    SESSION_STATES.SIGNING, // revert on error (legacy 'active' mapped here)
+    SESSION_STATES.EXECUTION_FAILED, // Phase B5: failure is terminal, requires coordinator action
   ],
   [SESSION_STATES.COMPLETED]: [], // terminal
+  [SESSION_STATES.EXECUTION_FAILED]: [], // terminal — operator must investigate before retry
   [SESSION_STATES.TRANSACTION_EXPIRED]: [
     SESSION_STATES.WAITING, // reset for new transaction injection
     SESSION_STATES.EXPIRED,
@@ -188,6 +190,9 @@ const ERROR_CODES = {
   // Protocol
   MESSAGE_INVALID: 'MESSAGE_INVALID',
   MESSAGE_TOO_LARGE: 'MESSAGE_TOO_LARGE',
+
+  // Authorization (post-AUTH role checks)
+  NOT_COORDINATOR: 'NOT_COORDINATOR',
 };
 
 // ============================================================================

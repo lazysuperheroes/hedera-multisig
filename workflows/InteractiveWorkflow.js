@@ -13,7 +13,10 @@
 
 const chalk = require('chalk');
 const TransactionFreezer = require('../core/TransactionFreezer');
-const TransactionDecoder = require('../core/TransactionDecoder');
+const {
+  TransactionDecoder: SharedDecoder,
+  getTransactionTypeName
+} = require('../shared/transaction-decoder');
 const SignatureCollector = require('../core/SignatureCollector');
 const SignatureVerifier = require('../core/SignatureVerifier');
 const TransactionExecutor = require('../core/TransactionExecutor');
@@ -156,9 +159,10 @@ class InteractiveWorkflow {
       const frozenTx = frozenTxData.transaction;
       this.progress.stopSpinner();
 
-      // Get transaction details using TransactionDecoder
-      const txDetails = frozenTxData.txDetails || TransactionDecoder.decode(
+      // Get transaction details (canonical shared decoder)
+      const txDetails = frozenTxData.txDetails || SharedDecoder.extractTransactionDetails(
         frozenTx,
+        getTransactionTypeName(frozenTx),
         this.options.contractInterface
       );
       const expirationTime = Math.floor(frozenTxData.expiresAt.getTime() / 1000);

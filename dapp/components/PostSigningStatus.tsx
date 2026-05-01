@@ -35,6 +35,79 @@ export interface PostSigningStatusProps {
   } | null;
   network?: 'testnet' | 'mainnet';
   onClear: () => void;
+  /** Phase B13: distinguish "threshold not met" from "not found" on timeout */
+  signaturesCollected?: number;
+  signaturesRequired?: number;
+}
+
+/**
+ * Phase B13: map common Hedera result codes to plain-English explanation +
+ * a recovery action a non-technical participant can act on.
+ */
+function explainResultCode(code: string): { headline: string; explanation: string; recovery: string } {
+  switch (code) {
+    case 'INSUFFICIENT_PAYER_BALANCE':
+      return {
+        headline: 'Payer account is out of HBAR',
+        explanation: 'The account paying the network fee did not have enough HBAR to cover it.',
+        recovery: 'Top up the payer account (or operator account) and ask the coordinator to retry the transaction.',
+      };
+    case 'INSUFFICIENT_ACCOUNT_BALANCE':
+      return {
+        headline: 'Source account is out of HBAR',
+        explanation: 'The account being debited did not have enough HBAR to cover the transfer.',
+        recovery: 'Top up the source account and have the coordinator create a new session.',
+      };
+    case 'INVALID_SIGNATURE':
+      return {
+        headline: 'Signature did not match the threshold key',
+        explanation: 'One or more collected signatures did not match a key in the eligible-keys set. The transaction never executed.',
+        recovery: 'The coordinator should verify the eligible-keys list matches the threshold key on-chain, then start a new session.',
+      };
+    case 'CONTRACT_REVERT_EXECUTED':
+      return {
+        headline: 'The smart contract rejected the call',
+        explanation: 'Network fees were paid, but the contract reverted (it actively refused the operation). This usually means a precondition wasn\'t met — wrong arguments, paused state, or insufficient allowance.',
+        recovery: 'Check the contract\'s preconditions. If you\'re unsure, ask the contract\'s deployer or read the source.',
+      };
+    case 'INVALID_SCHEDULE_ID':
+      return {
+        headline: 'Schedule ID not found',
+        explanation: 'The scheduled transaction was deleted, expired, or never existed.',
+        recovery: 'The coordinator should create a new schedule.',
+      };
+    case 'SCHEDULE_ALREADY_EXECUTED':
+      return {
+        headline: 'Schedule already executed',
+        explanation: 'Another signer\'s signature met the threshold first; the network executed the transaction. Your signature was not needed.',
+        recovery: 'No action needed — the transaction succeeded. Check HashScan for the result.',
+      };
+    case 'SCHEDULE_EXPIRED':
+      return {
+        headline: 'Scheduled transaction expired',
+        explanation: 'The schedule\'s expiration time passed before threshold was met.',
+        recovery: 'Coordinator needs to create a new schedule — consider a longer expiration window (up to ~62 days).',
+      };
+    case 'TRANSACTION_EXPIRED':
+      return {
+        headline: 'Transaction expired before all signatures arrived',
+        explanation: 'Hedera transactions are valid for 120 seconds after freezing. Not enough signers signed in time.',
+        recovery: 'Coordinator should create a new session with all signers ready, or use scheduled transactions for async signing.',
+      };
+    case 'INVALID_ACCOUNT_ID':
+    case 'ACCOUNT_DELETED':
+      return {
+        headline: 'Account ID is invalid or deleted',
+        explanation: 'One of the accounts referenced in the transaction does not exist on this network.',
+        recovery: 'Verify all account IDs and the network (mainnet vs testnet).',
+      };
+    default:
+      return {
+        headline: 'Transaction failed',
+        explanation: `The Hedera network rejected the transaction with code ${code}. This may be a contract-specific error or an unexpected network condition.`,
+        recovery: 'Check the HashScan link for full details. The coordinator may need to create a new session.',
+      };
+  }
 }
 
 // Polling stages
@@ -50,6 +123,8 @@ export function PostSigningStatus({
   transactionDetails,
   network = 'testnet',
   onClear,
+  signaturesCollected,
+  signaturesRequired,
 }: PostSigningStatusProps) {
   const [status, setStatus] = useState<'polling' | 'still-checking' | 'success' | 'error' | 'timeout'>('polling');
   const [txStatus, setTxStatus] = useState<TransactionStatus | null>(null);
@@ -75,7 +150,8 @@ export function PostSigningStatus({
       if (elapsed >= POLLING_TIMEOUT_MS) {
         setStatus('timeout');
         if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
+          clearTimeout(pollIntervalRef.current);
+          pollIntervalRef.current = null;
         }
         return;
       }
@@ -98,7 +174,8 @@ export function PostSigningStatus({
           }
           // Stop polling
           if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
+            clearTimeout(pollIntervalRef.current);
+            pollIntervalRef.current = null;
           }
         }
       } catch (error) {
@@ -107,9 +184,18 @@ export function PostSigningStatus({
       }
     };
 
-    // Start polling
+    // Start polling. Phase C9: jitter avoids N-signer thundering herd on the
+    // public mirror node (without it, every signer in a ceremony hits the
+    // same 3s tick for up to 125s).
     pollStatus(); // Initial poll
-    pollIntervalRef.current = setInterval(pollStatus, POLL_INTERVAL_MS);
+    const jitter = () => POLL_INTERVAL_MS + Math.floor(Math.random() * 500);
+    const scheduleNext = () => {
+      pollIntervalRef.current = setTimeout(async () => {
+        await pollStatus();
+        if (pollIntervalRef.current !== null) scheduleNext();
+      }, jitter()) as unknown as NodeJS.Timeout;
+    };
+    scheduleNext();
 
     // Track elapsed time for UI
     elapsedIntervalRef.current = setInterval(() => {
@@ -117,7 +203,10 @@ export function PostSigningStatus({
     }, 1000);
 
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
       if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     };
   }, [transactionId, network]);
@@ -173,28 +262,75 @@ export function PostSigningStatus({
           {status === 'success' && (
             <>
               <h2 className="text-xl font-bold text-green-800 dark:text-green-200 mb-2">Transaction Successful!</h2>
-              <p className="text-green-700 dark:text-green-300">
+              <p className="text-green-700 dark:text-green-300 mb-3">
                 Transaction {transactionId} <span className="font-bold">SUCCESS</span>
               </p>
+              {/* Phase C1: intent-vs-actual diff. Compare the transfers we
+                  signed against what the mirror node reports the network
+                  actually executed. The payer account legitimately differs
+                  by the fee amount; everything else should match exactly. */}
+              {transactionDetails?.transfers && txStatus?.transfers && (
+                <IntentVsActualDiff
+                  expected={transactionDetails.transfers}
+                  actual={txStatus.transfers}
+                  chargedFee={txStatus.chargedFee}
+                />
+              )}
             </>
           )}
-          {status === 'error' && (
-            <>
-              <h2 className="text-xl font-bold text-red-800 dark:text-red-200 mb-2">Transaction Failed</h2>
-              <p className="text-red-700 dark:text-red-300">
-                Transaction {transactionId} <span className="font-bold">{txStatus?.result || 'ERROR'}</span>
-              </p>
-            </>
-          )}
-          {status === 'timeout' && (
-            <>
-              <h2 className="text-xl font-bold text-yellow-800 dark:text-yellow-200 mb-2">Transaction Not Found</h2>
-              <p className="text-yellow-700 dark:text-yellow-300">
-                The transaction wasn&apos;t found on the network after {Math.floor(POLLING_TIMEOUT_MS / 1000)} seconds.
-                Check HashScan below — it may still be processing, or the signing threshold wasn&apos;t met.
-              </p>
-            </>
-          )}
+          {status === 'error' && (() => {
+            const explanation = explainResultCode(txStatus?.result || 'UNKNOWN');
+            return (
+              <>
+                <h2 className="text-xl font-bold text-red-800 dark:text-red-200 mb-2">{explanation.headline}</h2>
+                <p className="text-red-700 dark:text-red-300 mb-3">
+                  {explanation.explanation}
+                </p>
+                <p className="text-sm text-red-700 dark:text-red-300 mb-3">
+                  <strong>What to do:</strong> {explanation.recovery}
+                </p>
+                <p className="text-xs text-red-600/80 dark:text-red-400/80 font-mono">
+                  Code: {txStatus?.result || 'UNKNOWN'}
+                </p>
+              </>
+            );
+          })()}
+          {status === 'timeout' && (() => {
+            // Phase B13: distinguish "threshold not met" from generic "not found".
+            // If we know how many signatures were collected vs required, prefer the precise message.
+            const thresholdNotMet =
+              typeof signaturesCollected === 'number' &&
+              typeof signaturesRequired === 'number' &&
+              signaturesCollected < signaturesRequired;
+
+            if (thresholdNotMet) {
+              return (
+                <>
+                  <h2 className="text-xl font-bold text-yellow-800 dark:text-yellow-200 mb-2">
+                    Only {signaturesCollected} of {signaturesRequired} signatures arrived
+                  </h2>
+                  <p className="text-yellow-700 dark:text-yellow-300 mb-2">
+                    The signing threshold was not met within the {Math.floor(POLLING_TIMEOUT_MS / 1000)}-second window. The transaction was never submitted to the network.
+                  </p>
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                    <strong>What to do:</strong> Coordinate with the missing signers and have the coordinator create a new session — or switch to <a href="https://docs.hedera.com/hedera/core-concepts/scheduled-transaction" className="underline" target="_blank" rel="noopener noreferrer">scheduled transactions</a> if signers can&apos;t be online together.
+                  </p>
+                </>
+              );
+            }
+
+            return (
+              <>
+                <h2 className="text-xl font-bold text-yellow-800 dark:text-yellow-200 mb-2">Transaction Not Found</h2>
+                <p className="text-yellow-700 dark:text-yellow-300 mb-2">
+                  The transaction wasn&apos;t found on the network after {Math.floor(POLLING_TIMEOUT_MS / 1000)} seconds.
+                </p>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  This usually means the signing threshold wasn&apos;t met (so the transaction never executed) or the network is briefly behind. Check HashScan below to confirm.
+                </p>
+              </>
+            );
+          })()}
           {status === 'polling' && (
             <>
               <h2 className="text-xl font-bold text-blue-800 dark:text-blue-200 mb-2">Signature Submitted!</h2>
@@ -364,6 +500,104 @@ export function PostSigningStatus({
           Ready for Next Transaction
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Phase C1: render expected vs actual transfers side by side. The payer
+ * account legitimately differs by the network fee — that case is highlighted
+ * as expected, not as a discrepancy.
+ */
+function IntentVsActualDiff({
+  expected,
+  actual,
+  chargedFee,
+}: {
+  expected: Array<{ accountId: string; amount: string }>;
+  actual: Array<{ account: string; amount: number }>;
+  chargedFee: number | null;
+}) {
+  // Index actual transfers by account
+  const actualByAccount = new Map<string, number>();
+  for (const t of actual) {
+    actualByAccount.set(t.account, (actualByAccount.get(t.account) || 0) + t.amount);
+  }
+
+  // Compare each expected transfer
+  const rows = expected.map((e) => {
+    const expectedTinybars = parseInt(String(e.amount).match(/-?\d+/)?.[0] || '0', 10);
+    const actualTinybars = actualByAccount.get(e.accountId);
+    if (actualTinybars === undefined) {
+      return { account: e.accountId, expected: expectedTinybars, actual: null, status: 'missing' as const };
+    }
+    if (actualTinybars === expectedTinybars) {
+      return { account: e.accountId, expected: expectedTinybars, actual: actualTinybars, status: 'match' as const };
+    }
+    // Off by exactly the network fee → expected (payer paid the fee)
+    const delta = actualTinybars - expectedTinybars;
+    if (chargedFee && Math.abs(delta + chargedFee) < 100) {
+      return { account: e.accountId, expected: expectedTinybars, actual: actualTinybars, status: 'fee-only' as const, delta };
+    }
+    return { account: e.accountId, expected: expectedTinybars, actual: actualTinybars, status: 'diff' as const, delta };
+  });
+
+  const anyDiscrepancy = rows.some((r) => r.status === 'missing' || r.status === 'diff');
+
+  return (
+    <div className="mt-4 rounded-lg border border-green-200 dark:border-green-800 bg-white dark:bg-gray-800 p-4 text-left">
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Verified on Mirror Node</h3>
+        {anyDiscrepancy ? (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800">
+            Discrepancy
+          </span>
+        ) : (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800">
+            Matches signed intent
+          </span>
+        )}
+      </div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-gray-500 dark:text-gray-400">
+            <th className="text-left py-1">Account</th>
+            <th className="text-right py-1">Signed</th>
+            <th className="text-right py-1">Actual</th>
+            <th className="text-left py-1 pl-4">Note</th>
+          </tr>
+        </thead>
+        <tbody className="font-mono">
+          {rows.map((r) => (
+            <tr key={r.account} className="border-t border-gray-100 dark:border-gray-700">
+              <td className="py-1">{r.account}</td>
+              <td className="text-right tabular-nums">{r.expected.toLocaleString()}</td>
+              <td className="text-right tabular-nums">
+                {r.actual === null ? '—' : r.actual.toLocaleString()}
+              </td>
+              <td className="pl-4 font-sans">
+                {r.status === 'match' && (
+                  <span className="text-green-700 dark:text-green-400">exact match</span>
+                )}
+                {r.status === 'fee-only' && (
+                  <span className="text-gray-600 dark:text-gray-400">fee deducted ({chargedFee?.toLocaleString()} tℏ)</span>
+                )}
+                {r.status === 'missing' && (
+                  <span className="text-yellow-700 dark:text-yellow-400">expected but not in mirror</span>
+                )}
+                {r.status === 'diff' && (
+                  <span className="text-yellow-700 dark:text-yellow-400">
+                    differs by {((r.delta ?? 0)).toLocaleString()} tℏ
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+        All values in tinybars. Anything other than &quot;exact match&quot; or &quot;fee deducted&quot; warrants investigation.
+      </p>
     </div>
   );
 }

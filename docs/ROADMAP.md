@@ -38,7 +38,7 @@ Automated agents (AI agents, bots, policy engines) connect to signing sessions p
 
 ### 3. Scheduled Transactions
 
-Hedera's `ScheduleCreateTransaction` / `ScheduleSignTransaction` enables async signing over hours/days instead of the 120-second real-time window. This unlocks cross-timezone treasury management and relaxed offline signing.
+Hedera's `ScheduleCreateTransaction` / `ScheduleSignTransaction` (HIP-423) enables async signing over hours, days, or up to ~62 days instead of the 120-second real-time window. This unlocks cross-timezone treasury management, relaxed offline signing, and long-window async approvals.
 
 **Key requirement**: New workflow mode that wraps transactions in ScheduleCreate and tracks signatures on-chain.
 

@@ -1,0 +1,95 @@
+# Dependabot configuration for @lazysuperheroes/hedera-multisig
+#
+# Phase C4: weekly grouped updates for npm + actions; daily security updates.
+# Two npm ecosystems are tracked separately because the root and dApp have
+# distinct package-lock.json files and different runtime targets.
+
+version: 2
+
+updates:
+  # Root npm package — library + CLI + server
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+      - npm
+      - root
+    groups:
+      hedera:
+        patterns:
+          - "@hashgraph/*"
+          - "@hiero-ledger/*"
+      ethers:
+        patterns:
+          - "ethers"
+          - "@ethersproject/*"
+      tooling:
+        patterns:
+          - "mocha"
+          - "chai"
+          - "c8"
+          - "jsdoc"
+          - "clean-jsdoc-theme"
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # dApp npm package — Next.js + WalletConnect
+  - package-ecosystem: npm
+    directory: /dapp
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+      - npm
+      - dapp
+    groups:
+      next:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@next/*"
+      walletconnect:
+        patterns:
+          - "@hashgraph/hedera-wallet-connect"
+          - "@walletconnect/*"
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/*"
+          - "postcss"
+          - "autoprefixer"
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions — keep workflows current
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Etc/UTC
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      actions:
+        patterns:
+          - "*"

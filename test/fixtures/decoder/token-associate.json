@@ -1,0 +1,12 @@
+{
+  "description": "Associate 0.0.1001 with two tokens",
+  "inputBase64": "ClMqUQpNChkKDAjlgNLPBhCV5qyPAhIHCAAQABjpBxgAEgYIABAAGAMYgMq17gEiAgh4MgDCAhsKBwgAEAAY6QcSBwgAEAAYiCcSBwgAEAAYiScSAApTKlEKTQoZCgwI5YDSzwYQleasjwISBwgAEAAY6QcYABIGCAAQABgEGIDKte4BIgIIeDIAwgIbCgcIABAAGOkHEgcIABAAGIgnEgcIABAAGIknEgAKUypRCk0KGQoMCOWA0s8GEJXmrI8CEgcIABAAGOkHGAASBggAEAAYBRiAyrXuASICCHgyAMICGwoHCAAQABjpBxIHCAAQABiIJxIHCAAQABiJJxIA",
+  "expectedShape": {
+    "type": "TokenAssociateTransaction",
+    "accountId": "0.0.1001",
+    "tokenIds": [
+      "0.0.5000",
+      "0.0.5001"
+    ]
+  }
+}

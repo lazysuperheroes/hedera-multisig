@@ -378,10 +378,36 @@ export function TransactionReview({
           </div>
         )}
 
-        {/* Contract Execution */}
+        {/* Contract Execution (Phase B9) */}
         {decoded.details.contractId && (
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">CONTRACT CALL</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">CONTRACT CALL</h3>
+              {decoded.details.functionName ? (
+                decoded.details.selectorVerified ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    ABI Verified
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM10 5a1 1 0 011 1v3a1 1 0 11-2 0V6a1 1 0 011-1zm0 8a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd" />
+                    </svg>
+                    Selector Mismatch
+                  </span>
+                )
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  No ABI — Unverifiable
+                </span>
+              )}
+            </div>
             <div className="space-y-2 text-sm text-gray-800 dark:text-gray-200">
               <div className="flex gap-2">
                 <span className="text-gray-500 dark:text-gray-400">Contract:</span>
@@ -390,13 +416,58 @@ export function TransactionReview({
               {decoded.details.functionName && (
                 <div className="flex gap-2">
                   <span className="text-gray-500 dark:text-gray-400">Function:</span>
-                  <span className="font-mono font-semibold text-gray-800 dark:text-gray-100">{decoded.details.functionName}()</span>
+                  <span className="font-mono font-semibold text-gray-800 dark:text-gray-100">
+                    {decoded.details.functionName}({Object.keys(decoded.details.functionParams || {}).length === 0 ? '' : ''})
+                  </span>
                 </div>
               )}
               {decoded.details.gas && (
                 <div className="flex gap-2">
                   <span className="text-gray-500 dark:text-gray-400">Gas:</span>
                   <span className="font-mono text-gray-800 dark:text-gray-200 tabular-nums">{decoded.details.gas.toLocaleString()}</span>
+                </div>
+              )}
+              {/* Phase B9: render decoded args inline as a name/value table */}
+              {decoded.details.functionParams && Object.keys(decoded.details.functionParams).length > 0 && (
+                <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded border border-gray-200 dark:border-gray-700">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">PARAMETERS</p>
+                  <dl className="space-y-1.5 text-xs">
+                    {Object.entries(decoded.details.functionParams).map(([name, value]) => (
+                      <div key={name} className="flex gap-3 items-start">
+                        <dt className="font-mono text-gray-500 dark:text-gray-400 flex-shrink-0">{name}:</dt>
+                        <dd className="font-mono break-all text-gray-800 dark:text-gray-200">
+                          {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
+              {/* Phase B9: when ABI absent, surface the raw selector + calldata so a
+                  technically-savvy participant can verify against 4byte.directory or
+                  an expected value. Better than showing nothing. */}
+              {!decoded.details.functionName && decoded.details.functionSelector && (
+                <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-200 dark:border-yellow-800">
+                  <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
+                    No ABI provided — function name and arguments cannot be decoded.
+                  </p>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mb-2">
+                    Verify the selector below matches the function you expect (look it up at <a href="https://www.4byte.directory" target="_blank" rel="noopener noreferrer" className="underline">4byte.directory</a> or compare against the contract source).
+                  </p>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex gap-2">
+                      <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">Selector:</span>
+                      <span className="font-mono break-all text-gray-800 dark:text-gray-200">{decoded.details.functionSelector}</span>
+                    </div>
+                    {decoded.details.encodedCalldata && decoded.details.encodedCalldata.length > 10 && (
+                      <details>
+                        <summary className="cursor-pointer text-gray-500 dark:text-gray-400 text-xs">Show full calldata ({(decoded.details.encodedCalldata.length - 10) / 2} bytes of args)</summary>
+                        <div className="mt-1 font-mono break-all text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 p-2 rounded border border-yellow-200 dark:border-yellow-800">
+                          {decoded.details.encodedCalldata}
+                        </div>
+                      </details>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

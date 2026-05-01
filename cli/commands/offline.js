@@ -373,7 +373,10 @@ Examples:
     .action(async (options, command) => {
       const { ExitCodes, JsonOutput } = require('../utils/cliUtils');
       const TransactionFreezer = require('../../core/TransactionFreezer');
-      const TransactionDecoder = require('../../core/TransactionDecoder');
+      const {
+        TransactionDecoder: SharedDecoder,
+        getTransactionTypeName
+      } = require('../../shared/transaction-decoder');
 
       const jsonOutput = new JsonOutput(options.json || command.parent?.parent?.opts().json);
 
@@ -450,8 +453,12 @@ Examples:
           }
         }
 
-        // Decode transaction details
-        const txDetails = TransactionDecoder.decode(frozenTx.transaction, contractInterface);
+        // Decode transaction details (canonical shared decoder)
+        const txDetails = SharedDecoder.extractTransactionDetails(
+          frozenTx.transaction,
+          getTransactionTypeName(frozenTx.transaction),
+          contractInterface
+        );
 
         // Add additional metadata
         const result = {

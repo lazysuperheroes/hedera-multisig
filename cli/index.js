@@ -53,6 +53,7 @@ require('./commands/schedule')(program);
 require('./commands/transfer')(program);
 require('./commands/token')(program);
 require('./commands/session')(program);
+require('./commands/inject')(program);
 
 // Add init command (project setup wizard)
 program

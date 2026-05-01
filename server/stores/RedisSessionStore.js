@@ -122,6 +122,14 @@ class RedisSessionStore {
       expiresAt: now + (sessionData.timeout || this.defaultTimeout),
       status: sessionData.frozenTransaction ? 'transaction-received' : 'waiting',
 
+      // Auth credentials and mode (Phase A8 — must persist to keep Redis-backed
+      // sessions functional; without these, coordinator/agent auth and scheduled
+      // mode silently regress to legacy behavior on every reload)
+      coordinatorToken: sessionData.coordinatorToken || null,
+      agentApiKey: sessionData.agentApiKey || null,
+      mode: sessionData.mode || 'realtime',
+      reconnectionTokens: {}, // participantId -> { token, publicKey, createdAt }
+
       // Participant tracking (serializable format)
       participants: {}, // participantId -> participant data
       signatures: {}, // publicKey -> signature data
@@ -132,7 +140,8 @@ class RedisSessionStore {
         participantsReady: 0,
         participantsExpected: sessionData.expectedParticipants || sessionData.eligiblePublicKeys?.length || 0,
         signaturesCollected: 0,
-        signaturesRequired: sessionData.threshold
+        signaturesRequired: sessionData.threshold,
+        agentsConnected: 0
       }
     };
 
@@ -600,7 +609,8 @@ class RedisSessionStore {
     const external = {
       ...session,
       participants: new Map(Object.entries(session.participants || {})),
-      signatures: new Map(Object.entries(session.signatures || {}))
+      signatures: new Map(Object.entries(session.signatures || {})),
+      reconnectionTokens: new Map(Object.entries(session.reconnectionTokens || {}))
     };
 
     // Attach WebSockets from memory
@@ -611,6 +621,26 @@ class RedisSessionStore {
     external.coordinatorClient = this.coordinatorWebsockets.get(session.sessionId) || null;
 
     return external;
+  }
+
+  /**
+   * Persist a reconnection-token entry for a participant.
+   *
+   * Required for Redis-backed sessions: the in-memory store mutates the live
+   * session object (which is the same object held by the Map), but Redis
+   * `getSession()` returns a fresh copy each call, so direct Map mutations
+   * are lost on the next reload. This method writes through to storage.
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string} participantId - Participant identifier
+   * @param {Object} tokenEntry - { token, publicKey, createdAt }
+   */
+  async setReconnectionToken(sessionId, participantId, tokenEntry) {
+    const session = await this._loadSession(sessionId);
+    if (!session) return;
+    if (!session.reconnectionTokens) session.reconnectionTokens = {};
+    session.reconnectionTokens[participantId] = tokenEntry;
+    await this._saveSession(session);
   }
 
   /**

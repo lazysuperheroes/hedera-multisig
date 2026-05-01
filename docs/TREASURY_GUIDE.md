@@ -44,6 +44,15 @@ A multi-sig configuration is described as "M-of-N," where:
 | **2-of-2** | Two-person approval. Both must agree. Maximum security, no redundancy. |
 | **1-of-3** | Convenience accounts. Any single authorized person can transact. Lower security. |
 
+> **Want to go deeper?** [`THRESHOLD_GUIDE.md`](./THRESHOLD_GUIDE.md)
+> covers the security/availability/operational-cost tradeoff in
+> detail, common-mistake heuristics, decision recipes for specific
+> scenarios, **and** what nested key-lists look like (a 2-of-3 where
+> each branch is itself a department-level threshold). It also draws
+> the line between what Hedera consensus supports natively and what
+> this library currently coordinates — important if you're considering
+> anything beyond a flat M-of-N.
+
 ### Why Use Multi-Sig?
 
 - **No single point of failure** -- one lost or compromised key does not endanger funds
@@ -408,7 +417,7 @@ This shows the function name, parameter names, and values -- allowing signers to
 
 ## Scheduled Transactions
 
-For teams working across time zones or situations where the 120-second signing window is too tight, Hedera's **scheduled transactions** allow signing over hours or days.
+For teams working across time zones or situations where the 120-second signing window is too tight, Hedera's **scheduled transactions** (HIP-423) allow signing over hours, days, or up to ~62 days.
 
 ### How Scheduled Transactions Work
 

@@ -17,7 +17,6 @@ console.warn('\x1b[33m⚠️  Deprecation: Use `npx hedera-multisig sign` instea
 const readlineSync = require('readline-sync');
 const { PrivateKey } = require('@hashgraph/sdk');
 const TransactionFreezer = require('../core/TransactionFreezer');
-const TransactionDecoder = require('../core/TransactionDecoder');
 const SignatureVerifier = require('../core/SignatureVerifier');
 const {
   ExitCodes,

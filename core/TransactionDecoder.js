@@ -1,353 +1,30 @@
-// =============================================================================
-// DEPRECATED: This module is deprecated. Use shared/transaction-decoder instead.
-// This file is retained for backward compatibility only and will be removed
-// in a future major version. All new code should import from
-// require('../shared/transaction-decoder') or require('./shared/transaction-decoder').
-// =============================================================================
-
-const { AccountId, ContractId } = require('@hashgraph/sdk');
-const {
-  TransactionDecoder: SharedDecoder,
-  getTransactionTypeName
-} = require('../shared/transaction-decoder');
-
 /**
- * TransactionDecoder - Decode and display Hedera transactions for user verification
+ * Transaction terminal display utility.
  *
- * Provides detailed, human-readable information about transactions before signing.
- * Critical for user trust - users should never blindly sign transactions.
+ * Decoding logic moved to `shared/transaction-decoder/` in v2.1.0 (Phase A10/A11).
+ * This module retains only the small terminal-display adapter that
+ * `SignatureCollector` uses during interactive ceremonies. It consumes the
+ * `txDetails` shape produced by `SharedDecoder.extractTransactionDetails`
+ * (i.e. the canonical shape — not the legacy one).
  *
- * This module provides terminal display functionality on top of the shared decoder.
- *
- * @deprecated Use shared/transaction-decoder instead. This module is retained for
- * backward compatibility and will be removed in a future major version.
+ * For richer multi-section output (tables, time remaining, signature progress)
+ * use `ui/TransactionDisplay.displayFull()` instead.
  */
+
 class TransactionDecoder {
   /**
-   * Decode a Hedera transaction into human-readable details
+   * Render a brief, human-readable summary of a frozen transaction.
    *
-   * @deprecated Use shared/transaction-decoder's TransactionDecoder.decode() instead.
-   * @param {Transaction} transaction - Hedera SDK transaction
-   * @param {Interface} contractInterface - ethers.js Interface for ABI decoding (optional)
-   * @returns {TransactionDetails} Decoded transaction details
-   *
-   * @typedef {Object} TransactionDetails
-   * @property {string} type - Transaction type (e.g., 'ContractExecuteTransaction')
-   * @property {string} contract - Contract ID (if contract transaction)
-   * @property {string} function - Function name (if decodable)
-   * @property {Object} parameters - Decoded function parameters (if available)
-   * @property {Object} gas - Gas limit and estimated cost
-   * @property {Object} transfers - HBAR and token transfers
-   * @property {Object} raw - Raw transaction data and breakdown
-   */
-  static decode(transaction, contractInterface = null) {
-    // Use shared type detection (minification-safe)
-    const type = getTransactionTypeName(transaction);
-    const details = {
-      type,
-      contract: null,
-      function: null,
-      parameters: {},
-      gas: {
-        limit: null,
-        estimatedCost: null
-      },
-      transfers: {
-        hbar: null,
-        tokens: []
-      },
-      raw: {
-        functionSelector: null,
-        encodedParams: null,
-        bytesBreakdown: []
-      }
-    };
-
-    // Decode based on transaction type
-    if (type === 'ContractExecuteTransaction') {
-      this._decodeContractExecute(transaction, contractInterface, details);
-    } else if (type === 'ContractCreateTransaction') {
-      this._decodeContractCreate(transaction, details);
-    } else if (type === 'TransferTransaction') {
-      this._decodeTransfer(transaction, details);
-    } else if (type === 'TokenAssociateTransaction') {
-      this._decodeTokenAssociate(transaction, details);
-    } else if (type === 'AccountCreateTransaction') {
-      this._decodeAccountCreate(transaction, details);
-    } else {
-      // Generic transaction details
-      details.raw.info = 'Transaction type not fully supported for detailed decoding';
-    }
-
-    return details;
-  }
-
-  /**
-   * Decode ContractExecuteTransaction
-   * @private
-   */
-  static _decodeContractExecute(transaction, contractInterface, details) {
-    // Extract contract ID
-    if (transaction._contractId) {
-      details.contract = transaction._contractId.toString();
-    }
-
-    // Extract gas limit
-    if (transaction._gas) {
-      details.gas.limit = transaction._gas.toNumber();
-      // Estimate cost (rough estimate: gas * 0.0000001 HBAR)
-      const estimatedHbar = (details.gas.limit * 0.0000001).toFixed(4);
-      details.gas.estimatedCost = `~${estimatedHbar} HBAR`;
-    }
-
-    // Extract payable amount (HBAR transfer)
-    if (transaction._payableAmount && transaction._payableAmount.toTinybars() > 0) {
-      const hbar = transaction._payableAmount.toBigNumber().toString();
-      const hbarFormatted = (parseInt(hbar) / 100000000).toFixed(2);
-      details.transfers.hbar = `${hbarFormatted} HBAR to ${details.contract}`;
-    }
-
-    // Extract and decode function parameters
-    if (transaction._functionParameters) {
-      const funcParams = transaction._functionParameters;
-
-      // Get function selector (first 4 bytes)
-      if (funcParams.length >= 4) {
-        details.raw.functionSelector = '0x' + Buffer.from(funcParams.slice(0, 4)).toString('hex');
-      }
-
-      // Get encoded parameters (remaining bytes)
-      if (funcParams.length > 4) {
-        details.raw.encodedParams = '0x' + Buffer.from(funcParams.slice(4)).toString('hex');
-      }
-
-      // If we have a contract interface, decode the function call
-      if (contractInterface && details.raw.functionSelector) {
-        try {
-          const fullCalldata = '0x' + Buffer.from(funcParams).toString('hex');
-          const decoded = contractInterface.parseTransaction({ data: fullCalldata });
-
-          if (decoded) {
-            details.function = decoded.name;
-
-            // Extract parameter names and values
-            decoded.args.forEach((value, index) => {
-              const param = decoded.fragment.inputs[index];
-              let formattedValue = this._formatParameterValue(value, param.type);
-              details.parameters[param.name || `param${index}`] = formattedValue;
-            });
-          }
-        } catch (error) {
-          details.function = 'Unable to decode function';
-          details.parameters.error = error.message;
-        }
-      } else {
-        details.function = 'Function selector: ' + (details.raw.functionSelector || 'unknown');
-      }
-
-      // Create bytes breakdown
-      this._createBytesBreakdown(funcParams, details);
-    }
-  }
-
-  /**
-   * Decode ContractCreateTransaction
-   * @private
-   */
-  static _decodeContractCreate(transaction, details) {
-    details.function = 'Contract Deployment';
-
-    if (transaction._gas) {
-      details.gas.limit = transaction._gas.toNumber();
-      const estimatedHbar = (details.gas.limit * 0.0000001).toFixed(4);
-      details.gas.estimatedCost = `~${estimatedHbar} HBAR`;
-    }
-
-    if (transaction._initialBalance && transaction._initialBalance.toTinybars() > 0) {
-      const hbar = transaction._initialBalance.toBigNumber().toString();
-      const hbarFormatted = (parseInt(hbar) / 100000000).toFixed(2);
-      details.transfers.hbar = `${hbarFormatted} HBAR (initial balance)`;
-    }
-
-    if (transaction._bytecode) {
-      details.parameters.bytecodeSize = `${transaction._bytecode.length} bytes`;
-    }
-  }
-
-  /**
-   * Decode TransferTransaction
-   * @private
-   */
-  static _decodeTransfer(transaction, details) {
-    details.function = 'Transfer';
-
-    // Extract HBAR transfers (SDK uses an Array of Transfer objects, not a Map)
-    const hbarTransfers = transaction._hbarTransfers;
-    if (hbarTransfers && (Array.isArray(hbarTransfers) ? hbarTransfers.length > 0 : hbarTransfers.size > 0)) {
-      const transfers = [];
-      const transferList = Array.isArray(hbarTransfers) ? hbarTransfers : Array.from(hbarTransfers.entries()).map(([accountId, amount]) => ({ accountId, amount }));
-      for (const transfer of transferList) {
-        const accountId = transfer.accountId;
-        const amount = transfer.amount;
-        const tinybars = typeof amount.toTinybars === 'function' ? amount.toTinybars().toString() : amount.toString();
-        const hbarFormatted = (parseInt(tinybars) / 100000000).toFixed(2);
-        transfers.push(`${hbarFormatted} HBAR ${parseInt(tinybars) > 0 ? 'to' : 'from'} ${accountId.toString()}`);
-      }
-      details.transfers.hbar = transfers.join(', ');
-    }
-
-    // Extract token transfers
-    if (transaction._tokenTransfers && transaction._tokenTransfers.size > 0) {
-      transaction._tokenTransfers.forEach((transfers, tokenId) => {
-        transfers.forEach((amount, accountId) => {
-          details.transfers.tokens.push({
-            token: tokenId.toString(),
-            amount: amount.toString(),
-            recipient: accountId.toString()
-          });
-        });
-      });
-    }
-  }
-
-  /**
-   * Decode TokenAssociateTransaction
-   * @private
-   */
-  static _decodeTokenAssociate(transaction, details) {
-    details.function = 'Associate Tokens';
-
-    if (transaction._accountId) {
-      details.parameters.account = transaction._accountId.toString();
-    }
-
-    if (transaction._tokenIds && transaction._tokenIds.length > 0) {
-      details.parameters.tokens = transaction._tokenIds.map(t => t.toString()).join(', ');
-    }
-  }
-
-  /**
-   * Decode AccountCreateTransaction
-   * @private
-   */
-  static _decodeAccountCreate(transaction, details) {
-    details.function = 'Create Account';
-
-    if (transaction._initialBalance && transaction._initialBalance.toTinybars() > 0) {
-      const hbar = transaction._initialBalance.toBigNumber().toString();
-      const hbarFormatted = (parseInt(hbar) / 100000000).toFixed(2);
-      details.transfers.hbar = `${hbarFormatted} HBAR (initial balance)`;
-    }
-
-    if (transaction._key) {
-      details.parameters.publicKey = 'Key configured';
-    }
-  }
-
-  /**
-   * Format parameter value for display
-   * @private
-   */
-  static _formatParameterValue(value, type) {
-    // Handle BigInt (ethers v6 uses native BigInt)
-    if (typeof value === 'bigint') {
-      const numValue = value.toString();
-
-      // For large numbers, add helpful context
-      if (type.includes('uint') && numValue.length > 6) {
-        // Could be basis points, scaled integers, etc.
-        if (numValue.length === 7) {
-          // Possibly thousandths of basis points (e.g., 5000000 = 5%)
-          const percent = (parseInt(numValue) / 100000).toFixed(2);
-          return `${numValue} (${percent}% if basis point scale)`;
-        }
-        return numValue;
-      }
-
-      return numValue;
-    }
-
-    // Handle arrays
-    if (Array.isArray(value)) {
-      if (value.length > 5) {
-        return `[${value.slice(0, 5).map(v => this._formatParameterValue(v, 'any')).join(', ')}, ...] (${value.length} items)`;
-      }
-      return `[${value.map(v => this._formatParameterValue(v, 'any')).join(', ')}]`;
-    }
-
-    // Handle addresses
-    if (type === 'address') {
-      return value;
-    }
-
-    // Handle strings
-    if (typeof value === 'string') {
-      if (value.length > 50) {
-        return `"${value.substring(0, 47)}..." (${value.length} chars)`;
-      }
-      return `"${value}"`;
-    }
-
-    // Handle booleans
-    if (typeof value === 'boolean') {
-      return value ? 'true' : 'false';
-    }
-
-    // Default
-    return value.toString();
-  }
-
-  /**
-   * Create bytes breakdown for raw data display
-   * @private
-   */
-  static _createBytesBreakdown(funcParams, details) {
-    const breakdown = [];
-
-    // Function selector (first 4 bytes)
-    if (funcParams.length >= 4) {
-      breakdown.push({
-        offset: 0,
-        length: 4,
-        field: 'functionSelector',
-        value: details.raw.functionSelector
-      });
-    }
-
-    // Parameters (remaining bytes, in 32-byte chunks for ABI encoding)
-    if (funcParams.length > 4) {
-      let offset = 4;
-      let paramIndex = 0;
-
-      while (offset < funcParams.length) {
-        const chunkLength = Math.min(32, funcParams.length - offset);
-        const chunk = funcParams.slice(offset, offset + chunkLength);
-        const hexValue = '0x' + Buffer.from(chunk).toString('hex');
-
-        breakdown.push({
-          offset,
-          length: chunkLength,
-          field: `param${paramIndex}`,
-          value: hexValue
-        });
-
-        offset += chunkLength;
-        paramIndex++;
-      }
-    }
-
-    details.raw.bytesBreakdown = breakdown;
-  }
-
-  /**
-   * Display transaction details in terminal with formatting
-   *
-   * @param {TransactionDetails} txDetails - Decoded transaction details
-   * @param {Object} options - Display options
-   * @param {boolean} options.verbose - Show raw bytes breakdown (default: false)
-   * @param {boolean} options.compact - Compact display mode (default: false)
+   * @param {Object} txDetails - Output of `SharedDecoder.extractTransactionDetails`
+   * @param {Object} [options]
+   * @param {boolean} [options.verbose=false] - Include selector + raw calldata
+   * @param {boolean} [options.compact=false] - One-line summary
    */
   static display(txDetails, options = { verbose: false, compact: false }) {
+    if (!txDetails) {
+      console.log('(no transaction details)');
+      return;
+    }
     if (options.compact) {
       this._displayCompact(txDetails);
       return;
@@ -357,93 +34,101 @@ class TransactionDecoder {
     console.log('║          TRANSACTION DETAILS FOR SIGNING              ║');
     console.log('╚═══════════════════════════════════════════════════════╝\n');
 
-    console.log(`📄 Type: ${txDetails.type}`);
+    console.log(`📄 Type: ${txDetails.type || 'Unknown'}`);
 
-    if (txDetails.contract) {
-      console.log(`📋 Contract: ${txDetails.contract}`);
+    if (txDetails.transactionId) {
+      console.log(`🔖 Transaction ID: ${txDetails.transactionId}`);
     }
 
-    if (txDetails.function) {
-      console.log(`⚙️  Function: ${txDetails.function}${txDetails.function.includes('(') ? '' : '()'}\n`);
+    if (txDetails.contractId) {
+      console.log(`📋 Contract: ${txDetails.contractId}`);
     }
 
-    // Display parameters
-    if (Object.keys(txDetails.parameters).length > 0) {
-      console.log('📝 PARAMETERS:');
-      for (const [key, value] of Object.entries(txDetails.parameters)) {
-        console.log(`   ${key}: ${value}`);
-      }
-      console.log('');
+    if (txDetails.functionName) {
+      const verifiedFlag = txDetails.selectorVerified === true ? ' ✓ ABI-verified' :
+                           txDetails.selectorVerified === false ? ' ⚠ unverified' : '';
+      console.log(`⚙️  Function: ${txDetails.functionName}${verifiedFlag}`);
     }
 
-    // Display transfers
-    console.log('💰 TRANSFERS:');
-    if (txDetails.transfers.hbar) {
-      console.log(`   HBAR: ${txDetails.transfers.hbar}`);
-    } else {
-      console.log('   HBAR: None');
-    }
-
-    if (txDetails.transfers.tokens.length > 0) {
-      txDetails.transfers.tokens.forEach(t => {
-        console.log(`   Token ${t.token}: ${t.amount} to ${t.recipient}`);
+    if (txDetails.functionParams && txDetails.functionParams.length > 0) {
+      console.log('\n📝 PARAMETERS:');
+      txDetails.functionParams.forEach((param, idx) => {
+        const name = param.name || `arg${idx}`;
+        console.log(`   ${name} (${param.type || 'unknown'}): ${param.value}`);
       });
-    } else if (!txDetails.transfers.hbar) {
-      console.log('   Tokens: None');
     }
-    console.log('');
 
-    // Display gas
-    if (txDetails.gas.limit) {
-      console.log('⛽ GAS:');
-      console.log(`   Limit: ${txDetails.gas.limit.toLocaleString()}`);
-      if (txDetails.gas.estimatedCost) {
-        console.log(`   Estimated Cost: ${txDetails.gas.estimatedCost}`);
+    // HBAR transfers (canonical shape: array of { accountId, amount })
+    if (Array.isArray(txDetails.transfers) && txDetails.transfers.length > 0) {
+      console.log('\n💰 HBAR TRANSFERS:');
+      txDetails.transfers.forEach((t) => {
+        const tinybars = t.amount;
+        const hbar = (parseInt(tinybars, 10) / 100000000).toFixed(8);
+        const direction = parseInt(tinybars, 10) > 0 ? 'to' : 'from';
+        console.log(`   ${hbar} HBAR ${direction} ${t.accountId}`);
+      });
+    }
+
+    // Token transfers (canonical shape: array of { tokenId, transfers: [{accountId, amount}] })
+    if (Array.isArray(txDetails.tokenTransfers) && txDetails.tokenTransfers.length > 0) {
+      console.log('\n🪙 TOKEN TRANSFERS:');
+      txDetails.tokenTransfers.forEach((group) => {
+        console.log(`   Token ${group.tokenId}:`);
+        group.transfers.forEach((t) => {
+          console.log(`     ${t.amount} to/from ${t.accountId}`);
+        });
+      });
+    }
+
+    // NFT transfers
+    if (Array.isArray(txDetails.nftTransfers) && txDetails.nftTransfers.length > 0) {
+      console.log('\n🖼️  NFT TRANSFERS:');
+      txDetails.nftTransfers.forEach((group) => {
+        console.log(`   Token ${group.tokenId}:`);
+        group.transfers.forEach((t) => {
+          console.log(`     #${t.serialNumber}: ${t.senderAccountId} → ${t.receiverAccountId}`);
+        });
+      });
+    }
+
+    if (txDetails.gas) {
+      console.log('\n⛽ GAS:');
+      const gasLimit = typeof txDetails.gas === 'object' ? txDetails.gas.limit : txDetails.gas;
+      if (gasLimit) {
+        console.log(`   Limit: ${Number(gasLimit).toLocaleString()}`);
       }
-      console.log('');
     }
 
-    // Display raw data if verbose
+    if (txDetails.transactionMemo) {
+      console.log(`\n💬 Memo: ${txDetails.transactionMemo}`);
+    }
+
     if (options.verbose) {
-      console.log('🔍 RAW TRANSACTION DATA:');
-      if (txDetails.raw.functionSelector) {
-        console.log(`   Function Selector: ${txDetails.raw.functionSelector}`);
+      console.log('\n🔍 RAW DATA:');
+      if (txDetails.functionSelector) {
+        console.log(`   Function Selector: ${txDetails.functionSelector}`);
       }
-      if (txDetails.raw.encodedParams) {
-        const truncated = txDetails.raw.encodedParams.length > 66
-          ? txDetails.raw.encodedParams.substring(0, 66) + '...'
-          : txDetails.raw.encodedParams;
+      if (txDetails.encodedParams) {
+        const truncated = txDetails.encodedParams.length > 66
+          ? txDetails.encodedParams.substring(0, 66) + '...'
+          : txDetails.encodedParams;
         console.log(`   Encoded Parameters: ${truncated}`);
       }
-
-      if (txDetails.raw.bytesBreakdown.length > 0) {
-        console.log('\n   Bytes Breakdown:');
-        txDetails.raw.bytesBreakdown.forEach(segment => {
-          console.log(`   [${segment.offset}-${segment.offset + segment.length - 1}] ${segment.field}: ${segment.value}`);
-        });
+      if (txDetails.maxTransactionFee) {
+        console.log(`   Max Transaction Fee: ${txDetails.maxTransactionFee} tinybars`);
       }
-      console.log('');
     }
 
-    console.log('─────────────────────────────────────────────────────────');
+    console.log('\n─────────────────────────────────────────────────────────');
     console.log('⚠️  VERIFY DETAILS ABOVE BEFORE SIGNING ⚠️');
     console.log('─────────────────────────────────────────────────────────\n');
   }
 
-  /**
-   * Display compact version (for quick verification)
-   * @private
-   */
   static _displayCompact(txDetails) {
-    console.log(`\n${txDetails.type}: ${txDetails.function || 'Unknown'}`);
-    if (txDetails.contract) {
-      console.log(`Contract: ${txDetails.contract}`);
-    }
-    if (Object.keys(txDetails.parameters).length > 0) {
-      console.log(`Parameters: ${JSON.stringify(txDetails.parameters, null, 2)}`);
-    }
-    if (txDetails.transfers.hbar) {
-      console.log(`Transfer: ${txDetails.transfers.hbar}`);
+    console.log(`\n${txDetails.type || 'Unknown'}: ${txDetails.functionName || ''}`);
+    if (txDetails.contractId) console.log(`Contract: ${txDetails.contractId}`);
+    if (Array.isArray(txDetails.transfers) && txDetails.transfers.length > 0) {
+      console.log(`HBAR transfers: ${txDetails.transfers.length}`);
     }
     console.log('');
   }

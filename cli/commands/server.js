@@ -31,6 +31,9 @@ module.exports = function(program) {
     .option('--redis-host <host>', 'Redis host', process.env.REDIS_HOST || 'localhost')
     .option('--redis-port <port>', 'Redis port', parseInt, parseInt(process.env.REDIS_PORT) || 6379)
     .option('--redis-password <pass>', 'Redis password')
+    .option('--allowed-origins <origins>', 'Comma-separated allow-list of WebSocket browser origins (e.g. "https://multisig.example.com")')
+    .option('--unsafe-any-origin', 'Allow any browser origin (development only — required if you skip --allowed-origins for tunnel mode)')
+    .option('--quiet-secrets', 'Do not print PIN, coordinator token, or agent API key to stdout. Write them to .multisig-session.json only — useful when stdout is captured by a log aggregator.')
     .addHelpText('after', `
 Examples:
   $ hedera-multisig server -t 2 -k "key1,key2,key3"
@@ -132,6 +135,11 @@ Examples:
           passphrase: options.tlsPassphrase || undefined
         } : null;
 
+        // Origin policy (Phase B3 hardening)
+        const allowedOrigins = options.allowedOrigins
+          ? options.allowedOrigins.split(',').map((o) => o.trim()).filter(Boolean)
+          : null;
+
         // Create WebSocket server
         const wsServer = new WebSocketServer(sessionManager, {
           port: options.port,
@@ -141,7 +149,9 @@ Examples:
             enabled: true,
             provider: 'auto'
           } : null,
-          tls: tlsConfig
+          tls: tlsConfig,
+          allowedOrigins,
+          unsafeAnyOrigin: options.unsafeAnyOrigin === true
         });
 
         // Start server
@@ -212,11 +222,20 @@ Examples:
           console.log(chalk.bold.white('SESSION INFORMATION'));
           console.log(chalk.cyan('═'.repeat(60)));
           console.log(chalk.white('Session ID: ') + chalk.yellow(session.sessionId));
-          console.log(chalk.white('PIN: ') + chalk.bold.yellow(session.pin));
-          console.log(chalk.white('Coordinator Token: ') + chalk.bold.red(session.coordinatorToken));
-          console.log(chalk.gray('  (Keep this secret — required to authenticate as coordinator)'));
-          console.log(chalk.white('Agent API Key: ') + chalk.bold.red(session.agentApiKey));
-          console.log(chalk.gray('  (Share with agents — alternative to PIN for programmatic access)'));
+          if (options.quietSecrets) {
+            // Phase C19: stdout may be captured by Vector/Datadog/etc. Don't
+            // ship secrets through it. Operator reads them from the session
+            // file or QR code instead.
+            console.log(chalk.gray('PIN: ') + chalk.dim('(hidden — set without --quiet-secrets, or read .multisig-session.json)'));
+            console.log(chalk.gray('Coordinator Token: ') + chalk.dim('(hidden)'));
+            console.log(chalk.gray('Agent API Key: ') + chalk.dim('(hidden)'));
+          } else {
+            console.log(chalk.white('PIN: ') + chalk.bold.yellow(session.pin));
+            console.log(chalk.white('Coordinator Token: ') + chalk.bold.red(session.coordinatorToken));
+            console.log(chalk.gray('  (Keep this secret — required to authenticate as coordinator)'));
+            console.log(chalk.white('Agent API Key: ') + chalk.bold.red(session.agentApiKey));
+            console.log(chalk.gray('  (Share with agents — alternative to PIN for programmatic access)'));
+          }
 
           if (serverInfo.publicUrl) {
             console.log(chalk.white('Public URL: ') + chalk.yellow(serverInfo.publicUrl));
@@ -228,22 +247,30 @@ Examples:
           console.log(chalk.white('Expires: ') + chalk.yellow(new Date(session.expiresAt).toLocaleString()));
           console.log(chalk.cyan('═'.repeat(60)));
 
-          console.log(chalk.bold.white('\n📋 SHARE WITH PARTICIPANTS:\n'));
-          console.log(chalk.yellow(`Server URL: ${shareUrl}`));
-          console.log(chalk.yellow(`Session ID: ${session.sessionId}`));
-          console.log(chalk.yellow(`PIN: ${session.pin}\n`));
+          if (!options.quietSecrets) {
+            console.log(chalk.bold.white('\n📋 SHARE WITH PARTICIPANTS:\n'));
+            console.log(chalk.yellow(`Server URL: ${shareUrl}`));
+            console.log(chalk.yellow(`Session ID: ${session.sessionId}`));
+            console.log(chalk.yellow(`PIN: ${session.pin}\n`));
 
-          console.log(chalk.bold.white('🔗 CONNECTION STRING (paste in dApp):'));
-          console.log(chalk.cyan(`  ${connectionString}\n`));
+            console.log(chalk.bold.white('🔗 CONNECTION STRING (paste in dApp):'));
+            console.log(chalk.cyan(`  ${connectionString}\n`));
+          } else {
+            console.log(chalk.bold.white('\n📋 SHARE WITH PARTICIPANTS:'));
+            console.log(chalk.gray('  PIN, connection string, and QR code suppressed (--quiet-secrets).'));
+            console.log(chalk.gray('  Read .multisig-session.json or distribute via your secrets manager.\n'));
+          }
 
           // Display QR code
-          console.log(chalk.bold.white('\n📱 SCAN QR CODE TO JOIN:\n'));
-          qrcode.generate(connectionString, { small: true }, (qr) => {
-            console.log(qr);
-          });
+          if (!options.quietSecrets) {
+            console.log(chalk.bold.white('\n📱 SCAN QR CODE TO JOIN:\n'));
+            qrcode.generate(connectionString, { small: true }, (qr) => {
+              console.log(qr);
+            });
 
-          console.log(chalk.white('\nParticipants can also run:'));
-          console.log(chalk.gray(`  hedera-multisig participant -u "${shareUrl}" -s "${session.sessionId}" -p "${session.pin}"\n`));
+            console.log(chalk.white('\nParticipants can also run:'));
+            console.log(chalk.gray(`  hedera-multisig participant -u "${shareUrl}" -s "${session.sessionId}" -p "${session.pin}"\n`));
+          }
         }
 
         // Write session file

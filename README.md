@@ -6,20 +6,65 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js CI](https://github.com/lazysuperheroes/hedera-multisig/actions/workflows/test.yml/badge.svg)](https://github.com/lazysuperheroes/hedera-multisig/actions/workflows/test.yml)
 
-**Features:**
-- ✅ M-of-N threshold signatures (2-of-3, 3-of-5, etc.)
-- ✅ Mixed key type support (Ed25519 + ECDSA secp256k1)
-- ✅ Interactive workflow (<110s real-time coordination)
-- ✅ Offline workflow (air-gapped signing)
-- ✅ **Web-based signing with WalletConnect** (hardware wallet support)
-- ✅ **TLS/WSS encryption** for secure WebSocket connections
-- ✅ **Redis session persistence** for production reliability
-- ✅ **TypeScript definitions** included
-- ✅ **Unified CLI** with Commander.js and shell completions
-- ✅ Three security tiers (prompt, encrypted files, env vars)
-- ✅ Structured logging with debug export
-- ✅ Comprehensive audit logging
-- ✅ Production-ready with complete documentation
+## Pick your path
+
+| Want to… | Path | Time |
+|---|---|---|
+| **Try the dApp without installing anything** | Open [`testnet-multisig.lazysuperheroes.com`](https://testnet-multisig.lazysuperheroes.com) and join an existing session | 2 min |
+| **Run a real multi-sig session** | `npx hedera-multisig server -t 2 -k "key1,key2,key3"` then connect via the hosted dApp or CLI ([guide](docs/GETTING_STARTED.md)) | 5–15 min |
+| **Embed in your app** | `npm install @lazysuperheroes/hedera-multisig` ([library docs below](#-quick-start)) | varies |
+| **Automate signing with policies** | Build an agent with the [Agent Signing SDK](docs/AGENT_INTEGRATION.md) (PolicyEngine + composable rules) | 30+ min |
+
+> **Architecture:** We host the dApp UI on Vercel, but Vercel does **not**
+> host a coordinator process. The WebSocket server that holds session
+> state is always run by you (or a teammate) — locally or self-hosted.
+> Private keys never leave the signer's device. Only frozen transaction
+> bytes and signatures flow over the wire.
+
+## Why this exists
+
+Multi-sig on Hedera is a recurring pain point: developers either roll their
+own coordination ad-hoc (insecure), rely on a single signer (defeats the
+purpose), or skip threshold keys entirely. This library is a community gift
+that makes M-of-N threshold signing on Hedera reliable, secure, and
+ergonomic across every common workflow.
+
+## Three signing patterns, five workflows
+
+| Pattern | Workflow | When to use |
+|---|---|---|
+| **Treasury management** | Interactive, Offline, or Networked | DAO/team multi-sig spending. Coordinator builds a transaction, M-of-N signers approve. |
+| **Agent-to-agent automation** | Networked + AgentSigningClient | Bots and policy-driven services that auto-sign within configured rules. |
+| **Long-window async signing** | **Scheduled (HIP-423, up to ~62 days)** | Cross-timezone treasury ops, governance, time-locked approvals. Network executes when threshold is met. |
+
+Five workflows total: **Interactive** (real-time, <110s), **Offline**
+(air-gapped, file-based), **Networked** (WebSocket-coordinated), **Scheduled**
+(HIP-423 async), and **Flora** (HCS-16 prep, Phase 6).
+
+## Highlights
+
+- **M-of-N threshold signatures** (2-of-3, 3-of-5, …) with mixed Ed25519 + ECDSA
+- **Scheduled transactions up to ~62 days** (HIP-423) — the killer feature for cross-timezone teams
+- **Agent Signing SDK** with a [composable PolicyEngine](docs/AGENT_INTEGRATION.md) (amount limits, recipient allowlists, time windows, rate limits)
+- **WalletConnect dApp** with hardware-wallet support and ABI-verified contract review
+- **Mirror-node confirmation** of execution — receipt success is not enough; the network must actually externalize the transaction
+- **Server-side cryptographic signature verification** — the coordinator can't accept invalid signatures even if compromised
+- **Three security tiers** for keys: interactive prompt, encrypted files, env vars
+- **TLS/WSS** WebSocket encryption + per-IP and per-session rate limiting
+- **Redis session persistence** for production / horizontally-scaled deployments
+- **TypeScript declarations** included; **Commander.js CLI** with shell completions; structured logging; comprehensive audit log
+
+> **Security note:** v2.1.0 closed three CRITICALs found in the v2.0
+> review (post-AUTH coordinator role, `protobufjs` arbitrary-code-execution
+> CVE, reconnection-token public-key binding). Read [SECURITY.md](SECURITY.md)
+> for the threat model and disclosure policy. The library is unaudited —
+> recommended workflow for high-value mainnet treasuries is offline /
+> air-gapped, not the hosted dApp.
+
+> **New to threshold keys?** [`docs/THRESHOLD_GUIDE.md`](docs/THRESHOLD_GUIDE.md)
+> walks through how M-of-N works, how to choose M and N for your use
+> case, and what nested key-lists look like — including what this
+> library can and can't coordinate today.
 
 ---
 
@@ -787,42 +832,28 @@ Special thanks to:
 
 ## 🗺️ Roadmap
 
-### v1.x (Current)
-- ✅ M-of-N threshold signatures
-- ✅ Interactive and offline workflows
-- ✅ Mixed key types support
-- ✅ WalletConnect dApp with hardware wallet support
-- ✅ TypeScript definitions
-- ✅ TLS/WSS encryption
-- ✅ Redis session persistence
-- ✅ Unified CLI with Commander.js
-- ✅ Structured logging with export
-- ✅ npx initialization wizard
-- ✅ E2E testing with Playwright
-- [ ] Public demo instance
-- [ ] Video walkthroughs
+### Shipped in v2.1.0 (current)
+- ✅ M-of-N threshold signatures with mixed Ed25519 + ECDSA
+- ✅ Five workflows: Interactive, Offline, Networked, **Scheduled (HIP-423, ~62 days)**, Flora-prep
+- ✅ Agent Signing SDK with PolicyEngine (5 composable rules)
+- ✅ Mirror-node post-execution confirmation
+- ✅ WalletConnect dApp with ABI-verified contract review
+- ✅ TLS/WSS encryption, per-IP + per-session rate limiting
+- ✅ Redis session persistence (Phase A8 field parity)
+- ✅ TypeScript definitions, Commander.js CLI, structured logging, audit logging
+- ✅ Three security CRITICALs closed (post-AUTH coordinator role, protobufjs CVE, reconnection-token key binding)
 
+### v2.2 / Future
+- HCS-16 Flora workflow (on-chain coordination)
+- Public hosted demo instance (currently: testnet dApp UI is hosted; coordinator is self-hosted)
+- Multi-language SDK (Python, Go)
+- Hierarchical deterministic (HD) keys
+- Shamir Secret Sharing integration
+- Cumulative-amount limits in PolicyEngine
+- HCS-26 agent skills registry integration
 
-### v2.0 (Planned)
-- [ ] Batch multi-sig operations
-- [ ] Scheduled multi-sig transactions
-
-### Future
-- [ ] Multi-chain support
-- [ ] Hierarchical deterministic (HD) keys
-- [ ] Shamir Secret Sharing integration
-- [ ] Policy-based automation
-- [ ] Multi-language SDK (Python, Go)
+See [docs/ROADMAP.md](docs/ROADMAP.md) for detail.
 
 ---
 
-## 📊 Status
-
-![Tests](https://img.shields.io/badge/tests-236%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-90%25%2B-brightgreen)
-![Vulnerabilities](https://img.shields.io/badge/vulnerabilities-0-brightgreen)
-![Production Ready](https://img.shields.io/badge/status-production%20ready-brightgreen)
-
----
-
-**Made with ❤️ for Hedera by Lazy Superheroes**
+**Made with care for the Hedera community by Lazy Superheroes**

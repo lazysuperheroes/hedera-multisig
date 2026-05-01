@@ -247,8 +247,13 @@ export async function fetchAccountBalance(
   const baseUrl = getMirrorNodeUrl(net);
 
   try {
-    // 1. Fetch account (HBAR balance)
-    const accountRes = await fetch(`${baseUrl}/accounts/${accountId}`);
+    // Phase C14: parallelize the two requests — they're independent, and
+    // the previous sequential version doubled latency on slow networks.
+    const [accountRes, tokensRes] = await Promise.all([
+      fetch(`${baseUrl}/accounts/${accountId}`),
+      fetch(`${baseUrl}/accounts/${accountId}/tokens`).catch(() => null),
+    ]);
+
     if (!accountRes.ok) {
       if (accountRes.status === 404) return null;
       throw new Error(`Mirror node returned ${accountRes.status}`);
@@ -262,11 +267,9 @@ export async function fetchAccountBalance(
       maximumFractionDigits: 2,
     })} \u210F`; // ℏ
 
-    // 2. Fetch token balances
     const tokens: AccountBalance['tokens'] = [];
-    try {
-      const tokensRes = await fetch(`${baseUrl}/accounts/${accountId}/tokens`);
-      if (tokensRes.ok) {
+    if (tokensRes && tokensRes.ok) {
+      try {
         const tokensData = await tokensRes.json();
         if (Array.isArray(tokensData.tokens)) {
           for (const t of tokensData.tokens) {
@@ -277,10 +280,10 @@ export async function fetchAccountBalance(
             });
           }
         }
+      } catch {
+        // Token parse failure is non-fatal — HBAR balance still surfaces
+        console.warn(`Could not parse tokens for ${accountId}`);
       }
-    } catch {
-      // Token fetch failure is non-fatal
-      console.warn(`Could not fetch tokens for ${accountId}`);
     }
 
     return { hbarBalance: hbarFormatted, tokens };

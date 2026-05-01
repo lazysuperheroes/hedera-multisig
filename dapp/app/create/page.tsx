@@ -74,9 +74,23 @@ export default function CreatePage() {
   const [pin, setPin] = useState('');
   const [coordinatorToken, setCoordinatorToken] = useState('');
 
+  // ---- Phase B1: PIN-in-link is opt-in only --------------------------------
+  // Default OFF: shareable link contains server + session ID only. Participant
+  // types the PIN themselves. Coordinator can flip to ON for friction-free
+  // sharing in low-risk settings (testnet, internal demos).
+  const [includePinInLink, setIncludePinInLink] = useState(false);
+
   // ---- Step 2: transaction builder ------------------------------------------
   const [txType, setTxType] = useState<TransactionType>('hbar-transfer');
   const [txFields, setTxFields] = useState<Record<string, string>>({});
+
+  // ---- Phase D13a: build vs paste-frozen-base64 mode -----------------------
+  // 'build' (default) — assemble a transaction from form fields, freeze in-browser, inject.
+  // 'paste'           — paste pre-frozen base64 from a CLI prep script (e.g.
+  //                     examples/walkthrough-contract/07-prepare-multisig-increment.js)
+  //                     and inject as-is. No wallet needed for this path.
+  const [txMode, setTxMode] = useState<'build' | 'paste'>('build');
+  const [pastedBase64, setPastedBase64] = useState('');
 
   // ---- Balance lookup -------------------------------------------------------
   const [fromBalance, setFromBalance] = useState<AccountBalance | null>(null);
@@ -152,6 +166,20 @@ export default function CreatePage() {
     }
   }, [txType, txFields, wallet.accountId, sessionId, injection, toast]);
 
+  // Phase D13a: paste-frozen-base64 inject path — no wallet required, no
+  // form-build step. Pre-frozen bytes from a CLI prep script are pushed
+  // straight through TRANSACTION_INJECT.
+  const handleInjectPastedBase64 = useCallback(async () => {
+    try {
+      await injection.injectFrozenBase64(pastedBase64, { sessionId, label: 'paste-base64' });
+      setStep('share');
+      toast.success('Transaction Injected', 'Pre-frozen transaction has been broadcast to participants.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error.';
+      toast.error('Injection Failed', message);
+    }
+  }, [pastedBase64, sessionId, injection, toast]);
+
   const setTxField = useCallback(
     (key: string, value: string) =>
       setTxFields((prev) => ({ ...prev, [key]: value })),
@@ -175,7 +203,11 @@ export default function CreatePage() {
           serverUrl
         )}&session=${encodeURIComponent(
           connection.sessionCredentials.sessionId
-        )}&pin=${encodeURIComponent(connection.sessionCredentials.pin)}`
+        )}${
+          includePinInLink
+            ? `&pin=${encodeURIComponent(connection.sessionCredentials.pin)}`
+            : ''
+        }`
       : '';
 
   const createSteps = [
@@ -276,60 +308,141 @@ export default function CreatePage() {
             {/* Transaction builder card */}
             <div className={cardClass}>
               <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
-                Build Transaction
+                Inject Transaction
               </h2>
 
-              <div className="mb-6">
-                <label htmlFor="txType" className={labelClass}>
-                  Transaction Type
-                </label>
-                <select
-                  id="txType"
-                  className={inputClass}
-                  value={txType}
-                  onChange={(e) => {
-                    setTxType(e.target.value as TransactionType);
-                    setTxFields({});
-                  }}
+              {/* Phase D13a: mode tabs */}
+              <div className="mb-6 flex gap-2 border-b border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setTxMode('build')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    txMode === 'build'
+                      ? 'border-blue-600 text-blue-700 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
                 >
-                  <option value="hbar-transfer">HBAR Transfer</option>
-                  <option value="token-transfer">Token Transfer</option>
-                  <option value="nft-transfer">NFT Transfer</option>
-                  <option value="token-association">Token Association</option>
-                  <option value="contract-call">Contract Call</option>
-                </select>
+                  Build from form
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTxMode('paste')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    txMode === 'paste'
+                      ? 'border-blue-600 text-blue-700 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  Paste frozen TX
+                </button>
               </div>
 
-              <div className="space-y-5">
-                <TransactionFields
-                  txType={txType}
-                  txFields={txFields}
-                  setTxField={setTxField}
-                  onFromBlur={handleFromBlur}
-                  walletAccountId={wallet.accountId}
-                  balance={fromBalance}
-                  isLoadingBalance={isLoadingBalance}
-                  balanceError={balanceError}
-                />
-              </div>
+              {txMode === 'build' && (
+                <>
+                  <div className="mb-6">
+                    <label htmlFor="txType" className={labelClass}>
+                      Transaction Type
+                    </label>
+                    <select
+                      id="txType"
+                      className={inputClass}
+                      value={txType}
+                      onChange={(e) => {
+                        setTxType(e.target.value as TransactionType);
+                        setTxFields({});
+                      }}
+                    >
+                      <option value="hbar-transfer">HBAR Transfer</option>
+                      <option value="token-transfer">Token Transfer</option>
+                      <option value="nft-transfer">NFT Transfer</option>
+                      <option value="token-association">Token Association</option>
+                      <option value="contract-call">Contract Call</option>
+                    </select>
+                  </div>
 
-              {injection.injectError && (
-                <div role="alert" className="mt-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
-                  {injection.injectError}
-                </div>
+                  <div className="space-y-5">
+                    <TransactionFields
+                      txType={txType}
+                      txFields={txFields}
+                      setTxField={setTxField}
+                      onFromBlur={handleFromBlur}
+                      walletAccountId={wallet.accountId}
+                      balance={fromBalance}
+                      isLoadingBalance={isLoadingBalance}
+                      balanceError={balanceError}
+                    />
+                  </div>
+
+                  {injection.injectError && (
+                    <div role="alert" className="mt-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+                      {injection.injectError}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleInjectTransaction}
+                    disabled={injection.isInjecting || !wallet.isConnected}
+                    className={primaryBtnClass + ' mt-6'}
+                  >
+                    {injection.isInjecting && (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                    )}
+                    {injection.isInjecting ? 'Building & Injecting...' : 'Build & Inject Transaction'}
+                  </button>
+                </>
               )}
 
-              <button
-                type="button"
-                onClick={handleInjectTransaction}
-                disabled={injection.isInjecting || !wallet.isConnected}
-                className={primaryBtnClass + ' mt-6'}
-              >
-                {injection.isInjecting && (
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
-                )}
-                {injection.isInjecting ? 'Building & Injecting...' : 'Build & Inject Transaction'}
-              </button>
+              {txMode === 'paste' && (
+                <>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    Paste a pre-frozen transaction (base64) from the CLI prep
+                    scripts (e.g.{' '}
+                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">
+                      examples/walkthrough-contract/07-prepare-multisig-increment.js
+                    </code>
+                    ) and inject as-is. No wallet required — the pre-frozen
+                    transaction already has its own payer + transactionId.
+                  </p>
+
+                  <label htmlFor="pasted-base64" className={labelClass}>
+                    Frozen transaction (base64)
+                  </label>
+                  <textarea
+                    id="pasted-base64"
+                    className={inputClass + ' font-mono text-xs'}
+                    rows={6}
+                    placeholder="CgQQBxgL..."
+                    value={pastedBase64}
+                    onChange={(e) => setPastedBase64(e.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Length: {pastedBase64.trim().length} chars
+                    {pastedBase64.trim().length > 0 &&
+                      ` (~${Math.round(pastedBase64.trim().length * 3 / 4)} raw bytes)`}
+                    . Frozen transactions have a 120-second validity — paste +
+                    inject quickly after running the prep script.
+                  </p>
+
+                  {injection.injectError && (
+                    <div role="alert" className="mt-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+                      {injection.injectError}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleInjectPastedBase64}
+                    disabled={injection.isInjecting || pastedBase64.trim().length === 0}
+                    className={primaryBtnClass + ' mt-6'}
+                  >
+                    {injection.isInjecting && (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                    )}
+                    {injection.isInjecting ? 'Injecting...' : 'Inject Pre-Frozen Transaction'}
+                  </button>
+                </>
+              )}
             </div>
           </section>
         )}
@@ -342,6 +455,8 @@ export default function CreatePage() {
             connectionString={connectionString}
             shareableUrl={shareableUrl}
             injectionDone={injection.injectionDone}
+            includePinInLink={includePinInLink}
+            onTogglePinInLink={setIncludePinInLink}
           />
         )}
 

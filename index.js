@@ -10,7 +10,6 @@ const packageJson = require('./package.json');
 
 // Core Components
 const TransactionFreezer = require('./core/TransactionFreezer');
-const TransactionDecoder = require('./core/TransactionDecoder');
 const SignatureCollector = require('./core/SignatureCollector');
 const SignatureVerifier = require('./core/SignatureVerifier');
 const TransactionExecutor = require('./core/TransactionExecutor');
@@ -59,7 +58,6 @@ const SharedTransactionDecoder = require('./shared/transaction-decoder');
 module.exports = {
   // Core
   TransactionFreezer,
-  TransactionDecoder,
   SignatureCollector,
   SignatureVerifier,
   TransactionExecutor,

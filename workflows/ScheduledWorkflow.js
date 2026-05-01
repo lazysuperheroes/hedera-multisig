@@ -1,9 +1,10 @@
 /**
  * Scheduled Workflow
  *
- * Async multi-sig signing via Hedera ScheduleCreate/ScheduleSign.
+ * Async multi-sig signing via Hedera ScheduleCreate/ScheduleSign (HIP-423).
  * Removes the 120-second constraint by wrapping transactions in a schedule
- * that can collect signatures over hours or days.
+ * that can collect signatures over hours, days, or up to ~62 days
+ * (scheduling.maxExpirationFutureSeconds = 5,356,800s).
  *
  * Flow:
  * 1. Create inner transaction (transfer, contract call, etc.)
@@ -51,8 +52,12 @@ class ScheduledWorkflow {
    * @param {Transaction} innerTransaction - The transaction to schedule (e.g., TransferTransaction)
    * @param {Object} options
    * @param {AccountId} [options.payerAccountId] - Payer for the scheduled tx (defaults to operator)
-   * @param {Date} [options.expirationTime] - When the schedule expires (default: network default)
-   * @returns {Promise<{ scheduleId: string, transactionId: string, innerTransaction: Object }>}
+   * @param {Date} [options.expirationTime] - When the schedule expires (HIP-423: up to ~62 days)
+   * @param {boolean} [options.waitForExpiry=false] - If true, wait until expirationTime even
+   *   when threshold is met (HIP-423 long-term mode). If false (default), execute immediately
+   *   on threshold.
+   * @param {Key} [options.adminKey] - Admin key authorized to delete the schedule before execution
+   * @returns {Promise<{ scheduleId: string, transactionId: string }>}
    */
   async createSchedule(innerTransaction, options = {}) {
     try {
@@ -76,6 +81,14 @@ class ScheduledWorkflow {
 
       if (options.expirationTime) {
         scheduleTx.setExpirationTime(options.expirationTime);
+      }
+
+      if (options.waitForExpiry === true) {
+        scheduleTx.setWaitForExpiry(true);
+      }
+
+      if (options.adminKey) {
+        scheduleTx.setAdminKey(options.adminKey);
       }
 
       // Execute the schedule creation

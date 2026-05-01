@@ -132,8 +132,17 @@ export default function SessionPage({ params }: PageProps) {
         setCurrentStep('error');
       }
     } else {
-      // No saved session - check for legacy localStorage
-      const stored = localStorage.getItem('hedera-multisig-session-info');
+      // Phase B2: Read PIN handoff from sessionStorage (per-tab; auto-cleared
+      // on tab close). Falls back to legacy localStorage key for users who had
+      // an older build active in this tab.
+      let stored: string | null = null;
+      try { stored = sessionStorage.getItem('hedera-multisig-pending-join'); } catch {}
+      if (!stored) {
+        try { stored = localStorage.getItem('hedera-multisig-session-info'); } catch {}
+      }
+      // Always purge the legacy key — if found here, migrate then delete.
+      try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
+
       if (!stored) {
         setErrorMessage('No session information found. Please join a session first.');
         setCurrentStep('error');
@@ -153,12 +162,17 @@ export default function SessionPage({ params }: PageProps) {
 
         setSessionInfo(parsed);
 
-        // Migrate to new session recovery system
+        // Migrate to new session recovery system (PIN-free; reconnection token
+        // arrives later via AUTH_SUCCESS).
         sessionRecovery.saveSession({
           serverUrl: parsed.serverUrl,
           sessionId: parsed.sessionId,
           pin: parsed.pin,
         });
+
+        // PIN has been consumed — purge the per-tab handoff immediately.
+        // After this point the session uses reconnectionToken only.
+        try { sessionStorage.removeItem('hedera-multisig-pending-join'); } catch {}
 
         setCurrentStep('wallet-connect');
       } catch (error) {
@@ -417,7 +431,8 @@ export default function SessionPage({ params }: PageProps) {
   const handleDisconnect = async () => {
     // Clear all session caches to ensure clean state for next session
     sessionRecovery.clearSession();
-    localStorage.removeItem('hedera-multisig-session-info');
+    try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
+    try { sessionStorage.removeItem('hedera-multisig-pending-join'); } catch {}
 
     signingSession.disconnect();
     await wallet.disconnect();
@@ -427,7 +442,8 @@ export default function SessionPage({ params }: PageProps) {
   // Handle clearing session cache and retrying
   const handleClearAndRetry = () => {
     sessionRecovery.clearSession();
-    localStorage.removeItem('hedera-multisig-session-info');
+    try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
+    try { sessionStorage.removeItem('hedera-multisig-pending-join'); } catch {}
     window.location.reload();
   };
 
@@ -618,14 +634,28 @@ export default function SessionPage({ params }: PageProps) {
 
         {/* Step 1: Connect Wallet */}
         {currentStep === 'wallet-connect' && (
-          <WalletStatus
-            connected={wallet.isConnected}
-            connecting={wallet.isConnecting}
-            wallet={wallet.accountId ? { accountId: wallet.accountId, publicKey: wallet.publicKey || '', network: DEFAULT_NETWORK } : null}
-            error={wallet.error}
-            onConnect={handleConnectWallet}
-            onDisconnect={() => wallet.disconnect()}
-          />
+          <>
+            {/* Phase C17: prime first-time users on what's about to happen */}
+            <details className="mb-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-blue-900 dark:text-blue-100">
+                What&apos;s about to happen?
+              </summary>
+              <ol className="mt-3 ml-1 space-y-2 text-sm text-blue-900 dark:text-blue-100">
+                <li><strong>1.</strong> Connect your Hedera wallet (HashPack, Blade, or Kabila).</li>
+                <li><strong>2.</strong> Wait for the coordinator to inject a transaction — usually within a few minutes.</li>
+                <li><strong>3.</strong> Review the transaction details. You&apos;ll see exactly what you&apos;re being asked to sign — type, amounts, recipients, contract calls.</li>
+                <li><strong>4.</strong> Approve or reject. If you approve, your wallet asks for confirmation. Your private key never leaves your device.</li>
+              </ol>
+            </details>
+            <WalletStatus
+              connected={wallet.isConnected}
+              connecting={wallet.isConnecting}
+              wallet={wallet.accountId ? { accountId: wallet.accountId, publicKey: wallet.publicKey || '', network: DEFAULT_NETWORK } : null}
+              error={wallet.error}
+              onConnect={handleConnectWallet}
+              onDisconnect={() => wallet.disconnect()}
+            />
+          </>
         )}
 
         {/* Step 2+: Session Connection (shows wallet status + session status) */}

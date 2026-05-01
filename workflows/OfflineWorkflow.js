@@ -15,7 +15,10 @@ const fs = require('fs').promises;
 const path = require('path');
 const chalk = require('chalk');
 const TransactionFreezer = require('../core/TransactionFreezer');
-const TransactionDecoder = require('../core/TransactionDecoder');
+const {
+  TransactionDecoder: SharedDecoder,
+  getTransactionTypeName
+} = require('../shared/transaction-decoder');
 const SignatureCollector = require('../core/SignatureCollector');
 const SignatureVerifier = require('../core/SignatureVerifier');
 const TransactionExecutor = require('../core/TransactionExecutor');
@@ -60,9 +63,10 @@ class OfflineWorkflow {
       this.progress.stopSpinner();
       this.progress.success('Transaction frozen successfully');
 
-      // Get transaction details using TransactionDecoder
-      const txDetails = frozenTxData.txDetails || TransactionDecoder.decode(
+      // Get transaction details (canonical shared decoder)
+      const txDetails = frozenTxData.txDetails || SharedDecoder.extractTransactionDetails(
         frozenTx,
+        getTransactionTypeName(frozenTx),
         this.options.contractInterface
       );
       txDetails.expirationTime = Math.floor(frozenTxData.expiresAt.getTime() / 1000);

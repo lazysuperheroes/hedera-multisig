@@ -89,7 +89,7 @@ Sign locally -> Signatures collected -> Execute
 
 ```
 Coordinator creates ScheduleCreate transaction ->
-Signers submit ScheduleSign over hours or days ->
+Signers submit ScheduleSign over hours, days, or up to ~62 days (HIP-423) ->
 Network executes automatically when threshold met
 ```
 
@@ -266,7 +266,7 @@ If you can't answer "who signed what, when, and why?" for every transaction, you
 
 Hedera transactions are valid for 120 seconds. If your signing process takes longer, the transaction expires.
 
-**Solution**: Use the pre-session workflow—connect and load keys *before* the transaction is created. Or use the Scheduled Workflow for async signing over hours or days.
+**Solution**: Use the pre-session workflow—connect and load keys *before* the transaction is created. Or use the Scheduled Workflow for async signing over hours, days, or up to ~62 days (HIP-423).
 
 ### Mistake 5: Single Point of Infrastructure Failure
 

@@ -1,0 +1,7 @@
+{
+  "description": "Create new account with 10000 tinybars initial balance",
+  "inputBase64": "Cnwqegp2ChgKCwjlgNLPBhDg9owtEgcIABAAGOkHGAASBggAEAAYAxiAhK9fIgIIeDIAWkcKIhIgX1jYECgz2LdrNPFHIO9bn9XtUjFYAzKnkan5aG3cUfkQkE4w//////////9/OP//////////f0AASgUIgM7aA4gBABIACnwqegp2ChgKCwjlgNLPBhDg9owtEgcIABAAGOkHGAASBggAEAAYBBiAhK9fIgIIeDIAWkcKIhIgX1jYECgz2LdrNPFHIO9bn9XtUjFYAzKnkan5aG3cUfkQkE4w//////////9/OP//////////f0AASgUIgM7aA4gBABIACnwqegp2ChgKCwjlgNLPBhDg9owtEgcIABAAGOkHGAASBggAEAAYBRiAhK9fIgIIeDIAWkcKIhIgX1jYECgz2LdrNPFHIO9bn9XtUjFYAzKnkan5aG3cUfkQkE4w//////////9/OP//////////f0AASgUIgM7aA4gBABIA",
+  "expectedShape": {
+    "type": "AccountCreateTransaction"
+  }
+}

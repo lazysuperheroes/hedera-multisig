@@ -463,10 +463,19 @@ hedera-multisig offline freeze \
 ```bash
 hedera-multisig schedule create \
   -b "BASE64_FROM_STEP_1" \
-  --memo "March payroll - vendor ABC"
+  --memo "March payroll - vendor ABC" \
+  --expiration-time 14d
 ```
 
 3. Share the **Schedule ID** (e.g., `0.0.98765`) with all signers.
+
+**Long-term scheduling flags (HIP-423):**
+
+| Flag | Purpose | Example |
+|---|---|---|
+| `--expiration-time <input>` | When the schedule expires. Duration (`30d`, `2h`) or ISO-8601 (`2026-06-30T12:00:00Z`). Max ~62 days. | `--expiration-time 30d` |
+| `--wait-for-expiry` | Wait until expiration to execute, even after threshold is met. Useful for time-locked treasury approvals. | `--wait-for-expiry` |
+| `--admin-key <hex>` | Admin public key authorized to delete the schedule before execution. | `--admin-key 302a3005...` |
 
 ### How Signers Participate
 
@@ -479,7 +488,7 @@ hedera-multisig schedule sign \
   --passphrase "my-passphrase"
 ```
 
-There is no time pressure -- signers can sign hours or days apart.
+There is no time pressure -- signers can sign hours, days, or up to ~62 days apart (HIP-423; configurable via `--expiration-time` on `schedule create`).
 
 ### Monitoring a Schedule
 
@@ -547,6 +556,100 @@ A single session can include both human participants (using the dApp or CLI with
 - 1 automated agent that auto-signs transfers under 100 HBAR to approved addresses
 
 This gives you the flexibility to automate routine approvals while still requiring human oversight.
+
+---
+
+## Tunnel mode: trust model and alternatives
+
+When you run `npx hedera-multisig server` without `--no-tunnel`, the CLI
+opens a public ngrok or localtunnel URL so remote participants can connect
+without VPN, port forwarding, or DNS work. This is the easiest way to run
+a remote signing ceremony — but it has trust implications you should
+understand before using it for high-value treasury operations.
+
+### What a tunnel provider can see
+
+The tunnel service (ngrok, localtunnel, or another provider) **terminates
+TLS at their edge** and re-establishes a connection to your local server.
+That means:
+
+- They can observe **traffic patterns and timing** — when a session
+  starts, how many messages flow, when it ends.
+- They can read **everything in WebSocket frames** at their edge, including
+  frozen transaction bytes, decoded transaction details, signatures, and
+  participant labels.
+- They cannot read your **private keys** — keys never leave the signer's
+  device. The protocol is designed so the server (and therefore the tunnel
+  provider) is signature-agnostic.
+- They cannot **forge signatures** — signatures are verified
+  cryptographically against the eligible-keys set, so a malicious tunnel
+  cannot inject a fake signature on behalf of a legitimate participant.
+
+For most ceremonies — internal treasury approvals, agent automation,
+testnet experimentation — this is acceptable. The tunnel provider is a
+known third party, the data they observe is short-lived, and the trust
+model is comparable to using any cloud-hosted service.
+
+For ceremonies where **the existence of the transaction is itself
+sensitive** (M&A, investigations, governance votes), or where you cannot
+accept third-party visibility into transaction metadata, prefer one of
+these alternatives:
+
+### Alternative 1: Direct WSS via your own TLS certificate
+
+```bash
+npx hedera-multisig server \
+  -t 2 -k "KEY1,KEY2,KEY3" \
+  --no-tunnel \
+  --host 0.0.0.0 \
+  --port 443 \
+  --tls-cert /etc/letsencrypt/live/multisig.example.com/fullchain.pem \
+  --tls-key  /etc/letsencrypt/live/multisig.example.com/privkey.pem \
+  --allowed-origins "https://multisig.example.com"
+```
+
+This requires a domain you control, a TLS certificate (Let's Encrypt
+works), and either a port-forwarded port 443 on your network or a
+reachable VM. No third-party sees your traffic.
+
+### Alternative 2: Local network only
+
+If all signers are on the same network:
+
+```bash
+npx hedera-multisig server -t 2 -k "KEY1,KEY2,KEY3" --no-tunnel --host 0.0.0.0
+```
+
+Participants connect via your LAN IP. Zero internet exposure.
+
+### Alternative 3: Offline / air-gapped workflow
+
+If signers are not online at the same time, skip the WebSocket entirely
+and use the offline workflow:
+
+```bash
+npx hedera-multisig offline freeze -t transfer -f 0.0.X -T 0.0.Y -a 10
+# Distribute the base64 to each signer; they sign offline; collect signatures
+# and then `offline execute`.
+```
+
+No tunnel, no server, no third party.
+
+### Origin allow-list is required for tunnel mode
+
+As of v2.1.0, tunnel mode without `--allowed-origins` fails to start. A
+public tunnel URL with a permissive origin policy lets any web page
+connect to your coordinator and attempt to authenticate — set the
+allow-list explicitly:
+
+```bash
+npx hedera-multisig server \
+  -t 2 -k "KEY1,KEY2,KEY3" \
+  --allowed-origins "https://multisig.lazysuperheroes.com,https://testnet-multisig.lazysuperheroes.com"
+```
+
+For development only, `--unsafe-any-origin` opts out of the check. Do not
+use this in production.
 
 ---
 

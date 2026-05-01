@@ -45,10 +45,16 @@ class MultiSigWebSocketServer {
     //   tls.passphrase: (optional) Passphrase for private key
     this.tlsOptions = options.tls || null;
 
-    // Rate limiting for AUTH attempts (prevents PIN brute force and griefing)
+    // Rate limiting for AUTH attempts (prevents PIN brute force and griefing).
+    //
+    // maxAttempts=12: a 7-signer ceremony where every participant fat-fingers the
+    // PIN twice = 14 attempts; behind a single corporate NAT all participants share
+    // one source IP, so the previous limit of 5 self-DoS'd legitimate office teams.
+    // Per-session limit (sessionRateLimit) is the primary brute-force gate; per-IP
+    // is a softer griefing mitigation.
     this.authAttempts = new Map(); // IP -> { count, resetTime, blocked }
     this.authRateLimit = options.authRateLimit || {
-      maxAttempts: 5,      // Max failed attempts per IP
+      maxAttempts: 12,     // Max failed attempts per IP (was 5; bumped for corporate-NAT scenario)
       windowMs: 60000,     // 1 minute window
       blockDurationMs: 300000  // 5 minute block after too many failures
     };
@@ -63,8 +69,19 @@ class MultiSigWebSocketServer {
     // Maximum concurrent sessions to prevent memory exhaustion (SEC-13)
     this.maxSessions = options.maxSessions || 100;
 
-    // Allowed origins for WebSocket connections (SEC-12)
-    this.allowedOrigins = options.allowedOrigins || null; // null = allow all (dev mode)
+    // Allowed origins for WebSocket connections (SEC-12 + Phase B3 hardening).
+    //
+    // - `allowedOrigins: ['https://multisig.example.com']` (recommended for production)
+    // - `unsafeAnyOrigin: true` — allow any origin (explicit dev-mode opt-in only)
+    // - `allowedOrigins` unset and `unsafeAnyOrigin` unset → CLI/agent connections
+    //   (no Origin header) accepted; browser connections rejected. This is the safe
+    //   default for self-hosted CLI ceremonies and prevents drive-by browser
+    //   connections to a coordinator's local server.
+    //
+    // Tunnel mode (--tunnel) without an explicit allowlist is rejected at start
+    // time below — public URL + permissive origins is the highest-risk combo.
+    this.unsafeAnyOrigin = options.unsafeAnyOrigin === true;
+    this.allowedOrigins = Array.isArray(options.allowedOrigins) ? options.allowedOrigins : null;
 
     // Heartbeat configuration for detecting dead connections
     this.heartbeatConfig = {
@@ -72,6 +89,9 @@ class MultiSigWebSocketServer {
       timeout: options.heartbeatTimeout || 10000     // Wait 10 seconds for pong
     };
     this.heartbeatTimerId = null;
+
+    // Phase C7: server start time for uptime reporting via /healthz
+    this.startedAt = Date.now();
 
     // Cleanup expired rate limit entries every 10 minutes (using TimerController)
     this.rateLimitCleanupTimerId = timerController.setInterval(() => {
@@ -95,7 +115,40 @@ class MultiSigWebSocketServer {
         // Check if TLS is enabled
         this.isSecure = this.tlsOptions && this.tlsOptions.enabled;
 
+        // Phase C7: HTTP endpoints for operators monitoring tunnels and self-hosted
+        // deployments. /healthz returns JSON; /version returns the package version.
+        // The default response (any other path) keeps the existing plain-text banner
+        // so existing health-check infrastructure that just looks for HTTP 200 still
+        // works.
+        const pkg = (() => {
+          try { return require('../package.json'); } catch { return { version: 'unknown' }; }
+        })();
         const requestHandler = (req, res) => {
+          const url = (req.url || '/').split('?')[0];
+          if (url === '/healthz' || url === '/health') {
+            const sessionCount = this.sessionManager?.store?.sessions?.size ?? null;
+            const body = {
+              status: 'ok',
+              uptimeSec: Math.floor((Date.now() - this.startedAt) / 1000),
+              version: pkg.version,
+              sessionCount,
+              secure: !!this.isSecure,
+            };
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store'
+            });
+            res.end(JSON.stringify(body));
+            return;
+          }
+          if (url === '/version') {
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store'
+            });
+            res.end(JSON.stringify({ version: pkg.version, name: pkg.name || '@lazysuperheroes/hedera-multisig' }));
+            return;
+          }
           res.writeHead(200, { 'Content-Type': 'text/plain' });
           res.end(`Hedera MultiSig Server${this.isSecure ? ' (Secure)' : ''}\n`);
         };
@@ -109,15 +162,31 @@ class MultiSigWebSocketServer {
           this.server = http.createServer(requestHandler);
         }
 
-        // Create WebSocket server with optional origin validation (SEC-12)
-        const wsOptions = { server: this.server };
-        if (this.allowedOrigins) {
-          wsOptions.verifyClient = (info) => {
-            const origin = info.origin || info.req.headers.origin;
-            if (!origin) return true; // Allow non-browser clients (CLI, agents)
-            return this.allowedOrigins.includes(origin);
-          };
+        // Create WebSocket server with origin validation (SEC-12 + Phase B3).
+        //
+        // Tunnel mode without an explicit allowlist is unsafe (public URL +
+        // permissive origins) — fail fast with a clear error.
+        const tunnelEnabled = !!(this.options.tunnel && this.options.tunnel.enabled);
+        if (tunnelEnabled && !this.unsafeAnyOrigin && (!this.allowedOrigins || this.allowedOrigins.length === 0)) {
+          return reject(new Error(
+            'Tunnel mode requires an explicit --allowed-origins list ' +
+            '(or --unsafe-any-origin for development only). ' +
+            'A public tunnel URL with permissive origins lets any web page connect to your coordinator.'
+          ));
         }
+
+        const wsOptions = { server: this.server };
+        wsOptions.verifyClient = (info) => {
+          const origin = info.origin || info.req.headers.origin;
+          if (!origin) return true; // Non-browser clients (CLI, agents) — no Origin header
+          if (this.unsafeAnyOrigin) return true; // Explicit dev opt-in
+          if (Array.isArray(this.allowedOrigins) && this.allowedOrigins.length > 0) {
+            return this.allowedOrigins.includes(origin);
+          }
+          // Default deny for browser-origin connections without an explicit allowlist.
+          this.log.warn('Rejected browser connection: no allowedOrigins configured', { origin });
+          return false;
+        };
         this.wss = new WebSocket.Server(wsOptions);
 
         // Handle connections
@@ -371,6 +440,17 @@ class MultiSigWebSocketServer {
             break;
 
           case 'TRANSACTION_INJECT':
+            if (!isCoordinator) {
+              this.log.warn('Non-coordinator attempted TRANSACTION_INJECT', { sessionId, participantId });
+              ws.send(JSON.stringify({
+                type: 'ERROR',
+                payload: {
+                  message: 'Only the coordinator can inject transactions',
+                  code: ERROR_CODES.NOT_COORDINATOR
+                }
+              }));
+              break;
+            }
             await this._handleTransactionInject(sessionId, message);
             break;
 
@@ -379,6 +459,17 @@ class MultiSigWebSocketServer {
             break;
 
           case 'EXECUTE_TRANSACTION':
+            if (!isCoordinator) {
+              this.log.warn('Non-coordinator attempted EXECUTE_TRANSACTION', { sessionId, participantId });
+              ws.send(JSON.stringify({
+                type: 'ERROR',
+                payload: {
+                  message: 'Only the coordinator can trigger execution',
+                  code: ERROR_CODES.NOT_COORDINATOR
+                }
+              }));
+              break;
+            }
             await this._handleExecuteTransaction(sessionId, message);
             break;
 
@@ -541,6 +632,7 @@ class MultiSigWebSocketServer {
         if (sessionAttempts.resetTime < Date.now()) {
           this.sessionAuthAttempts.delete(sessionId);
         } else if (sessionAttempts.count >= this.sessionRateLimit.maxAttempts) {
+          this.log.warn('AUTH rejected: per-session rate limit exceeded', { sessionId, clientIp });
           ws.send(JSON.stringify({
             type: 'AUTH_FAILED',
             payload: { message: 'Too many failed authentication attempts for this session', code: ERROR_CODES.AUTH_RATE_LIMITED, rateLimited: true }
@@ -553,6 +645,7 @@ class MultiSigWebSocketServer {
     // Validate required fields (PIN, reconnection token, or agent API key required)
     if (!sessionId || (!pin && !reconnectionToken && !apiKey)) {
       this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
+      this.log.warn('AUTH rejected: missing credentials', { sessionId, clientIp });
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
         payload: { message: 'Missing sessionId or authentication credentials', code: ERROR_CODES.AUTH_INVALID_CREDENTIALS }
@@ -570,6 +663,19 @@ class MultiSigWebSocketServer {
       const result = await this.sessionManager.authenticateWithReconnectionToken(sessionId, reconnectionToken);
       authenticated = result.valid;
       reconnectedParticipantId = result.participantId;
+      if (!result.valid && result.reason === 'KEY_NO_LONGER_ELIGIBLE') {
+        this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
+        this.log.warn('Reconnection rejected: bound public key no longer eligible', { sessionId, clientIp });
+        ws.send(JSON.stringify({
+          type: 'AUTH_FAILED',
+          payload: {
+            message: 'Your key is no longer eligible to sign in this session. Re-authenticate with the PIN.',
+            code: ERROR_CODES.AUTH_KEY_NOT_ELIGIBLE,
+            publicKeyRejected: true
+          }
+        }));
+        return;
+      }
     } else if (isCoordinator) {
       // Coordinator must provide coordinatorToken alongside PIN
       authenticated = await this.sessionManager.authenticateCoordinator(sessionId, pin, coordinatorToken);
@@ -583,6 +689,9 @@ class MultiSigWebSocketServer {
 
     if (!authenticated) {
       this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
+      this.log.warn('AUTH rejected: invalid credentials', {
+        sessionId, clientIp, role: isCoordinator ? 'coordinator' : isAgent ? 'agent' : 'participant'
+      });
       ws.send(JSON.stringify({
         type: 'AUTH_FAILED',
         payload: {
@@ -602,6 +711,9 @@ class MultiSigWebSocketServer {
 
         if (!isEligible) {
           this._recordFailedAuth(clientIp, rateLimitAttempts, sessionId);
+          this.log.warn('AUTH rejected: public key not eligible', {
+            sessionId, clientIp, publicKeyPrefix: publicKey.slice(0, 20) + '...'
+          });
           ws.send(JSON.stringify({
             type: 'AUTH_FAILED',
             payload: {
@@ -666,8 +778,15 @@ class MultiSigWebSocketServer {
       this.clients.set(participantId, ws);
       callback(sessionId, participantId, false);
 
-      // Generate reconnection token so client can reconnect without PIN
-      const newReconnectionToken = await this.sessionManager.generateReconnectionToken(sessionId, participantId);
+      // Generate reconnection token so client can reconnect without PIN.
+      // Bind the token to the participant's public key (when supplied at AUTH)
+      // so eligibility is re-checked on reconnect — a stale token can't rejoin
+      // after the coordinator rotates the eligible-keys set.
+      const newReconnectionToken = await this.sessionManager.generateReconnectionToken(
+        sessionId,
+        participantId,
+        publicKey || null
+      );
 
       const sessionInfo = await this.sessionManager.getSessionInfo(sessionId);
 

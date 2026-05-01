@@ -26,10 +26,16 @@ class TransactionExecutor {
    * @param {boolean} options.skipAuditLog - Skip audit logging (default: false)
    * @param {string} options.auditLogPath - Custom audit log path
    * @param {Object} options.metadata - Additional metadata for audit log
+   * @param {boolean} [options.verifyOnMirror=true] - Confirm execution via mirror node (Phase B11)
+   * @param {string} [options.network] - Hedera network ('mainnet'/'testnet'/'previewnet').
+   *   Defaults to process.env.HEDERA_NETWORK or 'testnet'. Required for mirror verification.
+   * @param {Object} [options.mirrorClient] - Pre-built MirrorNodeClient instance (optional, for testing)
    * @returns {Promise<ExecutionResult>} Execution result with receipt
    *
    * @typedef {Object} ExecutionResult
-   * @property {boolean} success - True if transaction succeeded
+   * @property {boolean} success - True if consensus-node receipt reports SUCCESS
+   * @property {boolean} mirrorConfirmed - True if mirror node confirmed the transaction landed (Phase B11)
+   * @property {Object|null} mirrorRecord - Mirror-node transaction record (Phase B11)
    * @property {TransactionReceipt} receipt - Transaction receipt
    * @property {string} transactionId - Transaction ID
    * @property {number} executionTimeMs - Execution time in milliseconds
@@ -41,6 +47,8 @@ class TransactionExecutor {
     const startTime = Date.now();
     const result = {
       success: false,
+      mirrorConfirmed: false,
+      mirrorRecord: null,
       receipt: null,
       transactionId: null,
       executionTimeMs: 0,
@@ -104,6 +112,39 @@ class TransactionExecutor {
       } else {
         log.error('Transaction failed', { status: result.status });
         result.error = `Transaction failed with status: ${result.status}`;
+      }
+
+      // Phase B11: confirm on mirror node. Receipt SUCCESS proves consensus
+      // accepted the transaction; mirror confirmation proves it was externalized
+      // and the user can verify final state. Skip on receipt failure (no point
+      // polling for a transaction that didn't land).
+      if (result.success && options.verifyOnMirror !== false) {
+        try {
+          const network = options.network ||
+                          process.env.HEDERA_NETWORK ||
+                          'testnet';
+          const MirrorNodeClient = require('../shared/mirror-node-client');
+          const mirror = options.mirrorClient || new MirrorNodeClient(network);
+          log.info('Verifying execution on mirror node...');
+          const verification = await mirror.verifyExecution(result.transactionId);
+          result.mirrorConfirmed = verification.mirrorConfirmed;
+          result.mirrorRecord = verification.record;
+          if (verification.mirrorConfirmed) {
+            log.info('Mirror confirmed', {
+              consensusTimestamp: verification.record?.consensusTimestamp,
+              mirrorResult: verification.result
+            });
+          } else {
+            log.warn('Mirror node did not confirm transaction within polling window', {
+              transactionId: result.transactionId
+            });
+          }
+        } catch (mirrorErr) {
+          // Mirror failure shouldn't fail the overall result — receipt is authoritative.
+          // Surface as a warning so the caller knows mirror state is unknown.
+          log.warn('Mirror verification failed (non-fatal)', { error: mirrorErr.message });
+          result.mirrorConfirmed = false;
+        }
       }
 
       // Create audit log entry

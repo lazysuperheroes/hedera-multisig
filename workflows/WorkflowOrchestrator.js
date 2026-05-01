@@ -1,13 +1,28 @@
 /**
  * Workflow Orchestrator
  *
- * Main entry point for multi-signature operations.
- * Coordinates workflow selection, validation, and execution.
+ * Main entry point for ceremony-style multi-signature operations.
  *
- * Supports:
- * - Interactive workflow (real-time, <110s)
- * - Offline workflow (manual coordination, air-gapped)
- * - Automatic workflow selection based on configuration
+ * Handles three CEREMONY modes (signers coordinate via the same orchestrator
+ * call, with the transaction-to-be-signed already frozen):
+ *   - Interactive — real-time, <110s window, all signers present together
+ *   - Offline    — manual file/copy-paste coordination, air-gapped capable
+ *   - Networked  — WebSocket-mediated remote coordination
+ *
+ * Two additional modes are intentionally NOT routed through this orchestrator
+ * because they don&apos;t fit the ceremony shape:
+ *   - Scheduled  — uses `ScheduledWorkflow` directly. Each signer acts
+ *                  asynchronously against an on-chain Schedule entity (no
+ *                  shared coordinator), so the orchestrator&apos;s
+ *                  &quot;execute(transaction, config)&quot; API doesn&apos;t apply. Invoke
+ *                  via `cli/commands/schedule.js` or `new ScheduledWorkflow(...)`.
+ *   - Flora      — HCS-16 architectural prep only (Phase 6, not yet
+ *                  implemented). Will route through `CoordinationTransport`
+ *                  rather than this orchestrator when delivered.
+ *
+ * Phase C12: this docstring formalizes the &quot;3 ceremony + 1 async + 1 future&quot;
+ * framing instead of the legacy &quot;5 workflow modes&quot; marketing count, so the
+ * orchestrator surface matches the docs.
  */
 
 const chalk = require('chalk');

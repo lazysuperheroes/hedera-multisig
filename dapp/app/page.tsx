@@ -38,6 +38,21 @@ export default function Home() {
               Participants join to sign. Coordinators create sessions and build transactions.
             </p>
           </div>
+
+          {/* Hosted-vs-self-host clarity (Phase B7) — small reassurance for first-timers */}
+          <div className="animate-slide-up delay-300 mt-8 max-w-2xl rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-4 text-sm text-gray-600 dark:text-gray-400">
+            <p className="font-medium text-gray-900 dark:text-gray-200 mb-1">
+              How this works
+            </p>
+            <p className="leading-relaxed">
+              We host the user interface; <strong className="text-gray-900 dark:text-gray-200">you (or a teammate) host the coordinator</strong> via{' '}
+              <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">npx hedera-multisig server</code>.
+              The dApp connects to that coordinator URL — Vercel never sees your transactions.{' '}
+              <Link href="/learn" className="text-blue-600 dark:text-blue-400 hover:underline">
+                New here? Try the walkthrough →
+              </Link>
+            </p>
+          </div>
         </div>
       </section>
 
@@ -74,7 +89,7 @@ export default function Home() {
                 Scheduled Transactions
               </h3>
               <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-                Async signing over hours or days. No 120-second pressure for cross-timezone teams.
+                Async signing over hours, days, or up to ~62 days (HIP-423). No 120-second pressure for cross-timezone teams.
               </p>
             </div>
           </div>

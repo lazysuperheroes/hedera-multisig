@@ -130,8 +130,19 @@ export default function HistoryPage() {
             Transaction History
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Locally stored transactions this browser participated in.
+            Transactions this browser participated in.
           </p>
+          {/* Phase C16: prevent the "where did my history go?" surprise on a different
+              browser/device. Browser-local storage is the design choice (decentralized
+              philosophy) but it needs to be explicit. */}
+          <div className="mt-3 inline-flex items-start gap-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-200">
+            <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>
+              <strong>Stored in this browser only.</strong> Switching devices, clearing site data, or using private browsing will reset this list. Use the CSV export below to keep a record.
+            </span>
+          </div>
         </div>
 
         <div className="space-y-6">

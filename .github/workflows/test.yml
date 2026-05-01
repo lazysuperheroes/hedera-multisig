@@ -12,7 +12,8 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        # Node 18 EOL'd 2025-04-30. Phase C3: drop 18, add 24 (active LTS).
+        node-version: [20.x, 22.x, 24.x]
 
     steps:
       - name: Checkout repository
@@ -62,8 +63,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run npm audit
-        run: npm audit --audit-level=critical
+      - name: Run npm audit (production deps, high severity)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Coverage gate (Phase C5)
+        run: npm run test:coverage:check
 
       - name: Run security audit tool
         run: node cli/securityAudit.js
@@ -90,6 +94,10 @@ jobs:
       - name: Install dApp dependencies
         working-directory: ./dapp
         run: npm ci
+
+      - name: Run dApp ESLint (Phase C6)
+        working-directory: ./dapp
+        run: npm run lint
 
       - name: Run dApp Jest tests
         working-directory: ./dapp
