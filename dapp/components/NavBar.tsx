@@ -130,13 +130,20 @@ function NetworkBadge({ network }: { network: string }) {
   return (
     <span
       className={`
-        hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px]
+        hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px]
         font-semibold uppercase tracking-wider border
         ${isMainnet
           ? 'border-success/40 bg-success-soft text-success-soft-fg'
           : 'border-warning/40 bg-warning-soft text-warning-soft-fg'}
       `}
     >
+      {/* Thin presence-dot: 1px filled circle, no pulse — restores the
+          "live indicator" semantic the badge lost when the dot was
+          dropped (critique #3 minor obs). */}
+      <span
+        className={`w-1 h-1 rounded-full ${isMainnet ? 'bg-success' : 'bg-warning'}`}
+        aria-hidden="true"
+      />
       {network}
     </span>
   );

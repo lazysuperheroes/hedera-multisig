@@ -174,7 +174,7 @@ export default function CreatePage() {
       <div className="max-w-2xl mx-auto">
         {/* Header — H1 only. The StepProgress below carries the
             "what comes next" signal; subtitle would just restate it. */}
-        <h1 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-8">
+        <h1 className="page-hero font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-8">
           Create Session
         </h1>
 
@@ -201,10 +201,11 @@ export default function CreatePage() {
           {/* Step 2 — Transaction Builder */}
           {step === 'build-tx' && connection.sessionCredentials && (
             <section aria-label="Build transaction" className="space-y-8">
-              {/* Session info — flat inline dl, no eyebrow.
-                  H5: dropped redundant "Session" eyebrow; dl IS self-evident. */}
-              <div>
-                <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 text-sm">
+              {/* Session info — flat inline dl. Hairline divider above
+                  marks the section transition without needing chrome.
+                  (Critique #3 minor obs.) */}
+              <div className="pt-2 border-t border-border">
+                <dl className="mt-4 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 text-sm">
                   <dt className="text-foreground-subtle">ID</dt>
                   <dd className="font-mono text-foreground truncate">
                     {connection.sessionCredentials.sessionId}

@@ -15,7 +15,7 @@ export default function LearnPage() {
     <main className="min-h-screen bg-background">
       <section className="max-w-5xl mx-auto px-6 py-12 sm:py-20">
         <div className="max-w-3xl mb-16">
-          <h1 className="font-heading text-3xl sm:text-5xl font-bold tracking-tight text-foreground leading-[1.1]">
+          <h1 className="page-hero font-heading text-3xl sm:text-5xl font-bold tracking-tight text-foreground leading-[1.1]">
             Learn by doing
           </h1>
           <p className="mt-4 text-lg text-foreground-muted leading-relaxed">
@@ -26,16 +26,10 @@ export default function LearnPage() {
         </div>
 
         {/* Walkthroughs — full-bleed primary, then a sidenote secondary.
-            Different shape from landing's staircase + security pull-quote. */}
+            No eyebrows; the H2 + body weight + indentation carry the
+            structural signal. */}
         <div className="mb-20">
           {/* Primary — HBAR walkthrough. Full breath. */}
-          <div className="flex items-baseline gap-4 mb-6">
-            <span className="font-mono text-foreground-subtle tabular-nums text-sm">01</span>
-            <p className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
-              Recommended start
-            </p>
-            <span className="flex-1 h-px bg-border" aria-hidden="true" />
-          </div>
           <Link
             href={`${REPO_BASE}/walkthrough-hbar`}
             target="_blank"
@@ -62,18 +56,15 @@ export default function LearnPage() {
           </Link>
 
           {/* Secondary — Contract walkthrough. Pulled out as a marginalia
-              note: smaller, indented, with a "next" connective phrase
-              instead of a redundant "Then" eyebrow. */}
-          <div className="ml-0 sm:ml-[20%] max-w-xl border-l-2 border-border pl-6 py-2">
+              note: smaller, indented. The size + indentation say "supporting"
+              without needing a label to announce it. */}
+          <div className="ml-4 sm:ml-24 max-w-xl border-l-2 border-border pl-6 py-2">
             <Link
               href={`${REPO_BASE}/walkthrough-contract`}
               target="_blank"
               rel="noopener noreferrer"
               className="group block"
             >
-              <p className="text-xs text-foreground-subtle mb-1">
-                <span className="font-mono">02</span> · Once HBAR is working
-              </p>
               <h2 className="font-heading text-xl font-bold text-foreground mb-3 group-hover:text-accent transition-colors">
                 Smart-contract walkthrough
               </h2>
@@ -96,14 +87,11 @@ export default function LearnPage() {
           </div>
         </div>
 
-        {/* Prerequisites — flat list with eyebrow label, no card */}
+        {/* Prerequisites — flat list, body-weight section header */}
         <div className="border-t border-border pt-10 mb-16">
-          <div className="flex items-baseline gap-4 mb-4">
-            <span className="font-mono text-foreground-subtle tabular-nums text-sm">03</span>
-            <p className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
-              Prerequisites
-            </p>
-          </div>
+          <h3 className="font-heading text-base font-semibold text-foreground mb-4">
+            Prerequisites
+          </h3>
           <ol className="text-sm text-foreground-muted space-y-2.5 list-decimal list-inside max-w-3xl">
             <li>
               <strong className="text-foreground">Get a testnet account</strong> at{' '}

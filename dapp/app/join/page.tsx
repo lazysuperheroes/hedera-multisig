@@ -154,18 +154,15 @@ function JoinPageContent() {
 
       <section className="max-w-2xl mx-auto px-6 py-12 sm:py-16">
         {/* Header — H1 only, no redundant subtitle */}
-        <h1 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-12 leading-[1.1]">
+        <h1 className="page-hero font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-12 leading-[1.1]">
           Join a signing session
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-12">
 
-          {/* Section 1 — Quick connect */}
-          <section aria-labelledby="quick-heading">
-            <p id="quick-heading" className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-4">
-              Quick connect
-            </p>
-
+          {/* Section 1 — Quick connect. Section labelled by the input
+              label itself; no eyebrow needed. */}
+          <section aria-label="Quick connect">
             <label htmlFor="connectionString" className="block text-sm font-medium text-foreground mb-2">
               Connection string
             </label>
@@ -221,17 +218,17 @@ function JoinPageContent() {
 
           {/* Section 2 — Manual / details */}
           {showManualForm && (
-            <section aria-labelledby="details-heading" className="space-y-6 pt-2">
-              <div className="flex items-baseline justify-between gap-4">
-                <p id="details-heading" className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
-                  Session details
-                </p>
-                {connectionString && (
+            <section aria-label="Session details" className="space-y-6 pt-2">
+              {/* No section label — the field labels (Server URL / Session ID
+                  / Session PIN) make the section's purpose self-evident.
+                  The auto-fill confirmation badge floats top-right. */}
+              {connectionString && (
+                <div className="flex justify-end -mb-2">
                   <span className="text-xs text-success-soft-fg flex items-center gap-1.5">
                     <CheckIcon /> Auto-filled from connection string
                   </span>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Trust signal for the coordinator URL */}
               {hostTrust && (

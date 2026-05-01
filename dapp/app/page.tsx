@@ -8,7 +8,7 @@ export default function Home() {
           the headline carries on its own. */}
       <section className="max-w-6xl mx-auto px-6 pt-16 pb-12 sm:pt-24 sm:pb-20">
         <div className="max-w-3xl">
-          <h1 className="animate-slide-up font-heading text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.05]">
+          <h1 className="page-hero animate-slide-up font-heading text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.08]">
             Multi-sig that
             <br />
             survives time zones
@@ -17,7 +17,7 @@ export default function Home() {
           </h1>
           <p className="animate-slide-up delay-100 mt-6 text-lg sm:text-xl text-foreground-muted max-w-xl leading-relaxed">
             Approve Tuesday, sign Wednesday from London, network executes
-            when the threshold is met — up to 62 days later. Threshold
+            when the threshold is met. Up to 62 days later. Threshold
             signatures, agent automation, scheduled async signing.
             Private keys never leave your device.
           </p>
@@ -69,23 +69,16 @@ export default function Home() {
       </section>
 
       {/* Use cases — staircase rhythm. Each case sits at a different
-          horizontal position so the section reads top-to-bottom with
-          drift, breaking the symmetric grid pattern used elsewhere. */}
+          horizontal position. Section break carried by the border-t +
+          spacing; no eyebrow chrome — Treasury's H2 leads the section. */}
       <section className="border-t border-border bg-surface-recessed/40">
         <div className="max-w-6xl mx-auto px-6 py-16 sm:py-24">
-          <div className="flex items-baseline gap-4 mb-14">
-            <span className="font-mono text-foreground-subtle tabular-nums text-sm">01</span>
-            <p className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
-              Use cases
-            </p>
-            <span className="flex-1 h-px bg-border" aria-hidden="true" />
-          </div>
 
-          {/* Treasury — full width, dominant */}
+          {/* Treasury — full width, dominant. H2 acts as the section header. */}
           <div className="max-w-3xl mb-14">
-            <h3 className="font-heading text-2xl sm:text-3xl font-bold text-foreground mb-3 tracking-tight">
+            <h2 className="font-heading text-2xl sm:text-3xl font-bold text-foreground mb-3 tracking-tight">
               Treasury management
-            </h3>
+            </h2>
             <p className="text-foreground-muted leading-relaxed text-lg">
               Move HBAR, tokens, and NFTs with multi-party approval.
               Smart-contract calls with ABI verification. The most common use
@@ -99,8 +92,8 @@ export default function Home() {
             </Link>
           </div>
 
-          {/* Agent signing — indented from left, smaller */}
-          <div className="max-w-xl ml-0 sm:ml-[12%] mb-12 border-l border-border pl-6">
+          {/* Agent signing — one offset step in. */}
+          <div className="max-w-xl ml-4 sm:ml-12 mb-10 border-l border-border pl-6">
             <h3 className="font-heading text-lg font-bold text-foreground mb-2">
               Agent signing
             </h3>
@@ -110,8 +103,8 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Scheduled transactions — indented further */}
-          <div className="max-w-xl ml-0 sm:ml-[24%] border-l border-border pl-6">
+          {/* Scheduled transactions — two offset steps in. */}
+          <div className="max-w-xl ml-8 sm:ml-24 border-l border-border pl-6">
             <h3 className="font-heading text-lg font-bold text-foreground mb-2">
               Scheduled transactions
             </h3>
@@ -129,13 +122,9 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 py-16 sm:py-24">
           <div className="grid lg:grid-cols-5 gap-12 lg:gap-16">
             <div className="lg:col-span-3">
-              <div className="flex items-baseline gap-4 mb-10">
-                <span className="font-mono text-foreground-subtle tabular-nums text-sm">02</span>
-                <p className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
-                  Security model
-                </p>
-                <span className="flex-1 h-px bg-border" aria-hidden="true" />
-              </div>
+              <h2 className="font-heading text-2xl sm:text-3xl font-bold text-foreground mb-10 tracking-tight">
+                Security model
+              </h2>
               <dl className="space-y-8">
                 <SecurityPrinciple
                   title="Keys stay local"
