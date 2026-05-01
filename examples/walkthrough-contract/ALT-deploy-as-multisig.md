@@ -108,8 +108,8 @@ Each signer:
 ```bash
 npx hedera-multisig schedule sign \
   --schedule-id 0.0.SCHEDULE \
-  --key-file ../walkthrough-hbar/walkthrough-keys.alice.json \
-  --passphrase ""
+  --keyfile ../walkthrough-hbar/walkthrough-keys.alice.encrypted \
+  --passphrase walkthrough-test
 ```
 
 When 2 of 3 have signed, the network creates the contract. Get the

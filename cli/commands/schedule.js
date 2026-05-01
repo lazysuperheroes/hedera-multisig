@@ -129,8 +129,9 @@ Examples:
     .command('sign')
     .description('Sign a scheduled transaction')
     .requiredOption('--schedule-id <id>', 'Schedule ID to sign')
-    .option('-f, --key-file <path>', 'Encrypted key file')
-    .option('--passphrase <value>', 'Passphrase for key file')
+    .option('-f, --keyfile <path>', 'Encrypted key file (matches `participant --keyfile`)')
+    .option('--key-file <path>', 'Deprecated alias for --keyfile (kept for backward compat)')
+    .option('--passphrase <value>', 'Passphrase for the encrypted key file')
     .option('-k, --key <hex>', 'Private key (DEPRECATED)')
     .option('-j, --json', 'Output as JSON')
     .addHelpText('after', `
@@ -138,7 +139,7 @@ Sign a scheduled transaction. Each signer runs this independently.
 The network auto-executes when the threshold is met.
 
 Examples:
-  $ hedera-multisig schedule sign --schedule-id 0.0.12345 -f keys.enc --passphrase secret
+  $ hedera-multisig schedule sign --schedule-id 0.0.12345 --keyfile keys.encrypted --passphrase walkthrough-test
     `)
     .action(async (options, command) => {
       const { Client, AccountId, PrivateKey } = require('@hashgraph/sdk');
@@ -161,18 +162,23 @@ Examples:
         const client = network === 'mainnet' ? Client.forMainnet() : Client.forTestnet();
         client.setOperator(AccountId.fromString(operatorId), PrivateKey.fromString(operatorKey));
 
-        // Load private key
+        // Load private key. Accept --keyfile (canonical) or --key-file
+        // (deprecated alias that Commander parses to options.keyFile because
+        // of the camelCase conversion of hyphenated flags).
+        const keyfilePath = options.keyfile || options.keyFile;
         let privateKey;
-        if (options.keyFile) {
+        if (keyfilePath) {
           const EncryptedFileProvider = require('../../keyManagement/EncryptedFileProvider');
-          const provider = new EncryptedFileProvider(options.keyFile);
-          if (options.passphrase) provider._passphrase = options.passphrase;
+          const provider = new EncryptedFileProvider(keyfilePath, {
+            passphrase: options.passphrase,
+            promptIfMissing: !options.passphrase
+          });
           const keys = await provider.getKeys();
           privateKey = keys[0].privateKey || keys[0];
         } else if (options.key) {
           privateKey = PrivateKey.fromString(options.key);
         } else {
-          throw new Error('Must provide --key-file or --key');
+          throw new Error('Must provide --keyfile or --key');
         }
 
         const workflow = new ScheduledWorkflow(client, {

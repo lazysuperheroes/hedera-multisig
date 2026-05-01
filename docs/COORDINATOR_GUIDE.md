@@ -653,6 +653,55 @@ use this in production.
 
 ---
 
+## Long-window scheduled transactions: a 24-hour caveat
+
+Scheduled transactions (HIP-423) can live on-chain for up to ~62 days.
+The `schedule create --expiration-time 30d` flag sets the on-chain
+schedule's expiration to 30 days. **The on-chain schedule runs for the
+full window** — signatures collected via `ScheduleSignTransaction` are
+accepted up to that expiration, and the network auto-executes when the
+threshold is met.
+
+But the coordinator-side **ceremony session** (the WebSocket session
+the dApp connects to, which hands out reconnection tokens and tracks
+signature progress in the UI) is capped at 24 hours in v2.1.0. After
+24 hours:
+
+- The dApp's `/session/[id]` view shows "session expired"
+- New participants cannot join via the dApp
+- Existing reconnection tokens stop working
+
+**The signing itself still works.** Late signers run, on their own machine:
+
+```bash
+npx hedera-multisig schedule sign \
+  --schedule-id 0.0.YOUR_SCHEDULE_ID \
+  --keyfile ./your-key.encrypted \
+  --passphrase ...
+```
+
+This submits a `ScheduleSignTransaction` directly to the network — no
+coordinator session required. The multi-sig completes correctly when
+the threshold is met, regardless of whether anyone is connected to the
+dApp.
+
+**Practical guidance:**
+
+- For schedules expected to complete within 24 hours: use the dApp
+  ceremony flow as documented.
+- For longer windows: tell late signers up front that they will need
+  to use the CLI `schedule sign` path. Share the schedule ID through
+  your normal team channel; they don't need anything else.
+- Consider the alternate flow: have *all* signers use `schedule sign`
+  from the start, and skip the dApp ceremony for long-window
+  transactions. The dApp is most valuable for the 120-second realtime
+  ceremony shape; for 30-day async signing, CLI is the natural fit.
+
+**v2.2 will honor a `--session-timeout` flag** so the ceremony session
+matches the schedule expiration. Tracked as a v2.2 backlog item.
+
+---
+
 ## Troubleshooting
 
 ### "Connection refused" when participants try to join

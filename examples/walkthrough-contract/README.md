@@ -210,19 +210,28 @@ Two of [alice, bob, carol] join the session. Either via the dApp's
 holding their key) or via the CLI:
 
 ```bash
-# Alice (terminal 3):
+# Alice (terminal 3) — encrypted-file flow (recommended):
 npx hedera-multisig participant \
   --connect "$(... connection string from 7b ...)" \
   --label alice \
-  --key-file ../walkthrough-hbar/walkthrough-keys.alice.json
+  --keyfile ../walkthrough-hbar/walkthrough-keys.alice.encrypted \
+  --passphrase walkthrough-test
 ```
 
 ```bash
 # Bob (terminal 4):
 npx hedera-multisig participant \
   --connect "..." --label bob \
-  --key-file ../walkthrough-hbar/walkthrough-keys.bob.json
+  --keyfile ../walkthrough-hbar/walkthrough-keys.bob.encrypted \
+  --passphrase walkthrough-test
 ```
+
+> **Plaintext alternative.** If you'd rather use inline keys, swap
+> `--keyfile … --passphrase walkthrough-test` for
+> `-k "$(node -e "console.log(require('../walkthrough-hbar/walkthrough-keys.json').keys.alice.privateKey)")"`.
+> See the HBAR walkthrough's "Alternative: plaintext key" section for
+> the full pattern. The encrypted flow is the production-recommended
+> shape — see [`docs/ENCRYPTED_KEYS_GUIDE.md`](../../docs/ENCRYPTED_KEYS_GUIDE.md).
 
 When the second signer approves, the coordinator submits the signed
 transaction to the network and prints the executed transaction ID.

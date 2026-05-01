@@ -7,14 +7,16 @@ export default function Home() {
       <section className="max-w-6xl mx-auto px-6 pt-16 pb-12 sm:pt-24 sm:pb-20">
         <div className="max-w-3xl">
           <h1 className="animate-slide-up text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-gray-900 dark:text-white leading-[1.08]">
-            Multi-signature
+            Multi-sig that
             <br />
-            transactions
+            survives time zones
             <br />
-            <span className="text-blue-600 dark:text-blue-400">for Hedera</span>
+            <span className="text-blue-600 dark:text-blue-400">on Hedera</span>
           </h1>
           <p className="animate-slide-up delay-100 mt-6 text-lg sm:text-xl text-gray-600 dark:text-gray-400 max-w-xl leading-relaxed">
-            Coordinate multi-party signing across teams, agents, and time zones.
+            Approve Tuesday, sign Wednesday from London, network executes when
+            the threshold is met — up to 62 days later. Threshold signatures,
+            agent automation, scheduled async signing.
             Private keys never leave your device.
           </p>
 

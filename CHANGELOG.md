@@ -144,6 +144,21 @@ Plus 8 HIGH-severity hardening fixes:
   Parser is in `cli/utils/timeParser.js` with 21 unit tests; horizon
   enforcement rejects values beyond ~62 days. (`cli/commands/schedule.js`,
   `workflows/ScheduledWorkflow.js`)
+- **Known limitation — coordinator-side ceremony session is capped at
+  24 hours regardless of `--expiration-time`.** The on-chain schedule
+  itself runs for the full window you configured (up to ~62 days,
+  HIP-423). The coordinator's *signing-ceremony session* — the
+  WebSocket session that hands out reconnection tokens, runs the
+  TransactionReview UI, and tracks signature progress — expires after
+  24 hours via `SigningSessionManager.scheduledDefaultTimeout`. Late
+  signers joining on day 2+ of a multi-day schedule will see "session
+  expired" in the dApp; they can still sign by running
+  `npx hedera-multisig schedule sign --schedule-id <id> --keyfile ... --passphrase ...`
+  directly against the on-chain Schedule entity. The multi-sig
+  completes correctly either way; only the dApp coordination
+  experience degrades. **v2.2 will honor a `--session-timeout` flag at
+  server-create time so the ceremony session can match the on-chain
+  schedule's expiration.**
 - **Stale "30 minute" docs scrubbed** across ROADMAP, BLOG_POST,
   TREASURY_GUIDE, COORDINATOR_GUIDE, dApp landing, `cli/commands/schedule.js`,
   `workflows/ScheduledWorkflow.js`. Replaced with "hours, days, or up

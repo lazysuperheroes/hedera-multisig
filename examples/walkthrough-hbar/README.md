@@ -71,11 +71,24 @@ the walkthrough uses.
 node 01-generate-keys.js
 ```
 
-This creates `walkthrough-keys.json` with three Ed25519 keys named
-`alice`, `bob`, and `carol`. **For testnet only.** In production, each
-key would be generated on a separate device by a separate person.
+This creates **encrypted** per-signer key files plus a plaintext
+internal index:
 
-The script prints each public key — you'll see them again in the next step.
+| File | Contents | Used by |
+|---|---|---|
+| `walkthrough-keys.alice.encrypted` (and `.bob.encrypted`, `.carol.encrypted`) | AES-256-GCM encrypted single-key file. Passphrase: `walkthrough-test` (documented constant; testnet only). | `participant --keyfile` (CLI) — the production-recommended pattern |
+| `walkthrough-keys.json` | Plaintext combined index of all three keys | Internal use by walkthrough scripts 02 and 05 (public-key extraction + the dual-signature `AccountUpdate` ceremony) |
+
+**For testnet only.** In production, each key would be generated on a
+separate device by a separate person, with a strong per-signer passphrase
+that is never written down or transmitted. The fixed `walkthrough-test`
+passphrase here is for tutorial reproducibility — do not copy this
+pattern to a real treasury setup.
+
+The script prints each public key — you'll see them again in the next
+step. See [`docs/ENCRYPTED_KEYS_GUIDE.md`](../../docs/ENCRYPTED_KEYS_GUIDE.md)
+for the canonical patterns to interact with `EncryptedFileProvider` from
+your own code.
 
 ---
 
@@ -171,18 +184,17 @@ have 120 seconds from this moment to sign.
 
 You now play **Alice** and **Bob** to provide 2 of 3 signatures.
 
-In **terminal 3**, join as Alice using the CLI participant:
+In **terminal 3**, join as Alice using the CLI participant. The `--keyfile`
+flag points at the encrypted file; `--passphrase` supplies the
+walkthrough's documented constant:
 
 ```bash
 npx hedera-multisig participant \
   --connect "$(... server printed connection string ...)" \
   --label alice \
-  --key-file ./walkthrough-keys.alice.json
+  --keyfile ./walkthrough-keys.alice.encrypted \
+  --passphrase walkthrough-test
 ```
-
-(The `01-generate-keys.js` script writes individual encrypted-file copies
-of each key — `walkthrough-keys.alice.json`, `walkthrough-keys.bob.json`,
-`walkthrough-keys.carol.json` — so the CLI participant can load just one.)
 
 You'll be prompted to review the transaction. Confirm and sign.
 
@@ -190,8 +202,27 @@ In **terminal 4**, join as Bob the same way:
 
 ```bash
 npx hedera-multisig participant \
-  --connect "..." --label bob --key-file ./walkthrough-keys.bob.json
+  --connect "..." --label bob \
+  --keyfile ./walkthrough-keys.bob.encrypted \
+  --passphrase walkthrough-test
 ```
+
+### Alternative: plaintext key (your discretion)
+
+If you'd rather not deal with the encrypted-file flow for this testnet
+demo, you can pass the private key directly via `-k`:
+
+```bash
+npx hedera-multisig participant \
+  --connect "..." --label alice \
+  -k "$(node -e "console.log(require('./walkthrough-keys.json').keys.alice.privateKey)")"
+```
+
+`-k` is marked DEPRECATED for production (visible in process lists and
+shell history), but it's a valid path for testnet experimentation. The
+encrypted flow above is the production-recommended pattern and is what
+[`docs/ENCRYPTED_KEYS_GUIDE.md`](../../docs/ENCRYPTED_KEYS_GUIDE.md)
+walks through in detail.
 
 After Bob signs, the threshold (2) is met; the server submits the signed
 transaction to the Hedera network and prints the transaction ID.

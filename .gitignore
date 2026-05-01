@@ -11,8 +11,15 @@ coverage/
 .env.*
 !.env.example
 
-# Encrypted key files
+# Encrypted key files (generic patterns)
 *.enc
+*.encrypted
+
+# Walkthrough artifacts (testnet keys + state — never commit, never publish)
+examples/walkthrough-hbar/walkthrough-keys*
+examples/walkthrough-hbar/walkthrough-state.json
+examples/walkthrough-contract/demo-account-state.json
+examples/walkthrough-contract/multisig-*-tx.json
 
 # Logs
 logs/
