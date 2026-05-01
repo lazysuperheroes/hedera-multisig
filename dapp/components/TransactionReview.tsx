@@ -52,7 +52,7 @@ function EntityLink({ type, id, network }: { type: 'account' | 'contract' | 'tok
       href={getHashScanUrl(type, id, network)}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-mono inline-flex items-center gap-1"
+      className="text-accent hover:text-info-soft-fg dark:hover:text-info-soft-fg underline font-mono inline-flex items-center gap-1"
       title={`View ${id} on HashScan`}
     >
       {id}
@@ -157,13 +157,13 @@ export function TransactionReview({
     return (
       <div className="space-y-4" aria-busy="true" aria-label="Loading transaction details">
         {/* Skeleton: mimics the verified transaction card shape */}
-        <div className="bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-          <div className="bg-green-600 dark:bg-green-700 px-4 py-3">
+        <div className="bg-surface border-2 border-border rounded-lg overflow-hidden">
+          <div className="bg-success px-4 py-3">
             <div className="skeleton h-5 w-48 rounded" style={{background: 'rgba(255,255,255,0.2)'}}></div>
           </div>
           <div className="p-4 space-y-4">
             <div className="skeleton h-3 w-20 rounded"></div>
-            <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg space-y-3">
+            <div className="p-3 bg-surface-recessed rounded-lg space-y-3">
               <div className="flex items-center gap-3">
                 <div className="flex-1 space-y-2">
                   <div className="skeleton h-3 w-12 rounded"></div>
@@ -190,12 +190,12 @@ export function TransactionReview({
 
   if (error) {
     return (
-      <div className="bg-red-50 dark:bg-red-950/40 border-2 border-red-500 dark:border-red-700 rounded-lg p-6">
-        <h2 className="text-xl font-bold text-red-700 dark:text-red-300 mb-2">Could Not Read Transaction</h2>
-        <p className="text-red-600 dark:text-red-400">{error}</p>
+      <div className="bg-destructive-soft border-2 border-destructive rounded-lg p-6">
+        <h2 className="text-xl font-bold text-destructive-soft-fg mb-2">Could Not Read Transaction</h2>
+        <p className="text-destructive">{error}</p>
         <button
           onClick={() => onReject(`Decoding error: ${error}`)}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+          className="mt-4 px-4 py-2 bg-destructive text-white rounded hover:bg-destructive transition-colors"
         >
           Reject Transaction
         </button>
@@ -235,16 +235,16 @@ export function TransactionReview({
     <div className="space-y-4">
       {/* EXPIRED Banner */}
       {isExpired && (
-        <div className="bg-red-100 dark:bg-red-950/50 border-2 border-red-600 dark:border-red-700 rounded-lg p-4">
+        <div className="bg-destructive-soft border-2 border-destructive rounded-lg p-4">
           <div className="flex items-center gap-3">
-            <div className="text-red-600 dark:text-red-400">
+            <div className="text-destructive">
               <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div>
-              <h3 className="font-bold text-red-800 dark:text-red-200">Transaction Expired</h3>
-              <p className="text-sm text-red-700 dark:text-red-300">
+              <h3 className="font-bold text-destructive-soft-fg">Transaction Expired</h3>
+              <p className="text-sm text-destructive-soft-fg">
                 This transaction has timed out and can no longer be signed. Please request a new transaction from the coordinator.
               </p>
             </div>
@@ -296,21 +296,21 @@ export function TransactionReview({
 
       {/* Warnings Banner (if mismatches detected) */}
       {validation && Object.keys(validation.mismatches).length > 0 && (
-        <div className="bg-red-50 dark:bg-red-950/40 border-2 border-red-500 dark:border-red-700 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-red-800 dark:text-red-200 font-semibold mb-2">
+        <div className="bg-destructive-soft border-2 border-destructive rounded-lg p-4">
+          <div className="flex items-center gap-2 text-destructive-soft-fg font-semibold mb-2">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
             <span>Metadata Mismatch Warning</span>
           </div>
-          <p className="text-sm text-red-700 dark:text-red-300 mb-2">
+          <p className="text-sm text-destructive-soft-fg mb-2">
             What the coordinator claims this transaction does doesn&apos;t match what it actually does. Review carefully before signing.
           </p>
           <details className="text-xs">
-            <summary className="cursor-pointer text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300">Show details</summary>
-            <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded">
+            <summary className="cursor-pointer text-destructive hover:text-destructive-soft-fg">Show details</summary>
+            <div className="mt-2 p-2 bg-destructive-soft rounded">
               {Object.entries(validation.mismatches).map(([field, { metadata: meta, actual }]) => (
-                <div key={field} className="mb-1 text-red-800 dark:text-red-200">
+                <div key={field} className="mb-1 text-destructive-soft-fg">
                   <span className="font-semibold">{field}:</span> claimed &quot;{JSON.stringify(meta)}&quot; vs actual &quot;{JSON.stringify(actual)}&quot;
                 </div>
               ))}
@@ -320,9 +320,9 @@ export function TransactionReview({
       )}
 
       {/* Main Transaction Card */}
-      <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
+      <div className="bg-surface border-2 border-border-strong rounded-lg overflow-hidden">
         {/* Header */}
-        <div className="bg-green-600 dark:bg-green-700 text-white px-4 py-3">
+        <div className="bg-success text-white px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -330,34 +330,34 @@ export function TransactionReview({
               </svg>
               <span className="font-semibold">Verified Transaction</span>
             </div>
-            <span className="text-sm bg-green-700 dark:bg-green-800 px-2 py-1 rounded">{decoded.type}</span>
+            <span className="text-sm bg-success px-2 py-1 rounded">{decoded.type}</span>
           </div>
         </div>
 
         {/* Transfers Section (most important) */}
         {amounts.length > 0 && (
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">TRANSFERS</h3>
+          <div className="p-4 border-b border-border">
+            <h3 className="text-sm font-semibold text-foreground-muted mb-3">TRANSFERS</h3>
             <div className="space-y-3">
               {formattedTransfers.senders.map((sender, i) => {
                 const receiver = formattedTransfers.receivers[i];
                 return (
-                  <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                  <div key={i} className="flex items-center gap-3 p-3 bg-surface-recessed rounded-lg">
                     {/* From */}
                     <div className="flex-1">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">From</div>
+                      <div className="text-xs text-foreground-subtle mb-1">From</div>
                       <EntityLink type="account" id={sender.accountId} network={network} />
                     </div>
                     {/* Arrow + Amount */}
                     <div className="flex flex-col items-center">
-                      <div className="text-lg font-bold text-gray-800 dark:text-gray-100 tabular-nums">
+                      <div className="text-lg font-bold text-foreground tabular-nums">
                         {TransactionDecoder.formatAmount(sender.amount.replace('-', ''), sender.type).replace('+', '').replace('-', '')}
                       </div>
-                      <div className="text-gray-400 dark:text-gray-500">&rarr;</div>
+                      <div className="text-foreground-subtle">&rarr;</div>
                     </div>
                     {/* To */}
                     <div className="flex-1 text-right">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">To</div>
+                      <div className="text-xs text-foreground-subtle mb-1">To</div>
                       {receiver && <EntityLink type="account" id={receiver.accountId} network={network} />}
                     </div>
                   </div>
@@ -369,11 +369,11 @@ export function TransactionReview({
 
         {/* Token Association */}
         {decoded.details.tokenIds && decoded.details.tokenIds.length > 0 && (
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">TOKEN ASSOCIATION</h3>
+          <div className="p-4 border-b border-border">
+            <h3 className="text-sm font-semibold text-foreground-muted mb-2">TOKEN ASSOCIATION</h3>
             <div className="flex flex-wrap gap-2">
               {decoded.details.tokenIds.map((tokenId, index) => (
-                <div key={index} className="px-3 py-1 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded">
+                <div key={index} className="px-3 py-1 bg-info-soft border border-info/40 rounded">
                   <EntityLink type="token" id={tokenId} network={network} />
                 </div>
               ))}
@@ -383,19 +383,19 @@ export function TransactionReview({
 
         {/* Contract Execution (Phase B9) */}
         {decoded.details.contractId && (
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">CONTRACT CALL</h3>
+              <h3 className="text-sm font-semibold text-foreground-muted">CONTRACT CALL</h3>
               {decoded.details.functionName ? (
                 decoded.details.selectorVerified ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-success-soft text-success-soft-fg border border-success/40">
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     ABI Verified
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-destructive-soft text-destructive-soft-fg border border-destructive/40">
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                       <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM10 5a1 1 0 011 1v3a1 1 0 11-2 0V6a1 1 0 011-1zm0 8a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd" />
                     </svg>
@@ -411,34 +411,34 @@ export function TransactionReview({
                 </span>
               )}
             </div>
-            <div className="space-y-2 text-sm text-gray-800 dark:text-gray-200">
+            <div className="space-y-2 text-sm text-foreground">
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400">Contract:</span>
+                <span className="text-foreground-subtle">Contract:</span>
                 <EntityLink type="contract" id={decoded.details.contractId} network={network} />
               </div>
               {decoded.details.functionName && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500 dark:text-gray-400">Function:</span>
-                  <span className="font-mono font-semibold text-gray-800 dark:text-gray-100">
+                  <span className="text-foreground-subtle">Function:</span>
+                  <span className="font-mono font-semibold text-foreground">
                     {decoded.details.functionName}({Object.keys(decoded.details.functionParams || {}).length === 0 ? '' : ''})
                   </span>
                 </div>
               )}
               {decoded.details.gas && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500 dark:text-gray-400">Gas:</span>
-                  <span className="font-mono text-gray-800 dark:text-gray-200 tabular-nums">{decoded.details.gas.toLocaleString()}</span>
+                  <span className="text-foreground-subtle">Gas:</span>
+                  <span className="font-mono text-foreground tabular-nums">{decoded.details.gas.toLocaleString()}</span>
                 </div>
               )}
               {/* Phase B9: render decoded args inline as a name/value table */}
               {decoded.details.functionParams && Object.keys(decoded.details.functionParams).length > 0 && (
-                <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded border border-gray-200 dark:border-gray-700">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">PARAMETERS</p>
+                <div className="mt-3 p-3 bg-surface-recessed rounded border border-border">
+                  <p className="text-xs font-semibold text-foreground-subtle mb-2">PARAMETERS</p>
                   <dl className="space-y-1.5 text-xs">
                     {Object.entries(decoded.details.functionParams).map(([name, value]) => (
                       <div key={name} className="flex gap-3 items-start">
-                        <dt className="font-mono text-gray-500 dark:text-gray-400 flex-shrink-0">{name}:</dt>
-                        <dd className="font-mono break-all text-gray-800 dark:text-gray-200">
+                        <dt className="font-mono text-foreground-subtle flex-shrink-0">{name}:</dt>
+                        <dd className="font-mono break-all text-foreground">
                           {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                         </dd>
                       </div>
@@ -497,50 +497,50 @@ export function TransactionReview({
         )}
 
         {/* Technical Details (collapsed) */}
-        <div className="p-4 bg-gray-50 dark:bg-gray-900/50">
+        <div className="p-4 bg-surface-recessed">
           <details>
-            <summary className="cursor-pointer text-sm font-semibold text-gray-700 dark:text-gray-300">
+            <summary className="cursor-pointer text-sm font-semibold text-foreground-muted">
               Transaction Details
             </summary>
-            <div className="mt-3 space-y-2 text-xs text-gray-800 dark:text-gray-200">
+            <div className="mt-3 space-y-2 text-xs text-foreground">
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400">Transaction ID:</span>
-                <span className="font-mono text-gray-800 dark:text-gray-200">{decoded.details.transactionId}</span>
+                <span className="text-foreground-subtle">Transaction ID:</span>
+                <span className="font-mono text-foreground">{decoded.details.transactionId}</span>
               </div>
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400">Max Fee:</span>
-                <span className="font-mono text-gray-800 dark:text-gray-200">{decoded.details.maxTransactionFee}</span>
+                <span className="text-foreground-subtle">Max Fee:</span>
+                <span className="font-mono text-foreground">{decoded.details.maxTransactionFee}</span>
               </div>
               {decoded.details.validStartTimestamp && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500 dark:text-gray-400">Valid Start:</span>
-                  <span className="font-mono text-gray-800 dark:text-gray-200">{new Date(decoded.details.validStartTimestamp * 1000).toLocaleString()}</span>
+                  <span className="text-foreground-subtle">Valid Start:</span>
+                  <span className="font-mono text-foreground">{new Date(decoded.details.validStartTimestamp * 1000).toLocaleString()}</span>
                 </div>
               )}
               {decoded.details.transactionValidDuration && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500 dark:text-gray-400">Valid Duration:</span>
-                  <span className="font-mono text-gray-800 dark:text-gray-200 tabular-nums">{decoded.details.transactionValidDuration}s</span>
+                  <span className="text-foreground-subtle">Valid Duration:</span>
+                  <span className="font-mono text-foreground tabular-nums">{decoded.details.transactionValidDuration}s</span>
                 </div>
               )}
               <div className="flex flex-col gap-1">
-                <span className="text-gray-500 dark:text-gray-400">Checksum (SHA256):</span>
-                <span className="font-mono text-[10px] break-all bg-gray-100 dark:bg-gray-800 p-1 rounded text-gray-700 dark:text-gray-300">{decoded.checksum}</span>
+                <span className="text-foreground-subtle">Checksum (SHA256):</span>
+                <span className="font-mono text-[10px] break-all bg-surface-recessed p-1 rounded text-foreground-muted">{decoded.checksum}</span>
               </div>
               {decoded.details.transactionMemo && (
                 <div className="flex gap-2">
-                  <span className="text-gray-500 dark:text-gray-400">Memo:</span>
-                  <span className="text-gray-800 dark:text-gray-200">{decoded.details.transactionMemo}</span>
+                  <span className="text-foreground-subtle">Memo:</span>
+                  <span className="text-foreground">{decoded.details.transactionMemo}</span>
                 </div>
               )}
 
               {/* Nested Raw Transaction Data */}
-              <details className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-                <summary className="cursor-pointer text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
+              <details className="mt-4 pt-3 border-t border-border">
+                <summary className="cursor-pointer text-sm font-semibold text-foreground-muted hover:text-foreground hover:text-foreground">
                   Raw Transaction Data
                 </summary>
-                <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 overflow-auto max-h-96">
-                  <pre className="text-[11px] font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                <div className="mt-3 p-3 bg-surface rounded border border-border overflow-auto max-h-96">
+                  <pre className="text-[11px] font-mono text-foreground-muted whitespace-pre-wrap">
                     {JSON.stringify(decoded.details, (key, value) => {
                       // Handle Uint8Array and other binary data
                       if (value instanceof Uint8Array) {
@@ -561,15 +561,15 @@ export function TransactionReview({
       </div>
 
       {/* ACTIONS — Approve is dominant, Reject is secondary */}
-      <div className="space-y-3 pt-4 border-t-2 border-gray-200 dark:border-gray-700">
+      <div className="space-y-3 pt-4 border-t-2 border-border">
         {/* Approve — the hero action, full-width, visually dominant */}
         <button
           onClick={onApprove}
           disabled={disabled || isExpired}
           className={`w-full px-6 py-4 text-lg font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
             isExpired
-              ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 dark:text-gray-400 cursor-not-allowed'
-              : 'bg-green-600 text-white hover:bg-green-700 shadow-md hover:shadow-lg active:shadow-sm active:translate-y-px'
+              ? 'bg-border-strong text-foreground-muted cursor-not-allowed'
+              : 'bg-success text-white hover:bg-success shadow-md hover:shadow-lg active:shadow-sm active:translate-y-px'
           }`}
         >
           {isExpired ? 'Transaction Expired' : 'Approve & Sign'}
@@ -584,13 +584,13 @@ export function TransactionReview({
                 placeholder="Enter optional rejection reason..."
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded focus:ring-2 focus:ring-red-500 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full px-4 py-2 border border-border-strong bg-surface rounded focus:ring-2 focus:ring-red-500 text-foreground placeholder:text-foreground-subtle dark:placeholder:text-foreground-subtle"
               />
               <div className="flex space-x-2">
                 <button
                   onClick={handleReject}
                   disabled={disabled}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="flex-1 px-4 py-2 bg-destructive text-white font-semibold rounded-lg hover:bg-destructive disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Confirm Rejection
                 </button>
@@ -599,7 +599,7 @@ export function TransactionReview({
                     setShowRejectInput(false);
                     setRejectReason('');
                   }}
-                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  className="px-4 py-2 bg-surface-recessed text-foreground-muted rounded-lg hover:bg-border-strong dark:hover:bg-foreground-subtle transition-colors"
                 >
                   Cancel
                 </button>
@@ -609,7 +609,7 @@ export function TransactionReview({
             <button
               onClick={handleReject}
               disabled={disabled}
-              className="w-full px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-2 text-sm font-medium text-foreground-muted hover:text-destructive dark:hover:text-destructive hover:bg-destructive-soft dark:hover:bg-destructive-soft rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Reject Transaction
             </button>
@@ -618,8 +618,8 @@ export function TransactionReview({
       </div>
 
       {/* Warning Footer */}
-      <div className="bg-gray-100 dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700 rounded p-4 text-center">
-        <p className="text-sm text-gray-700 dark:text-gray-300">
+      <div className="bg-surface-recessed/60 border border-border rounded p-4 text-center">
+        <p className="text-sm text-foreground-muted">
           <span className="font-semibold">Important:</span> Signing authorizes this transaction to execute.
           Review the details above before approving.
         </p>

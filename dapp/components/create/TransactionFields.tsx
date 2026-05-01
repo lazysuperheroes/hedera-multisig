@@ -24,13 +24,13 @@ interface TransactionFieldsProps {
 }
 
 const inputClass =
-  'w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg ' +
+  'w-full px-4 py-3 border border-border-strong rounded-lg ' +
   'focus:ring-2 focus:ring-blue-500 focus:border-transparent ' +
-  'bg-white dark:bg-gray-700 text-gray-900 dark:text-white ' +
-  'placeholder:text-gray-400 dark:placeholder:text-gray-500';
+  'bg-surface text-foreground ' +
+  'placeholder:text-foreground-subtle';
 
 const labelClass =
-  'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2';
+  'block text-sm font-medium text-foreground-muted mb-2';
 
 function FromAccountField({
   txFields,
@@ -55,7 +55,7 @@ function FromAccountField({
         onChange={(e) => setTxField('from', e.target.value)}
         onBlur={onFromBlur}
       />
-      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+      <p className="mt-1 text-xs text-foreground-subtle">
         Defaults to connected wallet if left blank.
       </p>
       <BalanceCard balance={balance} isLoading={isLoadingBalance} error={balanceError} />
@@ -70,7 +70,7 @@ function ToAccountField({
   return (
     <div>
       <label htmlFor="tx-to" className={labelClass}>
-        To Account <span className="text-red-500">*</span>
+        To Account <span className="text-destructive">*</span>
       </label>
       <input
         id="tx-to"
@@ -92,7 +92,7 @@ function TokenIdField({
   return (
     <div>
       <label htmlFor="tx-tokenId" className={labelClass}>
-        Token ID <span className="text-red-500">*</span>
+        Token ID <span className="text-destructive">*</span>
       </label>
       <input
         id="tx-tokenId"
@@ -118,7 +118,7 @@ export function TransactionFields(props: TransactionFieldsProps) {
           <ToAccountField txFields={txFields} setTxField={setTxField} />
           <div>
             <label htmlFor="tx-amount" className={labelClass}>
-              Amount (HBAR) <span className="text-red-500">*</span>
+              Amount (HBAR) <span className="text-destructive">*</span>
             </label>
             <input
               id="tx-amount"
@@ -143,7 +143,7 @@ export function TransactionFields(props: TransactionFieldsProps) {
           <ToAccountField txFields={txFields} setTxField={setTxField} />
           <div>
             <label htmlFor="tx-amount" className={labelClass}>
-              Amount (smallest unit) <span className="text-red-500">*</span>
+              Amount (smallest unit) <span className="text-destructive">*</span>
             </label>
             <input
               id="tx-amount"
@@ -165,7 +165,7 @@ export function TransactionFields(props: TransactionFieldsProps) {
           <TokenIdField txFields={txFields} setTxField={setTxField} />
           <div>
             <label htmlFor="tx-serial" className={labelClass}>
-              Serial Number <span className="text-red-500">*</span>
+              Serial Number <span className="text-destructive">*</span>
             </label>
             <input
               id="tx-serial"
@@ -198,13 +198,13 @@ export function TransactionFields(props: TransactionFieldsProps) {
               value={txFields.account || ''}
               onChange={(e) => setTxField('account', e.target.value)}
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-xs text-foreground-subtle">
               Defaults to connected wallet if left blank.
             </p>
           </div>
           <div>
             <label htmlFor="tx-tokenIds" className={labelClass}>
-              Token IDs (comma-separated) <span className="text-red-500">*</span>
+              Token IDs (comma-separated) <span className="text-destructive">*</span>
             </label>
             <input
               id="tx-tokenIds"
@@ -224,7 +224,7 @@ export function TransactionFields(props: TransactionFieldsProps) {
         <>
           <div>
             <label htmlFor="tx-contractId" className={labelClass}>
-              Contract ID <span className="text-red-500">*</span>
+              Contract ID <span className="text-destructive">*</span>
             </label>
             <input
               id="tx-contractId"
@@ -352,18 +352,18 @@ function ContractAbiEditor({
   }, [iface, selectedFragment, selectedFn, argValues, abiText, setTxField]);
 
   const inputClassLocal =
-    'w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg ' +
+    'w-full px-4 py-3 border border-border-strong rounded-lg ' +
     'focus:ring-2 focus:ring-blue-500 focus:border-transparent ' +
-    'bg-white dark:bg-gray-700 text-gray-900 dark:text-white ' +
-    'placeholder:text-gray-400 dark:placeholder:text-gray-500';
+    'bg-surface text-foreground ' +
+    'placeholder:text-foreground-subtle';
   const labelClassLocal =
-    'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2';
+    'block text-sm font-medium text-foreground-muted mb-2';
 
   return (
     <>
       <div>
         <label htmlFor="tx-abi" className={labelClassLocal}>
-          Contract ABI (JSON) <span className="text-gray-500 font-normal">— optional, but enables verified review</span>
+          Contract ABI (JSON) <span className="text-foreground-subtle font-normal">— optional, but enables verified review</span>
         </label>
         <textarea
           id="tx-abi"
@@ -374,12 +374,12 @@ function ContractAbiEditor({
           onChange={(e) => setAbiText(e.target.value)}
         />
         {parseError && (
-          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+          <p className="mt-1 text-xs text-destructive">
             ABI parse error: {parseError}
           </p>
         )}
         {iface && fnList.length > 0 && (
-          <p className="mt-1 text-xs text-green-700 dark:text-green-400">
+          <p className="mt-1 text-xs text-success-soft-fg">
             ABI loaded — {fnList.length} function{fnList.length === 1 ? '' : 's'} available. Participants will see verified function names and decoded arguments.
           </p>
         )}
@@ -388,7 +388,7 @@ function ContractAbiEditor({
       {iface && fnList.length > 0 && (
         <div>
           <label htmlFor="tx-fn" className={labelClassLocal}>
-            Function <span className="text-red-500">*</span>
+            Function <span className="text-destructive">*</span>
           </label>
           <select
             id="tx-fn"
@@ -410,8 +410,8 @@ function ContractAbiEditor({
       )}
 
       {selectedFragment && selectedFragment.inputs.length > 0 && (
-        <div className="space-y-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 p-4">
-          <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+        <div className="space-y-3 rounded-lg border border-border bg-surface-recessed p-4">
+          <p className="text-xs font-semibold text-foreground-muted">
             ARGUMENTS for {selectedFragment.name}()
           </p>
           {selectedFragment.inputs.map((input, idx) => {
@@ -420,11 +420,11 @@ function ContractAbiEditor({
             const argError = argErrors[key];
             return (
               <div key={key}>
-                <label htmlFor={`arg-${key}`} className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                <label htmlFor={`arg-${key}`} className="block text-xs text-foreground-muted mb-1">
                   <code className="font-mono">{input.name || `arg${idx}`}</code>
-                  <span className="ml-2 text-gray-400">({input.type})</span>
+                  <span className="ml-2 text-foreground-subtle">({input.type})</span>
                   {isComplex && (
-                    <span className="ml-2 text-blue-600 dark:text-blue-400 italic">— JSON value</span>
+                    <span className="ml-2 text-accent italic">— JSON value</span>
                   )}
                 </label>
                 {isComplex ? (
@@ -451,7 +451,7 @@ function ContractAbiEditor({
                   />
                 )}
                 {argError && (
-                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                  <p className="mt-1 text-xs text-destructive">
                     Parse error: {argError}
                   </p>
                 )}
@@ -459,7 +459,7 @@ function ContractAbiEditor({
             );
           })}
           {encodingError && (
-            <p className="text-xs text-red-600 dark:text-red-400">
+            <p className="text-xs text-destructive">
               Encoding error: {encodingError}
             </p>
           )}
@@ -479,7 +479,7 @@ function ContractAbiEditor({
           onChange={(e) => setTxField('functionData', e.target.value)}
           readOnly={!!(iface && selectedFn)}
         />
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        <p className="mt-1 text-xs text-foreground-subtle">
           {iface && selectedFn
             ? 'Generated from ABI + arguments above. Edit ABI/args to change.'
             : 'ABI-encoded function call data in hexadecimal. Provide an ABI above for verified review.'}

@@ -5,7 +5,7 @@ import { CopyButton } from '../CopyButton';
 import { QRCodeDisplay } from '../QRCodeDisplay';
 
 const cardClass =
-  'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6';
+  'bg-surface rounded-lg shadow-sm border border-border p-6';
 
 interface SessionCredentials {
   sessionId: string;
@@ -41,9 +41,9 @@ export function ShareStep({
     <section aria-label="Share session" className="space-y-6">
       {/* Success banner */}
       {injectionDone && (
-        <div className="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg flex items-start gap-3">
+        <div className="p-4 bg-success-soft border border-success/40 rounded-lg flex items-start gap-3">
           <svg
-            className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0"
+            className="w-6 h-6 text-success flex-shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -57,10 +57,10 @@ export function ShareStep({
             />
           </svg>
           <div>
-            <p className="font-semibold text-green-800 dark:text-green-200">
+            <p className="font-semibold text-success-soft-fg">
               Transaction injected successfully
             </p>
-            <p className="text-sm text-green-700 dark:text-green-300">
+            <p className="text-sm text-success-soft-fg">
               Share the credentials below so participants can join and
               sign. Remember: participants have 120 seconds from now to
               sign.
@@ -71,7 +71,7 @@ export function ShareStep({
 
       {/* Credentials card */}
       <div className={cardClass}>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
+        <h2 className="text-lg font-semibold text-foreground mb-4">
           Session Credentials
         </h2>
 
@@ -107,7 +107,7 @@ export function ShareStep({
       {/* QR Code + Connection String */}
       {connectionString && (
         <div className={cardClass}>
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
+          <h2 className="text-lg font-semibold text-foreground mb-4">
             Share with Participants
           </h2>
 
@@ -134,7 +134,7 @@ export function ShareStep({
                   }
                 />
                 {onTogglePinInLink && (
-                  <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                  <label className="flex items-start gap-2 text-sm text-foreground-muted cursor-pointer">
                     <input
                       type="checkbox"
                       checked={includePinInLink}
@@ -155,10 +155,10 @@ export function ShareStep({
 
       {/* Monitor link */}
       <div className={cardClass}>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">
+        <h2 className="text-lg font-semibold text-foreground mb-3">
           Monitor Session
         </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        <p className="text-sm text-foreground-muted mb-4">
           Open the session page to watch participants join and monitor
           signature progress in real time.
         </p>
@@ -183,7 +183,7 @@ export function ShareStep({
             // Best-effort purge of any legacy key that may still be around.
             try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
           }}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white font-medium rounded-lg hover:bg-accent-hover transition-colors"
         >
           <svg
             className="w-5 h-5"
@@ -270,16 +270,16 @@ function CopyableField({
   hint?: string;
 }) {
   return (
-    <div className="w-full bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+    <div className="w-full bg-surface-recessed rounded-lg p-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+        <span className="text-sm font-medium text-foreground-muted">{label}</span>
         <CopyButton text={value} label={label} variant="button" size="sm" />
       </div>
-      <div className="font-mono text-xs text-gray-600 dark:text-gray-400 break-all bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-600">
+      <div className="font-mono text-xs text-foreground-muted break-all bg-surface p-2 rounded border border-border-strong">
         {value}
       </div>
       {hint && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{hint}</p>
+        <p className="text-xs text-foreground-subtle mt-2">{hint}</p>
       )}
     </div>
   );

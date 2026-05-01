@@ -68,55 +68,57 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Use cases — asymmetric: primary takes 3 cols, supporting 2,
-          and the supporting two have intentionally different visual weights. */}
+      {/* Use cases — staircase rhythm. Each case sits at a different
+          horizontal position so the section reads top-to-bottom with
+          drift, breaking the symmetric grid pattern used elsewhere. */}
       <section className="border-t border-border bg-surface-recessed/40">
         <div className="max-w-6xl mx-auto px-6 py-16 sm:py-24">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-12">
-            Use cases
-          </p>
+          <div className="flex items-baseline gap-4 mb-14">
+            <span className="font-mono text-foreground-subtle tabular-nums text-sm">01</span>
+            <p className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
+              Use cases
+            </p>
+            <span className="flex-1 h-px bg-border" aria-hidden="true" />
+          </div>
 
-          <div className="grid lg:grid-cols-5 gap-y-12 lg:gap-x-16">
-            {/* Primary — large, full breath. Treasury is the dominant case. */}
-            <div className="lg:col-span-3 max-w-2xl">
-              <h3 className="font-heading text-2xl sm:text-3xl font-bold text-foreground mb-3 tracking-tight">
-                Treasury management
-              </h3>
-              <p className="text-foreground-muted leading-relaxed">
-                Move HBAR, tokens, and NFTs with multi-party approval. Smart-contract
-                calls with ABI verification. The most common use case for teams
-                managing shared accounts.
-              </p>
-              <Link
-                href="/learn"
-                className="mt-4 inline-flex text-sm font-medium text-accent hover:underline"
-              >
-                See the HBAR walkthrough →
-              </Link>
-            </div>
+          {/* Treasury — full width, dominant */}
+          <div className="max-w-3xl mb-14">
+            <h3 className="font-heading text-2xl sm:text-3xl font-bold text-foreground mb-3 tracking-tight">
+              Treasury management
+            </h3>
+            <p className="text-foreground-muted leading-relaxed text-lg">
+              Move HBAR, tokens, and NFTs with multi-party approval.
+              Smart-contract calls with ABI verification. The most common use
+              case for teams managing shared accounts.
+            </p>
+            <Link
+              href="/learn"
+              className="mt-4 inline-flex text-sm font-medium text-accent hover:underline"
+            >
+              See the HBAR walkthrough →
+            </Link>
+          </div>
 
-            {/* Supporting — smaller, stacked vertically (not side-by-side
-                cards), with different rhythms. Breaks the "identical card grid". */}
-            <div className="lg:col-span-2 space-y-10">
-              <div>
-                <h3 className="font-heading text-lg font-bold text-foreground mb-2">
-                  Agent signing
-                </h3>
-                <p className="text-foreground-muted leading-relaxed text-sm">
-                  Automated agents with composable policy rules. Amount limits,
-                  recipient allowlists, time windows.
-                </p>
-              </div>
-              <div className="border-t border-border pt-10">
-                <h3 className="font-heading text-lg font-bold text-foreground mb-2">
-                  Scheduled transactions
-                </h3>
-                <p className="text-foreground-muted leading-relaxed text-sm">
-                  Async signing over hours, days, or up to ~62 days (HIP-423).
-                  No 120-second pressure for cross-timezone teams.
-                </p>
-              </div>
-            </div>
+          {/* Agent signing — indented from left, smaller */}
+          <div className="max-w-xl ml-0 sm:ml-[12%] mb-12 border-l border-border pl-6">
+            <h3 className="font-heading text-lg font-bold text-foreground mb-2">
+              Agent signing
+            </h3>
+            <p className="text-foreground-muted leading-relaxed text-sm">
+              Automated agents with composable policy rules. Amount limits,
+              recipient allowlists, time windows.
+            </p>
+          </div>
+
+          {/* Scheduled transactions — indented further */}
+          <div className="max-w-xl ml-0 sm:ml-[24%] border-l border-border pl-6">
+            <h3 className="font-heading text-lg font-bold text-foreground mb-2">
+              Scheduled transactions
+            </h3>
+            <p className="text-foreground-muted leading-relaxed text-sm">
+              Async signing over hours, days, or up to ~62 days (HIP-423).
+              No 120-second pressure for cross-timezone teams.
+            </p>
           </div>
         </div>
       </section>
@@ -127,9 +129,13 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 py-16 sm:py-24">
           <div className="grid lg:grid-cols-5 gap-12 lg:gap-16">
             <div className="lg:col-span-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-10">
-                Security model
-              </p>
+              <div className="flex items-baseline gap-4 mb-10">
+                <span className="font-mono text-foreground-subtle tabular-nums text-sm">02</span>
+                <p className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
+                  Security model
+                </p>
+                <span className="flex-1 h-px bg-border" aria-hidden="true" />
+              </div>
               <dl className="space-y-8">
                 <SecurityPrinciple
                   title="Keys stay local"

@@ -26,19 +26,19 @@ export function SignatureProgress({
   const isComplete = thresholdMet || signaturesCollected >= signaturesRequired;
 
   return (
-    <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-700 rounded-lg p-6">
-      <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Signature Collection Progress</h3>
+    <div className="bg-surface border-2 border-border rounded-lg p-6">
+      <h3 className="text-lg font-semibold text-foreground mb-4">Signature Collection Progress</h3>
 
       {/* Progress Bar */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 tabular-nums">
+          <span className="text-sm font-medium text-foreground-muted tabular-nums">
             {signaturesCollected} / {signaturesRequired} signatures
           </span>
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 tabular-nums">{Math.round(progress)}%</span>
+          <span className="text-sm font-medium text-foreground-muted tabular-nums">{Math.round(progress)}%</span>
         </div>
         <div
-          className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden"
+          className="w-full bg-surface-recessed rounded-full h-4 overflow-hidden"
           role="progressbar"
           aria-valuenow={signaturesCollected}
           aria-valuemin={0}
@@ -47,7 +47,7 @@ export function SignatureProgress({
         >
           <div
             className={`h-full rounded-full transition-all duration-500 ${
-              isComplete ? 'bg-green-500' : 'bg-blue-500'
+              isComplete ? 'bg-success' : 'bg-info'
             }`}
             style={{ width: `${Math.min(progress, 100)}%` }}
           />
@@ -56,24 +56,24 @@ export function SignatureProgress({
 
       {/* Threshold Status */}
       {isComplete ? (
-        <div className="bg-green-50 dark:bg-green-900/30 border-2 border-green-500 rounded p-4 mb-4">
+        <div className="bg-success-soft border-2 border-success rounded p-4 mb-4">
           <div className="flex items-center space-x-3">
-            <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <svg className="w-6 h-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             <div>
-              <p className="font-semibold text-green-800 dark:text-green-300">Threshold Met!</p>
-              <p className="text-sm text-green-700 dark:text-green-400">
+              <p className="font-semibold text-success-soft-fg">Threshold Met!</p>
+              <p className="text-sm text-success-soft-fg">
                 Collected {signaturesCollected} of {signaturesRequired} required signatures
               </p>
             </div>
           </div>
         </div>
       ) : (
-        <div className="bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-700 rounded p-4 mb-4">
+        <div className="bg-info-soft border-2 border-info rounded p-4 mb-4">
           <div className="flex items-center space-x-3">
             <div className="animate-pulse">
-              <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <svg className="w-6 h-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -83,8 +83,8 @@ export function SignatureProgress({
               </svg>
             </div>
             <div>
-              <p className="font-semibold text-blue-800 dark:text-blue-300">Collecting Signatures...</p>
-              <p className="text-sm text-blue-700 dark:text-blue-400">
+              <p className="font-semibold text-info-soft-fg">Collecting Signatures...</p>
+              <p className="text-sm text-info-soft-fg">
                 Need {signaturesRequired - signaturesCollected} more signature
                 {signaturesRequired - signaturesCollected !== 1 ? 's' : ''}
               </p>
@@ -95,25 +95,25 @@ export function SignatureProgress({
 
       {/* Participant Stats */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-3">
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Participants Connected</div>
-          <div className="text-2xl font-bold text-gray-800 dark:text-white">{participantsConnected}</div>
+        <div className="bg-surface-recessed rounded p-3">
+          <div className="text-xs text-foreground-subtle dark:text-foreground-subtle mb-1">Participants Connected</div>
+          <div className="text-2xl font-bold text-foreground">{participantsConnected}</div>
         </div>
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-3">
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Participants Ready</div>
-          <div className="text-2xl font-bold text-gray-800 dark:text-white">{participantsReady}</div>
+        <div className="bg-surface-recessed rounded p-3">
+          <div className="text-xs text-foreground-subtle dark:text-foreground-subtle mb-1">Participants Ready</div>
+          <div className="text-2xl font-bold text-foreground">{participantsReady}</div>
         </div>
       </div>
 
       {/* Signature List */}
       {signaturesCollected > 0 && (
         <div className="mt-4">
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Signatures Collected:</div>
+          <div className="text-xs text-foreground-subtle dark:text-foreground-subtle mb-2">Signatures Collected:</div>
           <div className="flex flex-wrap gap-2">
             {Array.from({ length: signaturesCollected }).map((_, index) => (
               <div
                 key={index}
-                className="flex items-center space-x-1 px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded text-xs"
+                className="flex items-center space-x-1 px-2 py-1 bg-success-soft text-success-soft-fg rounded text-xs"
               >
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path
@@ -128,7 +128,7 @@ export function SignatureProgress({
             {Array.from({ length: signaturesRequired - signaturesCollected }).map((_, index) => (
               <div
                 key={`pending-${index}`}
-                className="flex items-center space-x-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-400 rounded text-xs"
+                className="flex items-center space-x-1 px-2 py-1 bg-surface-recessed text-foreground-subtle rounded text-xs"
               >
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path

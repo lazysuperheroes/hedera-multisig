@@ -60,7 +60,9 @@ export function LSHLogo({ variant, className = '' }: LSHLogoProps) {
       className={`group inline-flex items-center gap-2 text-foreground-subtle hover:text-foreground transition-colors ${className}`}
       aria-label="Made by Lazy Superheroes"
     >
-      <span className="text-xs">Made by</span>
+      <span className="text-xs">
+        {register === 'dev' ? 'made by' : 'Made by'}
+      </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
@@ -74,8 +76,17 @@ export function LSHLogo({ variant, className = '' }: LSHLogoProps) {
         className="text-xs font-semibold tracking-tight"
         style={{ color: 'var(--lsh-gold)' }}
       >
-        Lazy Superheroes
+        {register === 'dev' ? 'lazy superheroes' : 'Lazy Superheroes'}
       </span>
+      {/* Q2: terminal cursor blink in dev mode — turns the attribution
+          into a tiny shell prompt, earns brand-family nod with character */}
+      {register === 'dev' && (
+        <span
+          className="inline-block w-[7px] h-[14px] bg-current animate-cursor-blink"
+          style={{ color: 'var(--lsh-gold)' }}
+          aria-hidden="true"
+        />
+      )}
     </a>
   );
 }

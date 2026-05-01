@@ -218,12 +218,12 @@ export function PostSigningStatus({
       <div
         className={`border-2 rounded-lg p-6 ${
           status === 'success'
-            ? 'bg-green-50 dark:bg-green-950/30 border-green-500 dark:border-green-700'
+            ? 'bg-success-soft border-success'
             : status === 'error'
-            ? 'bg-red-50 dark:bg-red-950/30 border-red-500 dark:border-red-700'
+            ? 'bg-destructive-soft border-destructive'
             : status === 'timeout'
             ? 'bg-warning-soft border-warning'
-            : 'bg-blue-50 dark:bg-blue-950/30 border-blue-500 dark:border-blue-700'
+            : 'bg-info-soft border-info'
         }`}
       >
         {/* Status Icon */}
@@ -246,8 +246,8 @@ export function PostSigningStatus({
         <div className="text-center">
           {status === 'success' && (
             <>
-              <h2 className="text-xl font-bold text-green-800 dark:text-green-200 mb-2">Transaction Successful!</h2>
-              <p className="text-green-700 dark:text-green-300 mb-3">
+              <h2 className="text-xl font-bold text-success-soft-fg mb-2">Transaction Successful!</h2>
+              <p className="text-success-soft-fg mb-3">
                 Transaction {transactionId} <span className="font-bold">SUCCESS</span>
               </p>
               {/* Phase C1: intent-vs-actual diff. Compare the transfers we
@@ -267,14 +267,14 @@ export function PostSigningStatus({
             const explanation = explainResultCode(txStatus?.result || 'UNKNOWN');
             return (
               <>
-                <h2 className="text-xl font-bold text-red-800 dark:text-red-200 mb-2">{explanation.headline}</h2>
-                <p className="text-red-700 dark:text-red-300 mb-3">
+                <h2 className="text-xl font-bold text-destructive-soft-fg mb-2">{explanation.headline}</h2>
+                <p className="text-destructive-soft-fg mb-3">
                   {explanation.explanation}
                 </p>
-                <p className="text-sm text-red-700 dark:text-red-300 mb-3">
+                <p className="text-sm text-destructive-soft-fg mb-3">
                   <strong>What to do:</strong> {explanation.recovery}
                 </p>
-                <p className="text-xs text-red-600/80 dark:text-red-400/80 font-mono">
+                <p className="text-xs text-destructive/80 font-mono">
                   Code: {txStatus?.result || 'UNKNOWN'}
                 </p>
               </>
@@ -318,13 +318,13 @@ export function PostSigningStatus({
           })()}
           {status === 'polling' && (
             <>
-              <h2 className="text-xl font-bold text-blue-800 dark:text-blue-200 mb-2">Signature Submitted!</h2>
-              <p className="text-blue-700 dark:text-blue-300 mb-2">
+              <h2 className="text-xl font-bold text-info-soft-fg mb-2">Signature Submitted!</h2>
+              <p className="text-info-soft-fg mb-2">
                 Checking if the transaction went through... (<span className="tabular-nums">{elapsedSeconds}s</span>)
               </p>
-              <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2 mt-3">
+              <div className="w-full bg-info-soft rounded-full h-2 mt-3">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-1000"
+                  className="bg-accent h-2 rounded-full transition-all duration-1000"
                   style={{ width: `${Math.min((elapsedSeconds / 125) * 100, 100)}%` }}
                 />
               </div>
@@ -332,13 +332,13 @@ export function PostSigningStatus({
           )}
           {status === 'still-checking' && (
             <>
-              <h2 className="text-xl font-bold text-blue-800 dark:text-blue-200 mb-2">Still Checking...</h2>
-              <p className="text-blue-700 dark:text-blue-300 mb-2">
+              <h2 className="text-xl font-bold text-info-soft-fg mb-2">Still Checking...</h2>
+              <p className="text-info-soft-fg mb-2">
                 The transaction hasn&apos;t appeared on the network yet. This can happen if other signers haven&apos;t signed yet, or if the network is busy. (<span className="tabular-nums">{elapsedSeconds}s</span>)
               </p>
-              <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2 mt-3">
+              <div className="w-full bg-info-soft rounded-full h-2 mt-3">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-1000"
+                  className="bg-accent h-2 rounded-full transition-all duration-1000"
                   style={{ width: `${Math.min((elapsedSeconds / 125) * 100, 100)}%` }}
                 />
               </div>
@@ -354,10 +354,10 @@ export function PostSigningStatus({
             rel="noopener noreferrer"
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${
               status === 'success'
-                ? 'bg-green-600 text-white hover:bg-green-700'
+                ? 'bg-success text-white hover:bg-success'
                 : status === 'error'
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
+                ? 'bg-destructive text-white hover:bg-destructive'
+                : 'bg-accent text-white hover:bg-accent-hover'
             }`}
           >
             View on HashScan
@@ -369,32 +369,32 @@ export function PostSigningStatus({
       </div>
 
       {/* Transaction Details (Expandable) */}
-      <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg">
+      <div className="bg-surface border-2 border-border-strong rounded-lg">
         <details>
-          <summary className="cursor-pointer p-4 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+          <summary className="cursor-pointer p-4 text-sm font-semibold text-foreground-muted hover:bg-surface-recessed dark:hover:bg-surface">
             Transaction Details
           </summary>
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700 space-y-3 text-sm">
+          <div className="p-4 border-t border-border space-y-3 text-sm">
             {/* Transaction ID */}
             <div className="flex gap-2 items-start">
-              <span className="text-gray-500 dark:text-gray-400 w-32 flex-shrink-0">Transaction ID:</span>
-              <span className="font-mono text-gray-800 dark:text-gray-200 break-all">{transactionId}</span>
+              <span className="text-foreground-subtle w-32 flex-shrink-0">Transaction ID:</span>
+              <span className="font-mono text-foreground break-all">{transactionId}</span>
               <CopyButton text={transactionId} label="Transaction ID" size="sm" />
             </div>
 
             {/* Type */}
             {transactionDetails?.type && (
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400 w-32">Type:</span>
-                <span className="text-gray-800 dark:text-gray-200">{transactionDetails.type}</span>
+                <span className="text-foreground-subtle w-32">Type:</span>
+                <span className="text-foreground">{transactionDetails.type}</span>
               </div>
             )}
 
             {/* Transfers */}
             {transactionDetails?.transfers && transactionDetails.transfers.length > 0 && (
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400 w-32">Transfers:</span>
-                <div className="text-gray-800 dark:text-gray-200">
+                <span className="text-foreground-subtle w-32">Transfers:</span>
+                <div className="text-foreground">
                   {transactionDetails.transfers.map((t, i) => (
                     <div key={i} className="font-mono text-xs">
                       {t.accountId}: {t.amount}
@@ -407,8 +407,8 @@ export function PostSigningStatus({
             {/* Token IDs */}
             {transactionDetails?.tokenIds && transactionDetails.tokenIds.length > 0 && (
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400 w-32">Tokens:</span>
-                <span className="font-mono text-gray-800 dark:text-gray-200">
+                <span className="text-foreground-subtle w-32">Tokens:</span>
+                <span className="font-mono text-foreground">
                   {transactionDetails.tokenIds.join(', ')}
                 </span>
               </div>
@@ -417,57 +417,57 @@ export function PostSigningStatus({
             {/* Contract */}
             {transactionDetails?.contractId && (
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400 w-32">Contract:</span>
-                <span className="font-mono text-gray-800 dark:text-gray-200">{transactionDetails.contractId}</span>
+                <span className="text-foreground-subtle w-32">Contract:</span>
+                <span className="font-mono text-foreground">{transactionDetails.contractId}</span>
               </div>
             )}
 
             {/* Function */}
             {transactionDetails?.functionName && (
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400 w-32">Function:</span>
-                <span className="font-mono text-gray-800 dark:text-gray-200">{transactionDetails.functionName}()</span>
+                <span className="text-foreground-subtle w-32">Function:</span>
+                <span className="font-mono text-foreground">{transactionDetails.functionName}()</span>
               </div>
             )}
 
             {/* Max Fee */}
             {transactionDetails?.maxTransactionFee && (
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400 w-32">Max Fee:</span>
-                <span className="font-mono text-gray-800 dark:text-gray-200">{transactionDetails.maxTransactionFee}</span>
+                <span className="text-foreground-subtle w-32">Max Fee:</span>
+                <span className="font-mono text-foreground">{transactionDetails.maxTransactionFee}</span>
               </div>
             )}
 
             {/* Memo */}
             {transactionDetails?.memo && (
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400 w-32">Memo:</span>
-                <span className="text-gray-800 dark:text-gray-200">{transactionDetails.memo}</span>
+                <span className="text-foreground-subtle w-32">Memo:</span>
+                <span className="text-foreground">{transactionDetails.memo}</span>
               </div>
             )}
 
             {/* Mirror Node Result (if available) */}
             {txStatus?.found && (
               <>
-                <div className="border-t border-gray-200 dark:border-gray-700 my-2 pt-2">
-                  <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Network Result</span>
+                <div className="border-t border-border my-2 pt-2">
+                  <span className="text-xs font-semibold text-foreground-subtle uppercase">Network Result</span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="text-gray-500 dark:text-gray-400 w-32">Result:</span>
-                  <span className={`font-bold ${txStatus.result === 'SUCCESS' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  <span className="text-foreground-subtle w-32">Result:</span>
+                  <span className={`font-bold ${txStatus.result === 'SUCCESS' ? 'text-success' : 'text-destructive'}`}>
                     {txStatus.result}
                   </span>
                 </div>
                 {txStatus.chargedFee !== null && (
                   <div className="flex gap-2">
-                    <span className="text-gray-500 dark:text-gray-400 w-32">Fee Charged:</span>
-                    <span className="font-mono text-gray-800 dark:text-gray-200">{(txStatus.chargedFee / 100000000).toFixed(8)} HBAR</span>
+                    <span className="text-foreground-subtle w-32">Fee Charged:</span>
+                    <span className="font-mono text-foreground">{(txStatus.chargedFee / 100000000).toFixed(8)} HBAR</span>
                   </div>
                 )}
                 {txStatus.consensusTimestamp && (
                   <div className="flex gap-2">
-                    <span className="text-gray-500 dark:text-gray-400 w-32">Consensus:</span>
-                    <span className="font-mono text-gray-800 dark:text-gray-200">{txStatus.consensusTimestamp}</span>
+                    <span className="text-foreground-subtle w-32">Consensus:</span>
+                    <span className="font-mono text-foreground">{txStatus.consensusTimestamp}</span>
                   </div>
                 )}
               </>
@@ -480,7 +480,7 @@ export function PostSigningStatus({
       <div className="text-center">
         <button
           onClick={onClear}
-          className="px-6 py-3 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition-colors"
+          className="px-6 py-3 bg-foreground-subtle text-white font-semibold rounded-lg hover:bg-surface transition-colors"
         >
           Ready for Next Transaction
         </button>
@@ -564,7 +564,7 @@ function IntentVsActualDiff({
       <div className="overflow-x-auto">
         <table className="w-full text-xs min-w-[480px]">
           <thead>
-            <tr className="text-gray-500 dark:text-gray-400">
+            <tr className="text-foreground-subtle">
               <th className="text-left py-1">Account</th>
               <th className="text-right py-1">Signed</th>
               <th className="text-right py-1">Actual</th>
@@ -573,16 +573,16 @@ function IntentVsActualDiff({
           </thead>
           <tbody className="font-mono">
             {rows.map((r) => (
-              <tr key={r.account} className="border-t border-gray-100 dark:border-gray-700">
+              <tr key={r.account} className="border-t border-border">
                 <td className="py-1">{r.account}</td>
                 <td className="text-right tabular-nums whitespace-nowrap">{formatTinybarsWithHbar(r.expected)}</td>
                 <td className="text-right tabular-nums whitespace-nowrap">{formatTinybarsWithHbar(r.actual)}</td>
                 <td className="pl-4 font-sans">
                   {r.status === 'match' && (
-                    <span className="text-green-700 dark:text-green-400">exact match</span>
+                    <span className="text-success-soft-fg">exact match</span>
                   )}
                   {r.status === 'fee-only' && (
-                    <span className="text-gray-600 dark:text-gray-400">
+                    <span className="text-foreground-muted">
                       fee deducted ({formatTinybarsWithHbar(chargedFee || 0)})
                     </span>
                   )}
@@ -600,7 +600,7 @@ function IntentVsActualDiff({
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+      <p className="mt-2 text-xs text-foreground-subtle">
         Tinybars are the engineering precision (1 ℏ = 100 000 000 tℏ); HBAR equivalents in parentheses. Anything other than &quot;exact match&quot; or &quot;fee deducted&quot; warrants investigation.
       </p>
     </div>

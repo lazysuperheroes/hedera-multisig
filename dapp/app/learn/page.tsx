@@ -25,62 +25,69 @@ export default function LearnPage() {
           </p>
         </div>
 
-        {/* Walkthroughs — asymmetric. HBAR is the recommended start (larger
-            type, more breath). Contract is the next step (compact). */}
-        <div className="grid lg:grid-cols-5 gap-y-12 lg:gap-x-16 mb-20">
-          <div className="lg:col-span-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-4">
-              Start here
+        {/* Walkthroughs — full-bleed primary, then a sidenote secondary.
+            Different shape from landing's staircase + security pull-quote. */}
+        <div className="mb-20">
+          {/* Primary — HBAR walkthrough. Full breath. */}
+          <div className="flex items-baseline gap-4 mb-6">
+            <span className="font-mono text-foreground-subtle tabular-nums text-sm">01</span>
+            <p className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
+              Recommended start
             </p>
-            <Link
-              href={`${REPO_BASE}/walkthrough-hbar`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group block"
-            >
-              <h2 className="font-heading text-2xl sm:text-3xl font-bold text-foreground mb-3 tracking-tight group-hover:text-accent transition-colors">
-                HBAR walkthrough
-              </h2>
-              <p className="text-foreground-muted leading-relaxed mb-4">
-                30-minute end-to-end: generate three keys, create a 2-of-3 threshold-key account,
-                run a real multi-sig ceremony, and verify on the mirror node. Treasury teams that
-                only move HBAR or fungible tokens can stop here.
-              </p>
-              <ul className="text-sm text-foreground-subtle space-y-1 mb-4">
-                <li>· Threshold-key account creation</li>
-                <li>· CLI participant + dApp coordinator flow</li>
-                <li>· Mirror-node confirmation</li>
-              </ul>
-              <span className="text-sm font-medium text-accent group-hover:underline">
-                Open on GitHub →
-              </span>
-            </Link>
+            <span className="flex-1 h-px bg-border" aria-hidden="true" />
           </div>
-
-          <div className="lg:col-span-2 lg:pl-8 lg:border-l lg:border-border">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-4">
-              Then
+          <Link
+            href={`${REPO_BASE}/walkthrough-hbar`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group block max-w-3xl mb-16"
+          >
+            <h2 className="font-heading text-3xl sm:text-4xl font-bold text-foreground mb-4 tracking-tight group-hover:text-accent transition-colors leading-tight">
+              HBAR walkthrough
+            </h2>
+            <p className="text-foreground-muted leading-relaxed text-lg mb-5">
+              30-minute end-to-end: generate three keys, create a 2-of-3
+              threshold-key account, run a real multi-sig ceremony, and
+              verify on the mirror node. Treasury teams that only move
+              HBAR or fungible tokens can stop here.
             </p>
+            <ul className="text-sm text-foreground-subtle space-y-1 mb-5">
+              <li>· Threshold-key account creation</li>
+              <li>· CLI participant + dApp coordinator flow</li>
+              <li>· Mirror-node confirmation</li>
+            </ul>
+            <span className="text-sm font-medium text-accent group-hover:underline">
+              Open on GitHub →
+            </span>
+          </Link>
+
+          {/* Secondary — Contract walkthrough. Pulled out as a marginalia
+              note: smaller, indented, with a "next" connective phrase
+              instead of a redundant "Then" eyebrow. */}
+          <div className="ml-0 sm:ml-[20%] max-w-xl border-l-2 border-border pl-6 py-2">
             <Link
               href={`${REPO_BASE}/walkthrough-contract`}
               target="_blank"
               rel="noopener noreferrer"
               className="group block"
             >
+              <p className="text-xs text-foreground-subtle mb-1">
+                <span className="font-mono">02</span> · Once HBAR is working
+              </p>
               <h2 className="font-heading text-xl font-bold text-foreground mb-3 group-hover:text-accent transition-colors">
                 Smart-contract walkthrough
               </h2>
-              <p className="text-foreground-muted leading-relaxed text-sm mb-4">
-                Deploy a Counter contract as a single-sig EOA, interact normally, then convert the
-                account to 2-of-3 multi-sig and prove single-sig is dead. Teaches every common
-                contract path.
+              <p className="text-foreground-muted leading-relaxed text-sm mb-3">
+                Deploy a Counter contract as a single-sig EOA, interact
+                normally, then convert the account to 2-of-3 multi-sig and
+                prove single-sig is dead. Teaches every common contract path.
               </p>
-              <ul className="text-xs text-foreground-subtle space-y-1 mb-4">
+              <ul className="text-xs text-foreground-subtle space-y-1 mb-3">
                 <li>· <code className="font-mono">ContractCreateFlow</code> deployment</li>
-                <li>· EOA → multi-sig migration via <code className="font-mono">AccountUpdate</code></li>
+                <li>· EOA → multi-sig via <code className="font-mono">AccountUpdate</code></li>
                 <li>· Negative test proving authorization changed</li>
                 <li>· Multi-sig <code className="font-mono">increment()</code> + <code className="font-mono">withdraw()</code></li>
-                <li>· Alternate path: deploy directly as multi-sig (HIP-423)</li>
+                <li>· Alternate: deploy directly as multi-sig (HIP-423)</li>
               </ul>
               <span className="text-sm font-medium text-accent group-hover:underline">
                 Open on GitHub →
@@ -91,9 +98,12 @@ export default function LearnPage() {
 
         {/* Prerequisites — flat list with eyebrow label, no card */}
         <div className="border-t border-border pt-10 mb-16">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-4">
-            Prerequisites
-          </p>
+          <div className="flex items-baseline gap-4 mb-4">
+            <span className="font-mono text-foreground-subtle tabular-nums text-sm">03</span>
+            <p className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
+              Prerequisites
+            </p>
+          </div>
           <ol className="text-sm text-foreground-muted space-y-2.5 list-decimal list-inside max-w-3xl">
             <li>
               <strong className="text-foreground">Get a testnet account</strong> at{' '}
@@ -132,9 +142,9 @@ export default function LearnPage() {
 
         {/* Other docs — compact list, not card grid */}
         <div className="border-t border-border pt-10">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-4">
+          <h2 className="font-heading text-xl font-bold text-foreground mb-4">
             Deeper reading
-          </p>
+          </h2>
           <ul className="space-y-3 text-sm">
             <DocLink
               href={`${DOCS_BASE}/AGENT_INTEGRATION.md`}

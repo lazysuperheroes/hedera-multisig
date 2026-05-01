@@ -201,11 +201,9 @@ export default function CreatePage() {
           {/* Step 2 — Transaction Builder */}
           {step === 'build-tx' && connection.sessionCredentials && (
             <section aria-label="Build transaction" className="space-y-8">
-              {/* Session info — flat inline dl, no card chrome */}
+              {/* Session info — flat inline dl, no eyebrow.
+                  H5: dropped redundant "Session" eyebrow; dl IS self-evident. */}
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-3">
-                  Session
-                </p>
                 <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 text-sm">
                   <dt className="text-foreground-subtle">ID</dt>
                   <dd className="font-mono text-foreground truncate">

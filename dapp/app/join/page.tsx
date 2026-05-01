@@ -162,7 +162,7 @@ function JoinPageContent() {
 
           {/* Section 1 — Quick connect */}
           <section aria-labelledby="quick-heading">
-            <p id="quick-heading" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-4">
+            <p id="quick-heading" className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle mb-4">
               Quick connect
             </p>
 
@@ -223,7 +223,7 @@ function JoinPageContent() {
           {showManualForm && (
             <section aria-labelledby="details-heading" className="space-y-6 pt-2">
               <div className="flex items-baseline justify-between gap-4">
-                <p id="details-heading" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
+                <p id="details-heading" className="eyebrow-label text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground-subtle">
                   Session details
                 </p>
                 {connectionString && (

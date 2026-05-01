@@ -114,8 +114,8 @@ export default function HistoryPage() {
 
   // ---- Shared Tailwind tokens ----
   const selectClass =
-    'px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg ' +
-    'bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm ' +
+    'px-3 py-2 border border-border-strong rounded-lg ' +
+    'bg-white dark:bg-surface text-foreground text-sm ' +
     'focus:ring-2 focus:ring-blue-500 focus:border-transparent';
 
   // ------------------------------------------------------------------
@@ -144,12 +144,12 @@ export default function HistoryPage() {
         <div className="space-y-6">
 
         {/* Controls row */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="bg-surface rounded-lg shadow-sm border border-border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
           {/* Status filter */}
           <div className="flex items-center gap-2">
             <label
               htmlFor="status-filter"
-              className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap"
+              className="text-sm font-medium text-foreground-muted whitespace-nowrap"
             >
               Status:
             </label>
@@ -170,7 +170,7 @@ export default function HistoryPage() {
           <div className="flex items-center gap-2">
             <label
               htmlFor="date-range"
-              className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap"
+              className="text-sm font-medium text-foreground-muted whitespace-nowrap"
             >
               Period:
             </label>
@@ -197,7 +197,7 @@ export default function HistoryPage() {
               type="button"
               onClick={exportCsv}
               disabled={filtered.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-surface-recessed text-foreground-muted hover:bg-border dark:hover:bg-foreground-subtle transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg
                 className="w-4 h-4"
@@ -220,7 +220,7 @@ export default function HistoryPage() {
                 type="button"
                 onClick={() => setConfirmClear(true)}
                 disabled={entries.length === 0}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-destructive-soft text-destructive-soft-fg hover:bg-destructive-soft dark:hover:bg-destructive-soft transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <svg
                   className="w-4 h-4"
@@ -239,7 +239,7 @@ export default function HistoryPage() {
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-red-600 dark:text-red-400">
+                <span className="text-sm text-destructive">
                   Are you sure?
                 </span>
                 <button
@@ -248,14 +248,14 @@ export default function HistoryPage() {
                     clearHistory();
                     setConfirmClear(false);
                   }}
-                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-destructive text-white hover:bg-destructive transition-colors"
                 >
                   Yes, delete all
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmClear(false)}
-                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-border text-foreground-muted hover:bg-border-strong transition-colors"
                 >
                   Cancel
                 </button>
@@ -266,9 +266,9 @@ export default function HistoryPage() {
 
         {/* Table / empty state */}
         {filtered.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+          <div className="bg-surface rounded-lg shadow-sm border border-border p-12 text-center">
             <svg
-              className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600 mb-4"
+              className="w-16 h-16 mx-auto text-foreground-subtle mb-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -280,45 +280,45 @@ export default function HistoryPage() {
                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            <h2 className="text-xl font-semibold text-foreground-muted mb-2">
               No transactions yet
             </h2>
-            <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+            <p className="text-foreground-subtle max-w-md mx-auto">
               Transactions you create or participate in will appear here.
               History is stored locally in your browser and never leaves your
               device.
             </p>
             <Link
               href="/create"
-              className="inline-block mt-6 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-block mt-6 px-6 py-3 bg-accent text-white font-semibold rounded-lg hover:bg-accent-hover transition-colors"
             >
               Create a Transaction
             </Link>
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="bg-surface rounded-lg shadow-sm border border-border overflow-hidden">
             {/* Scrollable table wrapper */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <caption className="sr-only">Transaction history</caption>
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">
+                  <tr className="border-b border-border bg-surface-recessed">
+                    <th className="px-4 py-3 font-medium text-foreground-muted">
                       Date
                     </th>
-                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">
+                    <th className="px-4 py-3 font-medium text-foreground-muted">
                       Type
                     </th>
-                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">
+                    <th className="px-4 py-3 font-medium text-foreground-muted">
                       Transaction ID
                     </th>
-                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">
+                    <th className="px-4 py-3 font-medium text-foreground-muted">
                       Status
                     </th>
-                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">
+                    <th className="px-4 py-3 font-medium text-foreground-muted">
                       Network
                     </th>
-                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">
+                    <th className="px-4 py-3 font-medium text-foreground-muted">
                       HashScan
                     </th>
                   </tr>
@@ -327,15 +327,15 @@ export default function HistoryPage() {
                   {filtered.map((entry) => (
                     <tr
                       key={entry.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      className="hover:bg-surface-recessed dark:hover:bg-surface-recessed transition-colors"
                     >
                       {/* Date */}
-                      <td className="px-4 py-3 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                      <td className="px-4 py-3 whitespace-nowrap text-foreground-muted">
                         {formatDate(entry.timestamp)}
                       </td>
 
                       {/* Type */}
-                      <td className="px-4 py-3 whitespace-nowrap text-gray-800 dark:text-gray-200 font-medium">
+                      <td className="px-4 py-3 whitespace-nowrap text-foreground font-medium">
                         {txTypeLabel(entry.transactionType)}
                       </td>
 
@@ -343,7 +343,7 @@ export default function HistoryPage() {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1">
                           <span
-                            className="font-mono text-xs text-gray-700 dark:text-gray-300"
+                            className="font-mono text-xs text-foreground-muted"
                             title={entry.transactionId}
                           >
                             {truncateTxId(entry.transactionId)}
@@ -366,7 +366,7 @@ export default function HistoryPage() {
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
                             entry.network === 'mainnet'
-                              ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300'
+                              ? 'bg-success-soft text-success-soft-fg'
                               : 'bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300'
                           }`}
                         >
@@ -383,7 +383,7 @@ export default function HistoryPage() {
                           )}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium"
+                          className="inline-flex items-center gap-1 text-accent hover:underline text-xs font-medium"
                         >
                           View
                           <svg
@@ -408,7 +408,7 @@ export default function HistoryPage() {
             </div>
 
             {/* Summary footer */}
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400">
+            <div className="px-4 py-3 border-t border-border bg-surface-recessed text-xs text-foreground-subtle">
               Showing {filtered.length} of {entries.length} transaction
               {entries.length !== 1 ? 's' : ''}.
               {entries.length > 0 && (
@@ -419,9 +419,9 @@ export default function HistoryPage() {
         )}
 
         {/* Info — lighter treatment, separated from main content */}
-        <div className="mt-6 border-t border-gray-200 dark:border-gray-800 pt-6">
-          <details className="text-sm text-gray-600 dark:text-gray-400">
-            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300">
+        <div className="mt-6 border-t border-border pt-6">
+          <details className="text-sm text-foreground-muted">
+            <summary className="cursor-pointer font-medium text-foreground-muted">
               About Transaction History
             </summary>
             <ul className="list-disc list-inside space-y-1 mt-3">

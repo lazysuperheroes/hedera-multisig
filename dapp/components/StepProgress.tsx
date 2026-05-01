@@ -25,10 +25,10 @@ export function StepProgress({ steps, currentIndex }: StepProgressProps) {
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${
                     isDone
-                      ? 'bg-green-500 text-white'
+                      ? 'bg-success text-white'
                       : isActive
-                      ? 'bg-blue-600 text-white ring-4 ring-blue-100 dark:ring-blue-900/50'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                      ? 'bg-accent text-white ring-4 ring-blue-100 dark:ring-blue-900/50'
+                      : 'bg-surface-recessed text-foreground-subtle'
                   }`}
                   aria-current={isActive ? 'step' : undefined}
                 >
@@ -42,10 +42,10 @@ export function StepProgress({ steps, currentIndex }: StepProgressProps) {
                 </div>
                 <div className={`text-xs sm:text-sm mt-1.5 text-center font-medium transition-colors duration-300 ${
                   isActive
-                    ? 'text-blue-600 dark:text-blue-400'
+                    ? 'text-accent'
                     : isDone
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-gray-400 dark:text-gray-500'
+                    ? 'text-success'
+                    : 'text-foreground-subtle'
                 }`}>
                   {s.label}
                 </div>
@@ -53,8 +53,8 @@ export function StepProgress({ steps, currentIndex }: StepProgressProps) {
 
               {/* Connector line */}
               {i < steps.length - 1 && (
-                <div className="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 min-w-[16px] sm:min-w-[24px] mx-1 overflow-hidden self-start mt-5">
-                  <div className={`h-full rounded-full transition-all duration-500 ${isDone ? 'bg-green-500 w-full' : 'w-0'}`} />
+                <div className="flex-1 h-1.5 rounded-full bg-surface-recessed min-w-[16px] sm:min-w-[24px] mx-1 overflow-hidden self-start mt-5">
+                  <div className={`h-full rounded-full transition-all duration-500 ${isDone ? 'bg-success w-full' : 'w-0'}`} />
                 </div>
               )}
             </li>

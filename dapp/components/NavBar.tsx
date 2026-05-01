@@ -130,17 +130,13 @@ function NetworkBadge({ network }: { network: string }) {
   return (
     <span
       className={`
-        hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px]
+        hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px]
         font-semibold uppercase tracking-wider border
         ${isMainnet
           ? 'border-success/40 bg-success-soft text-success-soft-fg'
           : 'border-warning/40 bg-warning-soft text-warning-soft-fg'}
       `}
     >
-      <span
-        className={`w-1.5 h-1.5 rounded-full ${isMainnet ? 'bg-success' : 'bg-warning'}`}
-        aria-hidden="true"
-      />
       {network}
     </span>
   );
@@ -214,7 +210,11 @@ function WalletPanel() {
           </span>
           {wallet.balance && (
             <>
-              <span className="text-foreground-subtle" aria-hidden="true">·</span>
+              <span
+                className="text-foreground-subtle leading-none -mx-0.5 select-none"
+                aria-hidden="true"
+                style={{ transform: 'translateY(-1px)' }}
+              >·</span>
               <span className="text-xs text-success-soft-fg font-semibold tabular-nums">
                 {wallet.balance}
               </span>

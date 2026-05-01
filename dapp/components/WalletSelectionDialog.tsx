@@ -98,16 +98,16 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="wallet-dialog-title">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+      <div className="bg-surface rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-          <h2 id="wallet-dialog-title" className="text-xl font-semibold text-gray-900 dark:text-white">
+          <h2 id="wallet-dialog-title" className="text-xl font-semibold text-foreground">
             Connect Wallet
           </h2>
           <button
             onClick={onClose}
             aria-label="Close dialog"
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            className="text-foreground-subtle hover:text-foreground-muted hover:text-foreground-muted"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -117,15 +117,15 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
 
         {/* Mobile Alert */}
         {isMobile && (
-          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
+          <div className="mb-4 p-3 bg-info-soft border border-info/40 rounded-lg">
+            <p className="text-sm text-info-soft-fg">
               <span className="font-semibold">Tip:</span> For the best experience, use your mobile wallet app's built-in browser.
             </p>
           </div>
         )}
 
         {/* Description */}
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+        <p className="text-sm text-foreground-muted mb-6">
           Connect your Hedera wallet to sign multi-signature transactions securely.
         </p>
 
@@ -136,7 +136,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
             <div className="text-center">
               <button
                 onClick={handleBackToOptions}
-                className="mb-4 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1"
+                className="mb-4 text-sm text-accent hover:text-info-soft-fg flex items-center gap-1"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -154,17 +154,17 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
                       includeMargin={true}
                     />
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-foreground-muted">
                     Scan this QR code with your mobile wallet app
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-foreground-subtle">
                     Works with HashPack, Blade, and other WalletConnect-compatible wallets
                   </p>
                 </div>
               ) : (
                 <div className="py-8">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
+                  <p className="mt-2 text-sm text-foreground-muted">
                     Generating QR code...
                   </p>
                 </div>
@@ -173,17 +173,17 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
           ) : !isInitialized ? (
             // Loading initialization
             <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Initializing...</p>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
+              <p className="mt-2 text-sm text-foreground-subtle">Initializing...</p>
             </div>
           ) : isWaitingForExtensions ? (
             // Waiting for extensions
             <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
+              <p className="mt-2 text-sm text-foreground-muted">
                 Detecting wallet extensions...
               </p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-xs text-foreground-subtle">
                 Make sure your wallet extension is installed and unlocked
               </p>
             </div>
@@ -192,7 +192,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
             <button
               onClick={() => handleConnect()}
               disabled={isConnecting}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg transition-colors"
             >
               {isConnecting && (
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -219,7 +219,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
               <button
                 onClick={() => handleConnect()}
                 disabled={isConnecting}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg transition-colors"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M5.54 7.09c3.65-3.58 9.59-3.58 13.24 0l.44.43c.18.18.18.47 0 .65l-1.5 1.47c-.09.09-.24.09-.33 0l-.6-.59c-2.55-2.5-6.68-2.5-9.23 0l-.64.63c-.09.09-.24.09-.33 0L5.1 8.22c-.18-.18-.18-.47 0-.65l.44-.48zm16.33 3.04l1.34 1.31c.18.18.18.47 0 .65l-6.03 5.91c-.18.18-.47.18-.65 0L12 13.73c-.05-.05-.12-.05-.17 0L7.3 17.99c-.18.18-.47.18-.65 0L.62 12.08c-.18-.18-.18-.47 0-.65l1.34-1.31c.18-.18.47-.18.65 0l4.54 4.45c.05.05.12.05.17 0l4.54-4.45c.18-.18.47-.18.65 0l4.54 4.45c.05.05.12.05.17 0l4.54-4.45c.18-.18.47-.18.65 0z"/>
@@ -235,7 +235,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
                   key={extension.id}
                   onClick={() => handleConnect(extension.id)}
                   disabled={isConnecting}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 rounded-lg transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-surface-recessed hover:bg-surface-recessed dark:hover:bg-foreground-subtle disabled:opacity-50 rounded-lg transition-colors"
                 >
                   {extension.icon && (
                     <img
@@ -244,7 +244,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
                       className="w-6 h-6"
                     />
                   )}
-                  <span className="font-medium text-gray-900 dark:text-white">
+                  <span className="font-medium text-foreground">
                     {extension.name}
                   </span>
                 </button>
@@ -254,7 +254,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
               <button
                 onClick={() => handleConnect()}
                 disabled={isConnecting}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg transition-colors"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M5.54 7.09c3.65-3.58 9.59-3.58 13.24 0l.44.43c.18.18.18.47 0 .65l-1.5 1.47c-.09.09-.24.09-.33 0l-.6-.59c-2.55-2.5-6.68-2.5-9.23 0l-.64.63c-.09.09-.24.09-.33 0L5.1 8.22c-.18-.18-.18-.47 0-.65l.44-.48zm16.33 3.04l1.34 1.31c.18.18.18.47 0 .65l-6.03 5.91c-.18.18-.47.18-.65 0L12 13.73c-.05-.05-.12-.05-.17 0L7.3 17.99c-.18.18-.47.18-.65 0L.62 12.08c-.18-.18-.18-.47 0-.65l1.34-1.31c.18-.18.47-.18.65 0l4.54 4.45c.05.05.12.05.17 0l4.54-4.45c.18-.18.47-.18.65 0l4.54 4.45c.05.05.12.05.17 0l4.54-4.45c.18-.18.47-.18.65 0z"/>
@@ -266,8 +266,8 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
         </div>
 
         {/* Help Link */}
-        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+        <div className="mt-6 pt-4 border-t border-border">
+          <p className="text-xs text-foreground-subtle">
             <span className="font-medium">Why connect a wallet?</span> Your private keys stay in your wallet. We only request signatures when needed.
           </p>
         </div>

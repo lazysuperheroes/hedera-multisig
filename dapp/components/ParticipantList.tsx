@@ -44,29 +44,29 @@ function getStatusBadge(status: Participant['status']): {
       };
     case 'ready':
       return {
-        bg: 'bg-blue-100 dark:bg-blue-900/30',
-        text: 'text-blue-800 dark:text-blue-200',
+        bg: 'bg-info-soft',
+        text: 'text-info-soft-fg',
         label: 'Ready',
         icon: '✓',
       };
     case 'signed':
       return {
-        bg: 'bg-green-100 dark:bg-green-900/30',
-        text: 'text-green-800 dark:text-green-200',
+        bg: 'bg-success-soft',
+        text: 'text-success-soft-fg',
         label: 'Signed',
         icon: '✅',
       };
     case 'disconnected':
       return {
-        bg: 'bg-gray-100 dark:bg-gray-700',
-        text: 'text-gray-500 dark:text-gray-400',
+        bg: 'bg-surface-recessed',
+        text: 'text-foreground-subtle',
         label: 'Disconnected',
         icon: '⚫',
       };
     default:
       return {
-        bg: 'bg-gray-100 dark:bg-gray-700',
-        text: 'text-gray-600 dark:text-gray-400',
+        bg: 'bg-surface-recessed',
+        text: 'text-foreground-muted',
         label: 'Unknown',
         icon: '?',
       };
@@ -93,9 +93,9 @@ export function ParticipantList({
 
   if (sortedParticipants.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">Participants</h3>
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+      <div className="bg-surface border-2 border-border-strong rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4">Participants</h3>
+        <div className="text-center py-8 text-foreground-subtle">
           <div className="text-4xl mb-2">👥</div>
           <p>Waiting for participants to connect...</p>
         </div>
@@ -104,10 +104,10 @@ export function ParticipantList({
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg p-6">
+    <div className="bg-surface border-2 border-border-strong rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Participants</h3>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
+        <h3 className="text-lg font-semibold text-foreground">Participants</h3>
+        <span className="text-sm text-foreground-subtle">
           {sortedParticipants.filter((p) => p.status !== 'disconnected').length} connected
         </span>
       </div>
@@ -127,10 +127,10 @@ export function ParticipantList({
               key={participant.id}
               className={`p-3 rounded-lg border-2 transition-colors ${
                 isCurrentUser
-                  ? 'border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-950/30'
+                  ? 'border-accent bg-info-soft'
                   : participant.status === 'disconnected'
-                  ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 opacity-60'
-                  : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50'
+                  ? 'border-border bg-surface-recessed opacity-60'
+                  : 'border-border bg-surface-recessed'
               }`}
             >
               <div className="flex items-center justify-between">
@@ -141,11 +141,11 @@ export function ParticipantList({
                   {/* Participant Info */}
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-800 dark:text-gray-200 text-sm">
+                      <span className="font-medium text-foreground text-sm">
                         {isCurrentUser ? 'You' : `Participant`}
                       </span>
                       {isCurrentUser && (
-                        <span className="px-1.5 py-0.5 bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200 text-xs rounded">
+                        <span className="px-1.5 py-0.5 bg-info-soft text-info-soft-fg text-xs rounded">
                           (You)
                         </span>
                       )}
@@ -154,7 +154,7 @@ export function ParticipantList({
                     {/* Public Key */}
                     {participant.publicKey ? (
                       <div className="flex items-center gap-1 mt-1">
-                        <code className="text-xs font-mono text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                        <code className="text-xs font-mono text-foreground-muted bg-surface-recessed px-1.5 py-0.5 rounded">
                           {truncateKey(participant.publicKey)}
                         </code>
                         <CopyButton
@@ -163,13 +163,13 @@ export function ParticipantList({
                           size="sm"
                         />
                         {isEligible === false && (
-                          <span className="text-xs text-red-600 dark:text-red-400" title="Not in eligible keys list">
+                          <span className="text-xs text-destructive" title="Not in eligible keys list">
                             ⚠️
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-400 dark:text-gray-500 italic">
+                      <span className="text-xs text-foreground-subtle italic">
                         Waiting for public key...
                       </span>
                     )}
@@ -189,16 +189,16 @@ export function ParticipantList({
       </div>
 
       {/* Legend */}
-      <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
+      <div className="mt-4 pt-3 border-t border-border">
+        <div className="flex flex-wrap gap-3 text-xs text-foreground-subtle">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-warning"></span> Connected
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-blue-400"></span> Ready
+            <span className="w-2 h-2 rounded-full bg-info"></span> Ready
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-400"></span> Signed
+            <span className="w-2 h-2 rounded-full bg-success"></span> Signed
           </span>
         </div>
       </div>
