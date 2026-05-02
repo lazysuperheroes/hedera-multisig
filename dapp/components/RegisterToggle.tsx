@@ -1,9 +1,9 @@
 /**
- * RegisterToggle — flips the aesthetic register between Treasury and Dev.
+ * RegisterToggle — flips the aesthetic register between Treasury and Console.
  * Independent of light/dark/auto theme (which is owned by ThemeToggle).
  *
  * - Treasury (default): calm/precise/trustworthy. Heebo + Unbounded.
- * - Dev: sharp/technical/confident. Geist mono. Punk-terminal.
+ * - Console: sharp/technical/confident. Geist mono. Punk-terminal.
  */
 
 'use client';
@@ -14,18 +14,18 @@ export function RegisterToggle() {
   const { register, setRegister } = useTheme();
 
   const toggle = () => {
-    setRegister(register === 'treasury' ? 'dev' : 'treasury');
+    setRegister(register === 'treasury' ? 'console' : 'treasury');
   };
 
   const meta = register === 'treasury'
     ? {
         label: 'Treasury',
-        tooltip: 'Register: Treasury (calm/financial). Click for Developer mode.',
+        tooltip: 'Register: Treasury (calm/financial). Click for Console mode.',
         icon: <SerifTIcon />,
       }
     : {
-        label: 'Dev',
-        tooltip: 'Register: Developer (terminal/punk). Click for Treasury.',
+        label: 'Console',
+        tooltip: 'Register: Console (terminal/punk). Click for Treasury.',
         icon: <TerminalIcon />,
       };
 
@@ -40,7 +40,7 @@ export function RegisterToggle() {
       "
       title={meta.tooltip}
       aria-label={`Register: ${meta.label}. Click to switch.`}
-      aria-pressed={register === 'dev'}
+      aria-pressed={register === 'console'}
     >
       <span key={register} className="inline-flex animate-register-flash" aria-hidden="true">
         {meta.icon}

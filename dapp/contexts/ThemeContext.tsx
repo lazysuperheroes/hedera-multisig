@@ -8,15 +8,15 @@ export type ResolvedTheme = 'light' | 'dark';
 /**
  * Register controls the entire aesthetic register, not just colors:
  *  - "treasury" — calm/precise/trustworthy. Heebo + Unbounded.
- *  - "dev"      — sharp/technical/confident. Geist mono. Punk-terminal.
+ *  - "console"  — sharp/technical/confident. Geist mono. Punk-terminal.
  *
  * Theme and register are INDEPENDENT axes. All 6 combinations are valid:
- *   treasury × {light, dark, auto}  +  dev × {light, dark, auto}
+ *   treasury × {light, dark, auto}  +  console × {light, dark, auto}
  *
- * Dev no longer forces dark — a dev-light "paper terminal" palette is
- * defined in globals.css alongside dev-dark.
+ * Console doesn't force dark — a console-light "paper terminal" palette is
+ * defined in globals.css alongside console-dark.
  */
-export type Register = 'treasury' | 'dev';
+export type Register = 'treasury' | 'console';
 
 export interface ThemeContextType {
   theme: Theme;
@@ -30,7 +30,7 @@ const isValidTheme = (value: string | null): value is Theme =>
   value === 'light' || value === 'dark' || value === 'system';
 
 const isValidRegister = (value: string | null): value is Register =>
-  value === 'treasury' || value === 'dev';
+  value === 'treasury' || value === 'console';
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 

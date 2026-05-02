@@ -29,7 +29,7 @@ export function LSHLogo({ variant, className = '' }: LSHLogoProps) {
   const src = resolvedTheme === 'dark' ? LOGO_LIGHT : LOGO_DARK;
 
   if (variant === 'lockup') {
-    const isDev = register === 'dev';
+    const isDev = register === 'console';
     return (
       <div className={`flex items-center gap-3 ${className}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -58,7 +58,7 @@ export function LSHLogo({ variant, className = '' }: LSHLogoProps) {
               "
               aria-label="Developer register"
             >
-              [DEV]
+              [CONSOLE]
             </span>
           )}
         </div>
@@ -76,7 +76,7 @@ export function LSHLogo({ variant, className = '' }: LSHLogoProps) {
       aria-label="Made by Lazy Superheroes"
     >
       <span className="text-xs">
-        {register === 'dev' ? 'made by' : 'Made by'}
+        {register === 'console' ? 'made by' : 'Made by'}
       </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -91,11 +91,11 @@ export function LSHLogo({ variant, className = '' }: LSHLogoProps) {
         className="text-xs font-semibold tracking-tight"
         style={{ color: 'var(--lsh-gold)' }}
       >
-        {register === 'dev' ? 'lazy superheroes' : 'Lazy Superheroes'}
+        {register === 'console' ? 'lazy superheroes' : 'Lazy Superheroes'}
       </span>
-      {/* Q2: terminal cursor blink in dev mode — turns the attribution
+      {/* Q2: terminal cursor blink in console mode — turns the attribution
           into a tiny shell prompt, earns brand-family nod with character */}
-      {register === 'dev' && (
+      {register === 'console' && (
         <span
           className="inline-block w-[7px] h-[14px] bg-current animate-cursor-blink"
           style={{ color: 'var(--lsh-gold)' }}

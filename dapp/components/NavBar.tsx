@@ -15,15 +15,29 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTheme } from '../contexts/ThemeContext';
 import { useWallet } from '../hooks/useWallet';
 import { WalletSelectionDialog } from './WalletSelectionDialog';
 import { RegisterToggle } from './RegisterToggle';
 import { ThemeToggle } from './ThemeToggle';
 import { LSHLogo } from './LSHLogo';
+import { ConsoleBar } from './ConsoleBar';
 
+/**
+ * NavBar — register-aware shell.
+ * - treasury register: standard NavShell (logo + nav links + wallet panel + toggles)
+ * - console register:  ConsoleBar (top status bar with shell-prompt path)
+ *
+ * Both forms render their own theme + register toggles so the user can
+ * switch back regardless of which register they're in.
+ */
 export function NavBar() {
   const pathname = usePathname();
+  const { register } = useTheme();
   const isLanding = pathname === '/';
+  if (register === 'console') {
+    return <ConsoleBar showWalletPanel={!isLanding} />;
+  }
   return <NavShell showWalletPanel={!isLanding} />;
 }
 

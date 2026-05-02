@@ -3,7 +3,7 @@
 /* Class-based dark mode + register-aware variants for Tailwind v4 */
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant treasury (&:where([data-register="treasury"], [data-register="treasury"] *));
-@custom-variant dev (&:where([data-register="dev"], [data-register="dev"] *));
+@custom-variant console (&:where([data-register="console"], [data-register="console"] *));
 
 /* ---------------------------------------------------------------------------
    Tokens — three registers: treasury-light (default), treasury-dark, dev (dark-only)
@@ -101,7 +101,7 @@
    J2: dev now supports BOTH light and dark — no more color-scheme: dark
    override. The default block below is dev-LIGHT (paper-terminal feel);
    the .dark variant follows. */
-[data-register="dev"] {
+[data-register="console"] {
   --background: oklch(0.98 0.006 60);
   --surface: oklch(0.96 0.008 60);
   --surface-recessed: oklch(0.93 0.010 60);
@@ -112,8 +112,8 @@
   --border-strong: oklch(0.72 0.015 60);
 
   /* Deep cyan accent — darker for contrast on light paper.
-     J3: this is the "engineer tool" mark. Same hue family as dev-dark
-     so the register keeps coherent across light/dark. */
+     Engineer-tool mark; same hue family as console-dark so the register
+     keeps coherent across light/dark. */
   --accent: oklch(0.50 0.18 200);
   --accent-hover: oklch(0.42 0.20 200);
   --accent-fg: oklch(0.99 0 0);
@@ -135,16 +135,18 @@
 
   --scrim: oklch(0.10 0.012 60 / 0.78);
 
-  /* Dev typography — no display face; lean denser + monospace-prominent */
-  --font-heading: var(--font-geist-sans), system-ui, sans-serif;
-  --font-body: var(--font-geist-sans), system-ui, sans-serif;
+  /* K2: console typography is mono THROUGHOUT — body, headings, chrome.
+     The whole page reads as terminal output. Treasury keeps Heebo +
+     Unbounded; console commits to Geist Mono everywhere. */
+  --font-heading: var(--font-geist-mono), ui-monospace, monospace;
+  --font-body: var(--font-geist-mono), ui-monospace, monospace;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 /* Dev DARK — same warm-tinted neutrals, deeper. */
-.dark[data-register="dev"],
-[data-register="dev"] .dark,
-.dark:where([data-register="dev"]) {
+.dark[data-register="console"],
+[data-register="console"] .dark,
+.dark:where([data-register="console"]) {
   --background: oklch(0.13 0.006 60);
   --surface: oklch(0.17 0.008 60);
   --surface-recessed: oklch(0.21 0.008 60);
@@ -350,7 +352,7 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Tinted scrollbar (dev register especially benefits from terminal-feel scrollbars) */
+/* Tinted scrollbar (console register especially benefits from terminal-feel scrollbars) */
 @supports selector(::-webkit-scrollbar) {
   ::-webkit-scrollbar       { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: var(--background); }
@@ -362,125 +364,156 @@ html {
 }
 
 /* ---------------------------------------------------------------------------
-   Dev register — terminal/punk character.
-   Distinct typographic register, density, motion, and focus rings —
-   not just "dark mode with green." See .impeccable.md "Two registers,
-   one product" + design critique #2 issue H2.
+   Console register — terminal/punk character. The shape of the product
+   changes here — body mono, zero radius, dense spacing, terminal grammar.
+   Critique #4 priorities #1-3 + K-phase rename.
    --------------------------------------------------------------------------- */
 
-[data-register="dev"] .reg-tight { letter-spacing: -0.005em; }
+[data-register="console"] .reg-tight { letter-spacing: -0.005em; }
+
+/* K2 — body face is mono in console. Every paragraph, list item, table
+   cell, span — all of it. The single biggest visual signal that you're
+   in the engineer register. */
+[data-register="console"] body {
+  font-family: var(--font-body); /* already mono via the token override */
+}
 
 /* Code / kbd / samp always monospace */
-[data-register="dev"] code,
-[data-register="dev"] kbd,
-[data-register="dev"] samp {
+[data-register="console"] code,
+[data-register="console"] kbd,
+[data-register="console"] samp {
   font-family: var(--font-mono);
 }
 
-/* Chrome typography — labels, eyebrows, tabs — render in monospace.
-   The data inside (form values, content, headings) stays in the body face.
-   This is the Vercel/Railway/Resend "engineer-tool" register. */
-[data-register="dev"] label,
-[data-register="dev"] [role="tab"],
-[data-register="dev"] [role="tablist"],
-[data-register="dev"] dt,
-[data-register="dev"] summary,
-[data-register="dev"] .uppercase {
-  font-family: var(--font-mono);
-  letter-spacing: 0.02em;
+/* Chrome typography — labels and structural elements get UPPERCASE +
+   wide tracking on top of mono (since everything is mono now, uppercase
+   is what differentiates chrome from content). */
+[data-register="console"] label,
+[data-register="console"] [role="tab"],
+[data-register="console"] [role="tablist"],
+[data-register="console"] dt,
+[data-register="console"] summary,
+[data-register="console"] .uppercase {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.8125rem;
 }
 
-/* Page-hero H1 in dev mode: monospace + `> ` prompt prefix. ONLY on H1s
-   marked .page-hero — modal/error/dialog H1s keep their default treatment
-   so they read naturally during critical moments (signing flows, errors).
-   Lowercase was dropped — mono + prefix carry the brand moment alone.
-   (Critique #3 issue I2 + Q1.) */
-[data-register="dev"] .page-hero {
+/* K3 — Page-hero H1 in console mode: `$ ` shell-prompt prefix. Treasury
+   keeps the Unbounded display face on .page-hero; console swaps to mono
+   with the literal command-line glyph. */
+[data-register="console"] .page-hero {
   font-family: var(--font-mono);
   letter-spacing: -0.01em;
 }
-[data-register="dev"] .page-hero::before {
-  content: "> ";
+[data-register="console"] .page-hero::before {
+  content: "$ ";
   color: var(--accent);
   font-weight: 700;
 }
 
-/* H2/H3 in dev mode: monospace + accent left-border for stronger
-   sectional presence. Subtle but persistent — every section header
-   carries a dev-mode visual signal. (J3) */
-[data-register="dev"] h2,
-[data-register="dev"] h3 {
+/* K3 — primary-CTA grammar. Buttons + links with the .cmd class get a
+   `$ ` prefix in console mode. Treasury renders the prefix as nothing
+   (just the button label). */
+[data-register="console"] .cmd::before {
+  content: "$ ";
+  color: var(--accent);
+  font-weight: 700;
+  margin-right: 0.125rem;
+}
+
+/* H2/H3 in console mode: mono + accent left-border for sectional presence. */
+[data-register="console"] h2,
+[data-register="console"] h3 {
   font-family: var(--font-mono);
   letter-spacing: -0.005em;
 }
-[data-register="dev"] main h2,
-[data-register="dev"] main h3 {
+[data-register="console"] main h2,
+[data-register="console"] main h3 {
   border-left: 3px solid var(--accent);
   padding-left: 0.75rem;
   margin-left: -0.9rem;
 }
 
-/* Top-of-viewport accent strip — persistent dev-mode marker.
-   2px line just below the NavBar that announces "you are in dev". (J3) */
-[data-register="dev"] body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent);
-  z-index: 60;
-  pointer-events: none;
+/* K2 — ZERO radius across the board. Every rounded-* utility flattens to
+   a pure rectangle. This is the second biggest visual signal after body
+   mono. !important is needed to win against Tailwind utility specificity. */
+[data-register="console"] [class*="rounded-"] {
+  border-radius: 0 !important;
 }
 
-/* Density step — tighten card and form padding a notch in dev mode.
-   Most spacing comes from utility classes (p-6, p-4, etc.) which Tailwind
-   inlines; we use a single CSS rule that targets common content
-   containers. Aggressive enough to feel tighter, restrained enough to
-   not break layouts. */
-[data-register="dev"] .bg-surface,
-[data-register="dev"] .bg-surface-recessed {
-  /* Slightly tighter rounded corner — boxier feel */
-  --radius: 0.25rem;
+/* K2 — DENSITY compression. Common Tailwind padding/spacing utilities get
+   tightened by ~25-33% in console mode so pages fit more on screen and
+   feel like a console, not a marketing page. */
+[data-register="console"] .p-6 { padding: 1rem !important; }
+[data-register="console"] .p-4 { padding: 0.625rem !important; }
+[data-register="console"] .py-3\.5 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+[data-register="console"] .py-3 { padding-top: 0.4rem !important; padding-bottom: 0.4rem !important; }
+[data-register="console"] .py-2 { padding-top: 0.3rem !important; padding-bottom: 0.3rem !important; }
+[data-register="console"] .px-7 { padding-left: 1rem !important; padding-right: 1rem !important; }
+[data-register="console"] .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
+[data-register="console"] .space-y-6 > * + * { margin-top: 0.875rem !important; }
+[data-register="console"] .space-y-8 > * + * { margin-top: 1rem !important; }
+[data-register="console"] .gap-6 { gap: 1rem !important; }
+[data-register="console"] .gap-8 { gap: 1.25rem !important; }
+
+/* K6 — Console pane chrome. Cards marked with .console-pane + a
+   data-pane-label="~/foo.tx" attribute get a terminal-window-style
+   header strip in console mode. Treasury renders the card normally
+   (the ::before pseudo doesn't match outside [data-register="console"]).
+
+   Usage:
+     <div class="console-pane bg-surface border border-border p-4"
+          data-pane-label="~/inject.tx">...</div>
+*/
+[data-register="console"] .console-pane {
+  position: relative;
+  padding-top: 0;
 }
-[data-register="dev"] [class*="rounded-md"] {
-  border-radius: 0.25rem;
-}
-[data-register="dev"] [class*="rounded-lg"] {
-  border-radius: 0.375rem;
+[data-register="console"] .console-pane::before {
+  content: attr(data-pane-label);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--surface-recessed);
+  padding: 0.25rem 0.625rem;
+  border-bottom: 1px solid var(--accent);
+  margin: 0 -1rem 0.625rem -1rem;
 }
 
 /* Faster transitions — terminal-cadence (snappy) instead of treasury-calm */
-[data-register="dev"] .transition-colors,
-[data-register="dev"] .transition-opacity,
-[data-register="dev"] .transition-all,
-[data-register="dev"] .transition {
+[data-register="console"] .transition-colors,
+[data-register="console"] .transition-opacity,
+[data-register="console"] .transition-all,
+[data-register="console"] .transition {
   transition-duration: 120ms;
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Blocky focus ring — solid, no offset, accent colour. Closer to a
-   text-cursor selection than a refined ring. */
-[data-register="dev"] *:focus-visible {
+/* Blocky focus ring — solid, no offset, accent colour. */
+[data-register="console"] *:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 0;
   border-radius: 0;
 }
 
-/* Buttons in dev mode get a slight monospace treatment + tighter padding
+/* Buttons in console mode get a slight monospace treatment + tighter padding
    feel via letter-spacing — kept as text, not converted to font-mono so
    the "Join Session" CTA still reads as a button. */
-[data-register="dev"] button,
-[data-register="dev"] [role="button"] {
+[data-register="console"] button,
+[data-register="console"] [role="button"] {
   letter-spacing: 0.01em;
 }
 
-/* LSH gold attribution in dev mode: brighter so it keeps signal weight
+/* LSH gold attribution in console mode: brighter so it keeps signal weight
    on near-black background without bleeding toward warning hue.
    (G6 minor obs) — override the token at the register root so any
    var(--lsh-gold) consumer picks it up automatically. */
-[data-register="dev"] {
+[data-register="console"] {
   --lsh-gold: oklch(0.86 0.14 78);
 }
 

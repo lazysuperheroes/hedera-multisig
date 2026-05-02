@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { emitConsoleLog } from '../lib/console-log';
 
 interface SessionCredentials {
   sessionId: string;
@@ -54,16 +55,24 @@ export function useCoordinatorConnection(): UseCoordinatorConnectionReturn {
     let hasTransaction = false;
 
     try {
+      emitConsoleLog({ level: 'info', source: 'ws', message: `connecting to ${serverUrl}` });
       const ws = new WebSocket(serverUrl);
       wsRef.current = ws;
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           ws.close();
+          emitConsoleLog({ level: 'error', source: 'ws', message: 'connection timed out (10s)' });
           reject(new Error('Connection timed out after 10 seconds.'));
         }, 10000);
 
         ws.onopen = () => {
+          emitConsoleLog({
+            level: 'success',
+            source: 'ws',
+            message: 'open — sending AUTH',
+            data: { role: 'coordinator', sessionId },
+          });
           ws.send(
             JSON.stringify({
               type: 'AUTH',
@@ -80,6 +89,11 @@ export function useCoordinatorConnection(): UseCoordinatorConnectionReturn {
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data as string);
+            emitConsoleLog({
+              level: msg.type === 'ERROR' ? 'error' : 'debug',
+              source: 'ws',
+              message: `← ${msg.type}`,
+            });
 
             if (msg.type === 'AUTH_SUCCESS') {
               clearTimeout(timeout);
@@ -100,6 +114,16 @@ export function useCoordinatorConnection(): UseCoordinatorConnectionReturn {
                 info?.status === 'transaction-received' ||
                 info?.status === 'signing';
 
+              emitConsoleLog({
+                level: 'success',
+                source: 'session',
+                message: `authenticated as coordinator`,
+                data: {
+                  threshold: info?.threshold,
+                  eligible_keys: info?.eligiblePublicKeys?.length ?? 0,
+                  status: info?.status,
+                },
+              });
               resolve();
             } else if (msg.type === 'AUTH_FAILED') {
               clearTimeout(timeout);
@@ -115,6 +139,7 @@ export function useCoordinatorConnection(): UseCoordinatorConnectionReturn {
 
         ws.onerror = () => {
           clearTimeout(timeout);
+          emitConsoleLog({ level: 'error', source: 'ws', message: 'socket error' });
           reject(new Error('WebSocket connection failed. Is the server running?'));
         };
 

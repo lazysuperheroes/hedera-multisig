@@ -242,8 +242,13 @@ export default function CreatePage() {
                 </div>
               )}
 
-              {/* Transaction builder — KEEP the card here. This is where focus + chrome help. */}
-              <div className="bg-surface border border-border rounded-md p-6">
+              {/* Transaction builder — KEEP the card here. This is where focus + chrome help.
+                  In console register, the .console-pane class + data-pane-label add a
+                  terminal-window header strip ("~/INJECT.TX") via globals.css. */}
+              <div
+                className="console-pane bg-surface border border-border rounded-md p-6"
+                data-pane-label="~/inject.tx"
+              >
                 <h2 className="font-heading text-lg font-semibold text-foreground mb-4">
                   Inject transaction
                 </h2>

@@ -60,7 +60,7 @@
 
 ## What hedera-multisig should explicitly NOT take
 
-- **Dark-mode-only**. We are light-default with a dark/dev mode toggle.
+- **Dark-mode-only**. We are light-default with a dark/console mode toggle.
   Treasury operators don't want a forced dark UI.
 - **Decorative gradients** (`.zero-font`, `.zerox-font`, `.lazy-font`, etc.).
   These are LSH game-energy decoration — costume-y in a financial signing
@@ -70,7 +70,7 @@
 - **PoolTogether / Stake.us reference**. Their "crypto gaming with clear
   odds" frame doesn't apply to a multi-party signing tool. Our references
   are Stripe / Mercury / Linear (treasury mode) and Vercel / Railway /
-  Resend (dev mode).
+  Resend (console mode).
 - **"Bold but not garish, playful but not childish"**. We are *calm-precise*
-  in treasury mode and *sharp-technical* in dev mode. Playfulness is not
+  in treasury mode and *sharp-technical* in console mode. Playfulness is not
   in our register at all.

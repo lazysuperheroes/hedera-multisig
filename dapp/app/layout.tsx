@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Heebo, Unbounded } from "next/font/google";
 import "./globals.css";
 import { NavBar } from "../components/NavBar";
+import { ConsoleLog } from "../components/ConsoleLog";
 import { ThemeProvider } from "../contexts/ThemeContext";
 
 // Geist — kept as fallback + dev-register face (functional, terminal-adjacent)
@@ -61,6 +62,9 @@ export default function RootLayout({
         <ThemeProvider>
           <NavBar />
           {children}
+          {/* Console-only: streaming event log drawer at the bottom.
+              Renders nothing in treasury register. */}
+          <ConsoleLog />
         </ThemeProvider>
       </body>
     </html>

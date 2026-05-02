@@ -28,7 +28,7 @@ export default function Home() {
               <Link
                 href="/join"
                 className="
-                  inline-flex items-center justify-center px-7 py-3.5 text-base font-semibold
+                  cmd inline-flex items-center justify-center px-7 py-3.5 text-base font-semibold
                   bg-accent text-accent-fg rounded-md
                   hover:bg-accent-hover transition-colors
                 "
@@ -38,7 +38,7 @@ export default function Home() {
               <Link
                 href="/create"
                 className="
-                  inline-flex items-center justify-center px-7 py-3.5 text-base font-semibold
+                  cmd inline-flex items-center justify-center px-7 py-3.5 text-base font-semibold
                   text-foreground border border-border-strong rounded-md
                   hover:bg-surface-recessed transition-colors
                 "

@@ -21,6 +21,7 @@ import {
   fetchConnectedAccountData,
   type ExtensionData,
 } from '../lib/walletconnect';
+import { emitConsoleLog } from '../lib/console-log';
 
 export interface UseWalletReturn {
   // State
@@ -160,11 +161,19 @@ export function useWallet(): UseWalletReturn {
       setIsConnected(connected);
 
       if (connected) {
-        setAccountId(getAccountId());
+        const acctId = getAccountId();
+        setAccountId(acctId);
         setPublicKey(getPublicKey());
         setPublicKeyType(getPublicKeyType());
         setEvmAddress(getEvmAddress());
         setBalance(getBalance());
+
+        emitConsoleLog({
+          level: 'success',
+          source: 'wallet',
+          message: `connected via ${extensionId || 'walletconnect'}`,
+          data: { account: acctId },
+        });
 
         // Fetch account data from mirror node (public key, key type, balance, EVM address)
         // This runs in background and updates cache
@@ -175,7 +184,9 @@ export function useWallet(): UseWalletReturn {
       }
     } catch (err) {
       console.error('Failed to connect wallet:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+      const msg = err instanceof Error ? err.message : 'Failed to connect wallet';
+      setError(msg);
+      emitConsoleLog({ level: 'error', source: 'wallet', message: `connect failed: ${msg}` });
       throw err;
     } finally {
       setIsConnecting(false);
@@ -197,6 +208,8 @@ export function useWallet(): UseWalletReturn {
     setAccountId(null);
     setPublicKey(null);
     setIsConnected(false);
+
+    emitConsoleLog({ level: 'info', source: 'wallet', message: 'disconnected' });
   }, []);
 
   return {

@@ -25,7 +25,7 @@
 **Dark mode only.** The application forces dark mode via `next-themes`. All design tokens refer to the `.dark` variant in `globals.css`. Never produce LSH-branded output in light mode.
 
 > **hedera-multisig deviation:** This dApp is light-default with an explicit
-> dark/dev mode toggle. The "dark mode only" rule applies to consumer-facing
+> dark/console mode toggle. The "dark mode only" rule applies to consumer-facing
 > LSH products (lazylotto), not financial signing tools.
 
 ---
@@ -116,7 +116,7 @@ Five sequential chart colours (`chart-1` through `chart-5`) for data visualisati
 
 > **hedera-multisig deviation:** Decorative typefaces are out of scope. This
 > is a financial signing tool and game-energy fonts would feel costume-y.
-> Treasury mode SHOULD adopt Heebo + Unbounded for family unity; dev mode
+> Treasury mode SHOULD adopt Heebo + Unbounded for family unity; console mode
 > is free to choose a more terminal-aligned grotesque + monospace stack.
 
 ### 4.3 Text Scale
