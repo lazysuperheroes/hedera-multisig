@@ -5,7 +5,7 @@ import { CopyButton } from '../CopyButton';
 import { QRCodeDisplay } from '../QRCodeDisplay';
 
 const cardClass =
-  'bg-surface rounded-lg shadow-sm border border-border p-6';
+  'console-pane bg-surface rounded-lg shadow-sm border border-border p-6';
 
 interface SessionCredentials {
   sessionId: string;
@@ -70,7 +70,7 @@ export function ShareStep({
       )}
 
       {/* Credentials card */}
-      <div className={cardClass}>
+      <div className={cardClass} data-pane-label="~/credentials">
         <h2 className="text-lg font-semibold text-foreground mb-4">
           Session Credentials
         </h2>
@@ -106,7 +106,7 @@ export function ShareStep({
 
       {/* QR Code + Connection String */}
       {connectionString && (
-        <div className={cardClass}>
+        <div className={cardClass} data-pane-label="~/share.links">
           <h2 className="text-lg font-semibold text-foreground mb-4">
             Share with Participants
           </h2>
@@ -154,7 +154,7 @@ export function ShareStep({
       )}
 
       {/* Monitor link */}
-      <div className={cardClass}>
+      <div className={cardClass} data-pane-label="~/monitor">
         <h2 className="text-lg font-semibold text-foreground mb-3">
           Monitor Session
         </h2>

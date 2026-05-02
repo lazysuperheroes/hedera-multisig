@@ -399,40 +399,74 @@ html {
   font-size: 0.8125rem;
 }
 
-/* K3 — Page-hero H1 in console mode: `$ ` shell-prompt prefix. Treasury
-   keeps the Unbounded display face on .page-hero; console swaps to mono
-   with the literal command-line glyph. */
+/* L1 — Page-hero H1 in console mode: smaller, mono, with a raised `$`
+   prompt prefix. Half the size of treasury's hero so the page feels
+   compact at a glance. The `$` is rendered slightly raised + reduced
+   opacity to read as a terminal-prompt mark, not part of the headline. */
 [data-register="console"] .page-hero {
   font-family: var(--font-mono);
   letter-spacing: -0.01em;
+  font-size: 1.375rem !important;
+  line-height: 1.2 !important;
+  margin-bottom: 1rem !important;
+}
+@media (min-width: 640px) {
+  [data-register="console"] .page-hero {
+    font-size: 1.625rem !important;
+  }
 }
 [data-register="console"] .page-hero::before {
   content: "$ ";
   color: var(--accent);
   font-weight: 700;
+  font-size: 0.85em;
+  vertical-align: 0.05em;
+  opacity: 0.7;
 }
 
-/* K3 — primary-CTA grammar. Buttons + links with the .cmd class get a
-   `$ ` prefix in console mode. Treasury renders the prefix as nothing
-   (just the button label). */
+/* K3 + L4 — primary-CTA grammar. Buttons + links with the .cmd class get
+   a `$ ` prefix in console mode AND a right-aligned `⏎` hint to evoke
+   keyboard-shortcut affordances common in dev tools. Treasury renders
+   the prefix as nothing. */
+[data-register="console"] .cmd {
+  position: relative;
+  padding-right: 2.5rem !important;
+}
 [data-register="console"] .cmd::before {
   content: "$ ";
   color: var(--accent);
   font-weight: 700;
   margin-right: 0.125rem;
+  opacity: 0.85;
+}
+[data-register="console"] .cmd::after {
+  content: "\21B5"; /* ⏎ */
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.55;
+  font-size: 0.95em;
+  font-weight: normal;
 }
 
-/* H2/H3 in console mode: mono + accent left-border for sectional presence. */
+/* L1 — H2/H3 in console: shrink to eyebrow-sized + uppercase. The
+   accent left-border carries the section-header signal; the size
+   doesn't need to. */
 [data-register="console"] h2,
 [data-register="console"] h3 {
   font-family: var(--font-mono);
-  letter-spacing: -0.005em;
+  letter-spacing: 0.05em;
 }
 [data-register="console"] main h2,
 [data-register="console"] main h3 {
   border-left: 3px solid var(--accent);
-  padding-left: 0.75rem;
-  margin-left: -0.9rem;
+  padding-left: 0.625rem;
+  margin-left: -0.75rem;
+  font-size: 0.8125rem !important;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem !important;
+  font-weight: 700;
 }
 
 /* K2 — ZERO radius across the board. Every rounded-* utility flattens to
@@ -442,20 +476,154 @@ html {
   border-radius: 0 !important;
 }
 
-/* K2 — DENSITY compression. Common Tailwind padding/spacing utilities get
-   tightened by ~25-33% in console mode so pages fit more on screen and
-   feel like a console, not a marketing page. */
-[data-register="console"] .p-6 { padding: 1rem !important; }
+/* K2+L3 — DENSITY compression. Common Tailwind padding/spacing/margin
+   utilities tightened so pages fit more on screen and feel like a
+   console, not a marketing page. Treasury keeps the spacious defaults. */
+[data-register="console"] .p-8 { padding: 1rem !important; }
+[data-register="console"] .p-6 { padding: 0.875rem !important; }
 [data-register="console"] .p-4 { padding: 0.625rem !important; }
-[data-register="console"] .py-3\.5 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+[data-register="console"] .py-3\.5 { padding-top: 0.45rem !important; padding-bottom: 0.45rem !important; }
 [data-register="console"] .py-3 { padding-top: 0.4rem !important; padding-bottom: 0.4rem !important; }
 [data-register="console"] .py-2 { padding-top: 0.3rem !important; padding-bottom: 0.3rem !important; }
 [data-register="console"] .px-7 { padding-left: 1rem !important; padding-right: 1rem !important; }
 [data-register="console"] .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
-[data-register="console"] .space-y-6 > * + * { margin-top: 0.875rem !important; }
+[data-register="console"] .pt-12 { padding-top: 1.5rem !important; }
+[data-register="console"] .pt-20 { padding-top: 2rem !important; }
+[data-register="console"] .pt-24 { padding-top: 2rem !important; }
+[data-register="console"] .pb-12 { padding-bottom: 1.5rem !important; }
+[data-register="console"] .pb-20 { padding-bottom: 2rem !important; }
+
+[data-register="console"] .space-y-6 > * + * { margin-top: 0.75rem !important; }
 [data-register="console"] .space-y-8 > * + * { margin-top: 1rem !important; }
+[data-register="console"] .space-y-12 > * + * { margin-top: 1.25rem !important; }
+
 [data-register="console"] .gap-6 { gap: 1rem !important; }
 [data-register="console"] .gap-8 { gap: 1.25rem !important; }
+
+[data-register="console"] .mb-12 { margin-bottom: 1.25rem !important; }
+[data-register="console"] .mb-10 { margin-bottom: 1rem !important; }
+[data-register="console"] .mb-8 { margin-bottom: 0.875rem !important; }
+[data-register="console"] .mb-6 { margin-bottom: 0.75rem !important; }
+[data-register="console"] .mb-4 { margin-bottom: 0.5rem !important; }
+[data-register="console"] .mb-3 { margin-bottom: 0.4rem !important; }
+[data-register="console"] .mt-12 { margin-top: 1.25rem !important; }
+[data-register="console"] .mt-10 { margin-top: 1rem !important; }
+[data-register="console"] .mt-8 { margin-top: 0.875rem !important; }
+[data-register="console"] .mt-6 { margin-top: 0.75rem !important; }
+[data-register="console"] .mt-4 { margin-top: 0.5rem !important; }
+
+/* L1 — body/label/input compression. The single biggest density win:
+   13px mono body, 11px uppercase labels, half-height inputs. Mono is
+   denser horizontally than sans, so dropping from 16px to 13px keeps
+   the visual weight in check. */
+[data-register="console"] body,
+[data-register="console"] p,
+[data-register="console"] li,
+[data-register="console"] dd,
+[data-register="console"] td,
+[data-register="console"] th,
+[data-register="console"] .text-base,
+[data-register="console"] .text-sm {
+  font-size: 0.8125rem !important;
+  line-height: 1.55 !important;
+}
+[data-register="console"] .text-lg {
+  font-size: 0.9375rem !important;
+  line-height: 1.45 !important;
+}
+[data-register="console"] .text-xl {
+  font-size: 1rem !important;
+  line-height: 1.35 !important;
+}
+
+[data-register="console"] label {
+  font-size: 0.6875rem !important;
+  margin-bottom: 0.25rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.85;
+}
+
+[data-register="console"] input[type="text"],
+[data-register="console"] input[type="password"],
+[data-register="console"] input[type="email"],
+[data-register="console"] input[type="number"],
+[data-register="console"] input[type="search"],
+[data-register="console"] input:not([type]),
+[data-register="console"] textarea,
+[data-register="console"] select {
+  padding-top: 0.4rem !important;
+  padding-bottom: 0.4rem !important;
+  padding-left: 0.625rem !important;
+  padding-right: 0.625rem !important;
+  font-size: 0.8125rem !important;
+  border-width: 1.5px !important;
+  line-height: 1.4 !important;
+}
+
+/* L3 — Console pages get tighter outer padding so the content reaches
+   closer to the viewport edges. Treasury keeps generous outer breath. */
+[data-register="console"] main {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+@media (min-width: 640px) {
+  [data-register="console"] main {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+  }
+}
+
+/* L2 — Compact StepProgress in console: flat single-line breadcrumb.
+   Squares shrink to ~20px, layout flips horizontal so number + label
+   sit side-by-side, rails become arrows via ::before pseudo. */
+[data-register="console"] .step-progress {
+  margin-bottom: 1rem !important;
+}
+[data-register="console"] .step-progress-marker-wrap {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  min-width: 0 !important;
+}
+[data-register="console"] .step-progress-marker {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  font-size: 0.625rem !important;
+  box-shadow: none !important;
+  border-radius: 0 !important; /* squares already, but ensure */
+}
+[data-register="console"] .step-progress-marker svg {
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+}
+[data-register="console"] .step-progress-label {
+  margin-top: 0 !important;
+  font-size: 0.75rem !important;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+/* Replace the rail bar with a simple arrow glyph in console */
+[data-register="console"] .step-progress-rail {
+  background: transparent !important;
+  height: auto !important;
+  margin-top: 0 !important;
+  align-self: center !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem !important;
+  padding: 0 0.25rem;
+}
+[data-register="console"] .step-progress-rail-fill {
+  display: none !important;
+}
+[data-register="console"] .step-progress-rail::before {
+  content: "→";
+  color: var(--foreground-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
 
 /* K6 — Console pane chrome. Cards marked with .console-pane + a
    data-pane-label="~/foo.tx" attribute get a terminal-window-style

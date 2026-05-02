@@ -10,7 +10,7 @@ const labelClass =
   'block text-sm font-medium text-foreground-muted mb-2';
 
 const cardClass =
-  'bg-surface rounded-lg shadow-sm border border-border p-6';
+  'console-pane bg-surface rounded-lg shadow-sm border border-border p-6';
 
 const primaryBtnClass =
   'w-full px-6 py-4 bg-accent text-white font-semibold rounded-lg shadow-lg ' +
@@ -45,7 +45,11 @@ export function ConnectStep({
   onConnect,
 }: ConnectStepProps) {
   return (
-    <section aria-label="Connect to session" className={cardClass}>
+    <section
+      aria-label="Connect to session"
+      className={cardClass}
+      data-pane-label="~/connect.session"
+    >
       <h2 className="text-lg font-semibold text-foreground mb-6">
         Session Credentials
       </h2>

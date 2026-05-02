@@ -12,18 +12,18 @@ interface StepProgressProps {
 
 export function StepProgress({ steps, currentIndex }: StepProgressProps) {
   return (
-    <nav aria-label="Progress" className="mb-8">
-      <ol className="flex items-center">
+    <nav aria-label="Progress" className="step-progress mb-8">
+      <ol className="step-progress-list flex items-center">
         {steps.map((s, i) => {
           const isActive = i === currentIndex;
           const isDone = i < currentIndex;
 
           return (
-            <li key={s.key} className="flex items-center flex-1 last:flex-none">
-              {/* Step circle + label */}
-              <div className="flex flex-col items-center min-w-[56px] sm:min-w-[64px]">
+            <li key={s.key} className="step-progress-item flex items-center flex-1 last:flex-none">
+              {/* Step marker + label */}
+              <div className="step-progress-marker-wrap flex flex-col items-center min-w-[56px] sm:min-w-[64px]">
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${
+                  className={`step-progress-marker w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${
                     isDone
                       ? 'bg-success text-white'
                       : isActive
@@ -40,7 +40,7 @@ export function StepProgress({ steps, currentIndex }: StepProgressProps) {
                     i + 1
                   )}
                 </div>
-                <div className={`text-xs sm:text-sm mt-1.5 text-center font-medium transition-colors duration-300 ${
+                <div className={`step-progress-label text-xs sm:text-sm mt-1.5 text-center font-medium transition-colors duration-300 ${
                   isActive
                     ? 'text-accent'
                     : isDone
@@ -51,10 +51,10 @@ export function StepProgress({ steps, currentIndex }: StepProgressProps) {
                 </div>
               </div>
 
-              {/* Connector line */}
+              {/* Connector */}
               {i < steps.length - 1 && (
-                <div className="flex-1 h-1.5 rounded-full bg-surface-recessed min-w-[16px] sm:min-w-[24px] mx-1 overflow-hidden self-start mt-5">
-                  <div className={`h-full rounded-full transition-all duration-500 ${isDone ? 'bg-success w-full' : 'w-0'}`} />
+                <div className="step-progress-rail flex-1 h-1.5 rounded-full bg-surface-recessed min-w-[16px] sm:min-w-[24px] mx-1 overflow-hidden self-start mt-5">
+                  <div className={`step-progress-rail-fill h-full rounded-full transition-all duration-500 ${isDone ? 'bg-success w-full' : 'w-0'}`} />
                 </div>
               )}
             </li>
