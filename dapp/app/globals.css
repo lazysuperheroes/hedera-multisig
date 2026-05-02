@@ -93,28 +93,73 @@
   --scrim: oklch(0.06 0.012 250 / 0.84);
 }
 
-/* DEV register — terminal/punk, dark-only. Hue ~150 (acid lime accent), zinc-ish neutrals. */
-[data-register="dev"] {
-  --background: oklch(0.13 0.006 250);
-  --surface: oklch(0.17 0.008 250);
-  --surface-recessed: oklch(0.21 0.008 250);
-  --foreground: oklch(0.95 0.006 145);
-  --foreground-muted: oklch(0.70 0.012 145);
-  --foreground-subtle: oklch(0.55 0.012 145);
-  --border: oklch(0.26 0.010 250);
-  --border-strong: oklch(0.36 0.014 250);
+/* DEV register — terminal/punk. Warm-paper neutrals (hue 60) so the
+   register reads visibly different from treasury (cool hue 250) at every
+   surface, not just in accent colour. Cyan accent (hue 200) for the
+   "engineer tool" register keeping success/warning/info distinct.
 
-  /* Sharp cyan accent — committed, distinct from success. Dev mode uses
-     a single tone (0.72) for both bg and text so the token system stays
-     clean — no parallel "darker for buttons, brighter for links" override.
-     (Critique #2 H3 + critique #3 I5 token consistency.) */
+   J2: dev now supports BOTH light and dark — no more color-scheme: dark
+   override. The default block below is dev-LIGHT (paper-terminal feel);
+   the .dark variant follows. */
+[data-register="dev"] {
+  --background: oklch(0.98 0.006 60);
+  --surface: oklch(0.96 0.008 60);
+  --surface-recessed: oklch(0.93 0.010 60);
+  --foreground: oklch(0.18 0.012 60);
+  --foreground-muted: oklch(0.42 0.012 60);
+  --foreground-subtle: oklch(0.55 0.012 60);
+  --border: oklch(0.84 0.012 60);
+  --border-strong: oklch(0.72 0.015 60);
+
+  /* Deep cyan accent — darker for contrast on light paper.
+     J3: this is the "engineer tool" mark. Same hue family as dev-dark
+     so the register keeps coherent across light/dark. */
+  --accent: oklch(0.50 0.18 200);
+  --accent-hover: oklch(0.42 0.20 200);
+  --accent-fg: oklch(0.99 0 0);
+  --accent-soft: oklch(0.92 0.05 200);
+  --accent-soft-fg: oklch(0.42 0.18 200);
+
+  --success: oklch(0.50 0.18 142);
+  --success-soft: oklch(0.92 0.05 142);
+  --success-soft-fg: oklch(0.36 0.14 142);
+  --warning: oklch(0.66 0.16 75);
+  --warning-soft: oklch(0.95 0.04 75);
+  --warning-soft-fg: oklch(0.42 0.13 75);
+  --info: oklch(0.62 0.14 215);
+  --info-soft: oklch(0.93 0.04 215);
+  --info-soft-fg: oklch(0.40 0.14 215);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-soft: oklch(0.93 0.04 25);
+  --destructive-soft-fg: oklch(0.42 0.18 25);
+
+  --scrim: oklch(0.10 0.012 60 / 0.78);
+
+  /* Dev typography — no display face; lean denser + monospace-prominent */
+  --font-heading: var(--font-geist-sans), system-ui, sans-serif;
+  --font-body: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* Dev DARK — same warm-tinted neutrals, deeper. */
+.dark[data-register="dev"],
+[data-register="dev"] .dark,
+.dark:where([data-register="dev"]) {
+  --background: oklch(0.13 0.006 60);
+  --surface: oklch(0.17 0.008 60);
+  --surface-recessed: oklch(0.21 0.008 60);
+  --foreground: oklch(0.95 0.006 60);
+  --foreground-muted: oklch(0.70 0.012 60);
+  --foreground-subtle: oklch(0.55 0.012 60);
+  --border: oklch(0.26 0.010 60);
+  --border-strong: oklch(0.36 0.014 60);
+
   --accent: oklch(0.72 0.16 200);
   --accent-hover: oklch(0.80 0.17 200);
   --accent-fg: oklch(0.10 0.020 200);
   --accent-soft: oklch(0.28 0.08 200);
   --accent-soft-fg: oklch(0.82 0.16 200);
 
-  /* Success stays acid-lime — distinct hue family from cyan accent. */
   --success: oklch(0.82 0.20 142);
   --success-soft: oklch(0.28 0.08 142);
   --success-soft-fg: oklch(0.88 0.18 142);
@@ -128,17 +173,7 @@
   --destructive-soft: oklch(0.32 0.10 25);
   --destructive-soft-fg: oklch(0.90 0.18 25);
 
-  --scrim: oklch(0.06 0.008 250 / 0.86);
-
-  /* Dev typography — no display face; lean denser + monospace-prominent */
-  --font-heading: var(--font-geist-sans), system-ui, sans-serif;
-  --font-body: var(--font-geist-sans), system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-}
-
-/* Force dark base when register is dev (dev has no light mode) */
-[data-register="dev"] {
-  color-scheme: dark;
+  --scrim: oklch(0.06 0.008 60 / 0.86);
 }
 
 @theme inline {
@@ -370,12 +405,33 @@ html {
   font-weight: 700;
 }
 
-/* H2/H3 in dev mode: monospace (chrome treatment). Hierarchy preserved
-   via size, weight, and the body face vs heading-mono distinction. */
+/* H2/H3 in dev mode: monospace + accent left-border for stronger
+   sectional presence. Subtle but persistent — every section header
+   carries a dev-mode visual signal. (J3) */
 [data-register="dev"] h2,
 [data-register="dev"] h3 {
   font-family: var(--font-mono);
   letter-spacing: -0.005em;
+}
+[data-register="dev"] main h2,
+[data-register="dev"] main h3 {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.75rem;
+  margin-left: -0.9rem;
+}
+
+/* Top-of-viewport accent strip — persistent dev-mode marker.
+   2px line just below the NavBar that announces "you are in dev". (J3) */
+[data-register="dev"] body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  z-index: 60;
+  pointer-events: none;
 }
 
 /* Density step — tighten card and form padding a notch in dev mode.

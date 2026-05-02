@@ -7,12 +7,14 @@ export type ResolvedTheme = 'light' | 'dark';
 
 /**
  * Register controls the entire aesthetic register, not just colors:
- *  - "treasury" — calm/precise/trustworthy. Heebo + Unbounded. Light-default.
- *  - "dev"      — sharp/technical/confident. Geist + acid-lime accent. Dark-only.
+ *  - "treasury" — calm/precise/trustworthy. Heebo + Unbounded.
+ *  - "dev"      — sharp/technical/confident. Geist mono. Punk-terminal.
  *
- * The register switch is the differentiator — it swaps tokens, fonts,
- * and motion budget. Dev register forces dark resolved-theme regardless of
- * the user's light/dark setting.
+ * Theme and register are INDEPENDENT axes. All 6 combinations are valid:
+ *   treasury × {light, dark, auto}  +  dev × {light, dark, auto}
+ *
+ * Dev no longer forces dark — a dev-light "paper terminal" palette is
+ * defined in globals.css alongside dev-dark.
  */
 export type Register = 'treasury' | 'dev';
 
@@ -38,41 +40,53 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [register, setRegisterState] = useState<Register>('treasury');
   const [mounted, setMounted] = useState(false);
 
+  // Refs track the LATEST committed values so cross-axis setters don't
+  // race against React's deferred ref-sync useEffects. Updated synchronously
+  // inside applyAll() — never via a separate effect.
   const themeRef = useRef<Theme>(theme);
   const registerRef = useRef<Register>(register);
-  useEffect(() => { themeRef.current = theme; }, [theme]);
-  useEffect(() => { registerRef.current = register; }, [register]);
 
   const getSystemTheme = (): ResolvedTheme => {
     if (typeof window === 'undefined') return 'light';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   };
 
-  const resolveTheme = (themeSetting: Theme, reg: Register): ResolvedTheme => {
-    // Dev register forces dark — terminal/punk has no light variant
-    if (reg === 'dev') return 'dark';
+  const resolveTheme = (themeSetting: Theme): ResolvedTheme => {
     if (themeSetting === 'system') return getSystemTheme();
     return themeSetting;
   };
 
-  const applyState = (resolved: ResolvedTheme, reg: Register) => {
+  /**
+   * Atomically apply both axes. The previous bug: setRegister+setTheme called
+   * back-to-back each ran their own applyState off stale refs, overwriting
+   * each other. Now every axis change goes through applyAll which writes
+   * BOTH attributes + classes + refs + storage in one synchronous block.
+   */
+  const applyAll = (nextTheme: Theme, nextRegister: Register) => {
+    const resolved = resolveTheme(nextTheme);
     const root = document.documentElement;
     root.classList.remove('light', 'dark');
     root.classList.add(resolved);
-    root.setAttribute('data-register', reg);
+    root.setAttribute('data-register', nextRegister);
+
+    // Update refs synchronously so the next call (if any) reads fresh values.
+    themeRef.current = nextTheme;
+    registerRef.current = nextRegister;
+
+    setThemeState(nextTheme);
+    setRegisterState(nextRegister);
     setResolvedTheme(resolved);
+
+    try { localStorage.setItem('theme', nextTheme); } catch {}
+    try { localStorage.setItem('register', nextRegister); } catch {}
   };
 
   const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme);
-    try { localStorage.setItem('theme', newTheme); } catch {}
-    applyState(resolveTheme(newTheme, registerRef.current), registerRef.current);
+    applyAll(newTheme, registerRef.current);
   };
 
   const setRegister = (newRegister: Register) => {
-    setRegisterState(newRegister);
-    try { localStorage.setItem('register', newRegister); } catch {}
-    applyState(resolveTheme(themeRef.current, newRegister), newRegister);
+    applyAll(themeRef.current, newRegister);
   };
 
   useEffect(() => {
@@ -86,25 +100,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const initialTheme: Theme = isValidTheme(storedTheme) ? storedTheme : 'system';
     const initialRegister: Register = isValidRegister(storedRegister) ? storedRegister : 'treasury';
 
-    // Hydration setState: this is the canonical "synchronize state with an
-    // external system" pattern (localStorage + window.matchMedia, neither of
-    // which exist on the server). Single render after mount, then steady-state.
-    setThemeState(initialTheme);
-    setRegisterState(initialRegister);
-    themeRef.current = initialTheme;
-    registerRef.current = initialRegister;
-    applyState(resolveTheme(initialTheme, initialRegister), initialRegister);
+    applyAll(initialTheme, initialRegister);
     setMounted(true);
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
-      if (themeRef.current === 'system' && registerRef.current === 'treasury') {
-        applyState(getSystemTheme(), registerRef.current);
+      if (themeRef.current === 'system') {
+        const resolved = getSystemTheme();
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(resolved);
+        setResolvedTheme(resolved);
       }
     };
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
-    // resolveTheme + applyState are stable closures over refs; safe to omit.
+    // applyAll is a stable closure over refs; safe to omit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

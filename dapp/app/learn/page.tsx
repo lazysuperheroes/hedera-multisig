@@ -9,12 +9,18 @@ export const metadata = {
 
 const REPO_BASE = 'https://github.com/lazysuperheroes/hedera-multisig/tree/main/examples';
 const DOCS_BASE = 'https://github.com/lazysuperheroes/hedera-multisig/blob/main/docs';
+const TESTNET_DAPP_URL = 'https://testnet-multisig.lazysuperheroes.com';
 
 export default function LearnPage() {
+  // Walkthroughs are testnet-only. If this build serves the mainnet dApp,
+  // push visitors over to the testnet dApp so they can follow along live.
+  const network = process.env.NEXT_PUBLIC_DEFAULT_NETWORK || 'testnet';
+  const isMainnetBuild = network === 'mainnet';
+
   return (
     <main className="min-h-screen bg-background">
       <section className="max-w-5xl mx-auto px-6 py-12 sm:py-20">
-        <div className="max-w-3xl mb-16">
+        <div className="max-w-3xl mb-12">
           <h1 className="page-hero font-heading text-3xl sm:text-5xl font-bold tracking-tight text-foreground leading-[1.1]">
             Learn by doing
           </h1>
@@ -23,6 +29,48 @@ export default function LearnPage() {
             multi-sig ceremony. Read the README, run the scripts, see real transactions land on
             HashScan.
           </p>
+        </div>
+
+        {/* Testnet redirect callout — walkthroughs use testnet accounts;
+            mainnet users should switch to the testnet dApp to follow along.
+            Shown on the testnet build too as a "you're in the right place"
+            confirmation, in a quieter form. */}
+        <div
+          className={`
+            mb-12 max-w-3xl rounded-md border-l-2 pl-4 py-3
+            ${isMainnetBuild
+              ? 'border-warning bg-warning-soft text-warning-soft-fg'
+              : 'border-info/60 bg-info-soft/60 text-info-soft-fg'}
+          `}
+          role={isMainnetBuild ? 'alert' : 'note'}
+        >
+          {isMainnetBuild ? (
+            <p className="text-sm">
+              <strong>You&apos;re on the mainnet dApp.</strong> The walkthroughs run on Hedera
+              testnet — switch to{' '}
+              <a
+                href={TESTNET_DAPP_URL}
+                className="underline font-medium hover:opacity-80"
+              >
+                testnet-multisig.lazysuperheroes.com
+              </a>{' '}
+              to follow along with real transactions and a free testnet account.
+            </p>
+          ) : (
+            <p className="text-sm">
+              You&apos;re on the testnet dApp — the right place to follow these walkthroughs.
+              Get a free testnet account at{' '}
+              <a
+                href="https://portal.hedera.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline font-medium hover:opacity-80"
+              >
+                portal.hedera.com
+              </a>
+              .
+            </p>
+          )}
         </div>
 
         {/* Walkthroughs — full-bleed primary, then a sidenote secondary.

@@ -18,6 +18,7 @@ import { usePathname } from 'next/navigation';
 import { useWallet } from '../hooks/useWallet';
 import { WalletSelectionDialog } from './WalletSelectionDialog';
 import { RegisterToggle } from './RegisterToggle';
+import { ThemeToggle } from './ThemeToggle';
 import { LSHLogo } from './LSHLogo';
 
 export function NavBar() {
@@ -61,8 +62,11 @@ function NavShell({ showWalletPanel }: { showWalletPanel: boolean }) {
             <Link href="/learn" className={navLinkClass}>Learn</Link>
           </div>
 
-          {/* Right: register toggle, wallet panel (when applicable), mobile menu */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Right: theme + register toggles, wallet panel (when applicable), mobile menu.
+              Two independent buttons — light/dark/auto on one, treasury/dev on the other.
+              Each cycles independently; all 6 combinations valid. */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            <ThemeToggle />
             <RegisterToggle />
             {showWalletPanel && <WalletPanel />}
             {!showWalletPanel && (

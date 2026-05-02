@@ -29,6 +29,7 @@ export function LSHLogo({ variant, className = '' }: LSHLogoProps) {
   const src = resolvedTheme === 'dark' ? LOGO_LIGHT : LOGO_DARK;
 
   if (variant === 'lockup') {
+    const isDev = register === 'dev';
     return (
       <div className={`flex items-center gap-3 ${className}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -40,12 +41,26 @@ export function LSHLogo({ variant, className = '' }: LSHLogoProps) {
           className="h-7 w-auto"
         />
         <div className="flex items-baseline gap-2 leading-none">
-          <span className="font-heading text-base font-bold tracking-tight text-foreground">
+          <span
+            className={`text-base font-bold tracking-tight text-foreground ${
+              isDev ? 'font-mono' : 'font-heading'
+            }`}
+          >
             MultiSig
           </span>
-          <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-foreground-subtle treasury:hidden">
-            {register === 'dev' ? 'dev' : ''}
-          </span>
+          {isDev && (
+            <span
+              className="
+                inline-flex items-center font-mono text-[10px] font-bold
+                px-1.5 py-0.5 rounded-sm
+                border border-accent/60 text-accent
+                bg-accent-soft tracking-[0.1em]
+              "
+              aria-label="Developer register"
+            >
+              [DEV]
+            </span>
+          )}
         </div>
       </div>
     );
