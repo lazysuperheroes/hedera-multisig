@@ -30,13 +30,19 @@ export function ConsoleLog() {
   // Load saved open/closed state. Hydration setState — same canonical
   // pattern as ThemeContext (localStorage isn't available on the server,
   // so we sync after mount).
+  //
+  // Default-open in console register the first time a user lands here:
+  // engineer-tool registers should announce "this drawer exists" by
+  // showing it. Treasury never renders this component at all.
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_OPEN);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (stored === '1') setIsOpen(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      else if (stored === null && register === 'console') setIsOpen(true);
     } catch {}
-  }, []);
+  }, [register]);
 
   // Subscribe to log events
   useEffect(() => {

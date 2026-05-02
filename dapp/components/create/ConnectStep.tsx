@@ -13,7 +13,7 @@ const cardClass =
   'console-pane bg-surface rounded-lg shadow-sm border border-border p-6';
 
 const primaryBtnClass =
-  'w-full px-6 py-4 bg-accent text-white font-semibold rounded-lg shadow-lg ' +
+  'cmd w-full px-6 py-4 bg-accent text-white font-semibold rounded-lg shadow-lg ' +
   'hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed ' +
   'flex items-center justify-center gap-2';
 
@@ -50,15 +50,18 @@ export function ConnectStep({
       className={cardClass}
       data-pane-label="~/connect.session"
     >
-      <h2 className="text-lg font-semibold text-foreground mb-6">
+      {/* H2 + body description hidden in console — pane label `~/connect.session`
+          already names the section, and engineers don't need the long-form
+          intro that treasury keeps. */}
+      <h2 className="console-hide text-lg font-semibold text-foreground mb-6">
         Session Credentials
       </h2>
-      <p className="text-sm text-foreground-subtle mb-6">
+      <p className="console-hide text-sm text-foreground-subtle mb-6">
         Enter the credentials for a session that was created via the CLI
         server command. You will authenticate as the coordinator.
       </p>
       <div className="space-y-5">
-        <div>
+        <div className="form-row">
           <label htmlFor="serverUrl" className={labelClass}>
             Server URL
           </label>
@@ -73,7 +76,7 @@ export function ConnectStep({
           />
         </div>
 
-        <div>
+        <div className="form-row">
           <label htmlFor="sessionId" className={labelClass}>
             Session ID
           </label>
@@ -88,7 +91,7 @@ export function ConnectStep({
           />
         </div>
 
-        <div>
+        <div className="form-row">
           <label htmlFor="pin" className={labelClass}>
             Session PIN
           </label>
@@ -103,7 +106,7 @@ export function ConnectStep({
           />
         </div>
 
-        <div>
+        <div className="form-row">
           <label htmlFor="coordToken" className={labelClass}>
             Coordinator Token
           </label>
@@ -116,7 +119,7 @@ export function ConnectStep({
             onChange={(e) => onCoordinatorTokenChange(e.target.value.trim())}
             required
           />
-          <p className="mt-1 text-xs text-foreground-subtle">
+          <p className="form-hint mt-1 text-xs text-foreground-subtle">
             The coordinator token is separate from the participant PIN
             and grants elevated privileges.
           </p>

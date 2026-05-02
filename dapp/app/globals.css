@@ -574,6 +574,92 @@ html {
   }
 }
 
+/* M1 — INLINE form labels in console. Form groups marked .form-row
+   become a 140px-label / 1fr-input grid so the form reads like a
+   `key: value` list rather than a stacked-label form. Hint paragraphs
+   that follow inputs span both columns and align with the input column.
+   Treasury keeps the stacked default. */
+[data-register="console"] .form-row {
+  display: grid !important;
+  grid-template-columns: minmax(7.5rem, 9rem) 1fr;
+  align-items: center;
+  gap: 0.625rem;
+}
+[data-register="console"] .form-row > label {
+  margin-bottom: 0 !important;
+  padding-top: 0;
+  align-self: center;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-register="console"] .form-row > .form-hint,
+[data-register="console"] .form-row > p {
+  grid-column: 2;
+  margin-top: 0.125rem !important;
+  font-size: 0.625rem !important;
+  line-height: 1.4 !important;
+  opacity: 0.75;
+}
+/* Robustness fallback — any div with a direct label+input child gets
+   inline treatment in console too, even without the .form-row class. */
+[data-register="console"] section .space-y-5 > div:has(> label):has(> input),
+[data-register="console"] section .space-y-5 > div:has(> label):has(> select),
+[data-register="console"] section .space-y-5 > div:has(> label):has(> textarea),
+[data-register="console"] section .space-y-6 > div:has(> label):has(> input),
+[data-register="console"] section .space-y-4 > div:has(> label):has(> input) {
+  display: grid !important;
+  grid-template-columns: minmax(7.5rem, 9rem) 1fr;
+  align-items: center;
+  gap: 0.625rem;
+}
+[data-register="console"] section .space-y-5 > div:has(> label) > label,
+[data-register="console"] section .space-y-6 > div:has(> label) > label,
+[data-register="console"] section .space-y-4 > div:has(> label) > label {
+  margin-bottom: 0 !important;
+}
+[data-register="console"] section .space-y-5 > div:has(> label) > p,
+[data-register="console"] section .space-y-6 > div:has(> label) > p,
+[data-register="console"] section .space-y-4 > div:has(> label) > p {
+  grid-column: 2;
+  margin-top: 0.125rem !important;
+  font-size: 0.625rem !important;
+  line-height: 1.4 !important;
+  opacity: 0.75;
+}
+
+/* M2 — .console-hide. Elements that exist for treasury (long descriptive
+   prose, redundant section H2s) don't render in console. Drop them
+   entirely; the pane header + form labels carry the meaning. */
+[data-register="console"] .console-hide {
+  display: none !important;
+}
+
+/* M4 — Compact primary CTA in console. Auto-width instead of full-width,
+   tighter padding, smaller min-height. Looks like a terminal command,
+   not a marketing CTA. The .cmd `$ ` prefix and `⏎` suffix already
+   render via L4. */
+[data-register="console"] .cmd {
+  width: auto !important;
+  min-width: 0 !important;
+  padding-top: 0.4rem !important;
+  padding-bottom: 0.4rem !important;
+  padding-left: 1rem !important;
+  padding-right: 2.5rem !important;
+  font-size: 0.8125rem !important;
+  align-self: flex-start;
+  display: inline-flex !important;
+}
+
+/* M5 — .form-hint and the auto-targeted hint <p> after inputs in
+   console: tiny mono helper text. Treasury keeps full body size. */
+[data-register="console"] .form-hint {
+  font-size: 0.625rem !important;
+  line-height: 1.4 !important;
+  opacity: 0.75;
+}
+
 /* L2 — Compact StepProgress in console: flat single-line breadcrumb.
    Squares shrink to ~20px, layout flips horizontal so number + label
    sit side-by-side, rails become arrows via ::before pseudo. */
