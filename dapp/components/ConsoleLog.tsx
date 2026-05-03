@@ -15,17 +15,39 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
-import { subscribeConsoleLog, type ConsoleLogEntry, type ConsoleLogLevel } from '../lib/console-log';
+import { subscribeConsoleLog, emitConsoleLog, type ConsoleLogEntry, type ConsoleLogLevel } from '../lib/console-log';
+import { useOnboarding } from '../hooks/useOnboarding';
 
 const MAX_ENTRIES = 200;
 const STORAGE_KEY_OPEN = 'console-log-open';
 
 export function ConsoleLog() {
   const { register } = useTheme();
+  const { state: onboarding, markTriedConsole } = useOnboarding();
   const [entries, setEntries] = useState<ConsoleLogEntry[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(false);
+  const welcomeEmittedRef = useRef(false);
+
+  // First-time welcome: when the user first activates Console mode, emit
+  // a one-line welcome entry to the log so the drawer announces what it
+  // is. Idempotent via onboarding.triedConsole + a session-local ref.
+  useEffect(() => {
+    if (
+      register === 'console' &&
+      !onboarding.triedConsole &&
+      !welcomeEmittedRef.current
+    ) {
+      welcomeEmittedRef.current = true;
+      emitConsoleLog({
+        level: 'info',
+        source: 'console',
+        message: 'welcome — this drawer streams wallet/ws events. close anytime via the toggle above.',
+      });
+      markTriedConsole();
+    }
+  }, [register, onboarding.triedConsole, markTriedConsole]);
 
   // Load saved open/closed state. Hydration setState — same canonical
   // pattern as ThemeContext (localStorage isn't available on the server,

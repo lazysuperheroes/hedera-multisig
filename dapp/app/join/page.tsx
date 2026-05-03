@@ -205,14 +205,23 @@ function JoinPageContent() {
             )}
           </section>
 
-          {/* Toggle between auto-filled view and manual entry */}
+          {/* Toggle between auto-filled view and manual entry. Console
+              renders this as a CLI-style flag (`--manual`) via the
+              .manual-toggle class — treasury keeps the prose. */}
           {!showManualForm && (
             <button
               type="button"
               onClick={() => setShowManualForm(true)}
-              className="text-sm text-accent hover:underline"
+              className="manual-toggle text-sm text-accent hover:underline"
+              data-treasury-label="Or enter session details manually →"
+              data-console-label="--manual"
             >
-              Or enter session details manually →
+              <span className="treasury-label">
+                Or enter session details manually →
+              </span>
+              <span className="console-label">
+                --manual
+              </span>
             </button>
           )}
 

@@ -130,21 +130,23 @@ export default function HistoryPage() {
           <h1 className="page-hero font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
             Transaction history
           </h1>
-          <p className="mt-2 text-foreground-muted">
+          <p className="console-hide mt-2 text-foreground-muted">
             Transactions this browser participated in.
           </p>
-          {/* Phase C16: prevent the "where did my history go?" surprise on a different
-              browser/device. Browser-local storage is the design choice (decentralized
-              philosophy) but it needs to be explicit. */}
-          <div className="mt-4 border-l-2 border-info/60 bg-info-soft/60 pl-4 py-2 text-xs text-info-soft-fg max-w-2xl">
+          {/* Treasury keeps the explicit "stored in browser only" warning;
+              console operators know browser storage is browser storage. */}
+          <div className="console-hide mt-4 border-l-2 border-info/60 bg-info-soft/60 pl-4 py-2 text-xs text-info-soft-fg max-w-2xl">
             <strong>Stored in this browser only.</strong> Switching devices, clearing site data, or using private browsing will reset this list. Use the CSV export below to keep a record.
           </div>
         </div>
 
         <div className="space-y-6">
 
-        {/* Controls row */}
-        <div className="bg-surface rounded-lg shadow-sm border border-border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        {/* Controls row — gets ~/filters pane chrome in console */}
+        <div
+          className="console-pane bg-surface rounded-lg shadow-sm border border-border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3"
+          data-pane-label="~/filters"
+        >
           {/* Status filter */}
           <div className="flex items-center gap-2">
             <label
@@ -296,7 +298,10 @@ export default function HistoryPage() {
             </Link>
           </div>
         ) : (
-          <div className="bg-surface rounded-lg shadow-sm border border-border overflow-hidden">
+          <div
+            className="console-pane bg-surface rounded-lg shadow-sm border border-border overflow-hidden"
+            data-pane-label="~/log"
+          >
             {/* Scrollable table wrapper */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
@@ -418,8 +423,9 @@ export default function HistoryPage() {
           </div>
         )}
 
-        {/* Info — lighter treatment, separated from main content */}
-        <div className="mt-6 border-t border-border pt-6">
+        {/* Info — lighter treatment, separated from main content. Hidden in
+            console (engineers know what localStorage is). */}
+        <div className="console-hide mt-6 border-t border-border pt-6">
           <details className="text-sm text-foreground-muted">
             <summary className="cursor-pointer font-medium text-foreground-muted">
               About Transaction History

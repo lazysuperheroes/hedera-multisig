@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Footer } from '../components/Footer';
+import { LandingOnboarding } from '../components/LandingOnboarding';
 
 export default function Home() {
   return (
@@ -51,20 +52,10 @@ export default function Home() {
             </p>
           </div>
 
-          {/* "How this works" — flat callout, not a bordered card */}
-          <div className="animate-slide-up delay-300 mt-10 max-w-2xl border-l-2 border-accent/30 pl-5 py-1 text-sm text-foreground-muted leading-relaxed">
-            <span className="font-semibold text-foreground">How this works.</span>{' '}
-            We host the user interface;{' '}
-            <strong className="text-foreground">you (or a teammate) host the coordinator</strong>{' '}
-            via{' '}
-            <code className="text-xs font-mono bg-surface-recessed px-1.5 py-0.5 rounded">
-              npx hedera-multisig server
-            </code>
-            . The dApp connects to that coordinator URL — Vercel never sees your transactions.{' '}
-            <Link href="/learn" className="text-accent hover:underline whitespace-nowrap">
-              New here? Try the walkthrough →
-            </Link>
-          </div>
+          {/* Onboarding surfaces: "How this works" callout (dismissible)
+              + Try-Console nudge (after visit 3, treasury only). Visit
+              counter bumps on mount of LandingOnboarding. */}
+          <LandingOnboarding />
         </div>
       </section>
 

@@ -20,12 +20,14 @@ export function RegisterToggle() {
   const meta = register === 'treasury'
     ? {
         label: 'Treasury',
-        tooltip: 'Register: Treasury (calm/financial). Click for Console mode.',
+        tooltip:
+          'Register: Treasury — calm financial view. Two modes available; click to switch to Console (engineer/power-user view with mono type, denser layout, terminal grammar, and a streaming connection log).',
         icon: <SerifTIcon />,
       }
     : {
         label: 'Console',
-        tooltip: 'Register: Console (terminal/punk). Click for Treasury.',
+        tooltip:
+          'Register: Console — engineer/power-user view. Click to switch back to Treasury (the calm financial-app view).',
         icon: <TerminalIcon />,
       };
 

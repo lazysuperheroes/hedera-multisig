@@ -24,7 +24,9 @@ export default function LearnPage() {
           <h1 className="page-hero font-heading text-3xl sm:text-5xl font-bold tracking-tight text-foreground leading-[1.1]">
             Learn by doing
           </h1>
-          <p className="mt-4 text-lg text-foreground-muted leading-relaxed">
+          {/* Long subhead is treasury-friendly orientation; engineers scan
+              the walkthrough cards directly. console-hide drops it. */}
+          <p className="console-hide mt-4 text-lg text-foreground-muted leading-relaxed">
             Two end-to-end walkthroughs that take you from a fresh testnet account to a successful
             multi-sig ceremony. Read the README, run the scripts, see real transactions land on
             HashScan.
@@ -77,12 +79,14 @@ export default function LearnPage() {
             No eyebrows; the H2 + body weight + indentation carry the
             structural signal. */}
         <div className="mb-20">
-          {/* Primary — HBAR walkthrough. Full breath. */}
+          {/* Primary — HBAR walkthrough. Full breath in treasury;
+              terminal pane in console (~/walkthrough.hbar). */}
           <Link
             href={`${REPO_BASE}/walkthrough-hbar`}
             target="_blank"
             rel="noopener noreferrer"
-            className="group block max-w-3xl mb-16"
+            className="console-pane group block max-w-3xl mb-16 p-0"
+            data-pane-label="~/walkthrough.hbar"
           >
             <h2 className="font-heading text-3xl sm:text-4xl font-bold text-foreground mb-4 tracking-tight group-hover:text-accent transition-colors leading-tight">
               HBAR walkthrough
@@ -104,14 +108,15 @@ export default function LearnPage() {
           </Link>
 
           {/* Secondary — Contract walkthrough. Pulled out as a marginalia
-              note: smaller, indented. The size + indentation say "supporting"
-              without needing a label to announce it. */}
+              note: smaller, indented. In console it gets its own pane
+              chrome (~/walkthrough.contract). */}
           <div className="ml-4 sm:ml-24 max-w-xl border-l-2 border-border pl-6 py-2">
             <Link
               href={`${REPO_BASE}/walkthrough-contract`}
               target="_blank"
               rel="noopener noreferrer"
-              className="group block"
+              className="console-pane group block"
+              data-pane-label="~/walkthrough.contract"
             >
               <h2 className="font-heading text-xl font-bold text-foreground mb-3 group-hover:text-accent transition-colors">
                 Smart-contract walkthrough
@@ -140,7 +145,7 @@ export default function LearnPage() {
           <h3 className="font-heading text-base font-semibold text-foreground mb-4">
             Prerequisites
           </h3>
-          <ol className="text-sm text-foreground-muted space-y-2.5 list-decimal list-inside max-w-3xl">
+          <ol className="console-checklist text-sm text-foreground-muted space-y-2.5 list-decimal list-inside max-w-3xl">
             <li>
               <strong className="text-foreground">Get a testnet account</strong> at{' '}
               <a

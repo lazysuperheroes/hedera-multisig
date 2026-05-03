@@ -603,25 +603,22 @@ html {
   opacity: 0.75;
 }
 /* Robustness fallback — any div with a direct label+input child gets
-   inline treatment in console too, even without the .form-row class. */
-[data-register="console"] section .space-y-5 > div:has(> label):has(> input),
-[data-register="console"] section .space-y-5 > div:has(> label):has(> select),
-[data-register="console"] section .space-y-5 > div:has(> label):has(> textarea),
-[data-register="console"] section .space-y-6 > div:has(> label):has(> input),
-[data-register="console"] section .space-y-4 > div:has(> label):has(> input) {
+   inline treatment in console too, even without the .form-row class.
+   N1 fix: previous selector required `.space-y-X` to be a *descendant*
+   of section; /join has it on the section itself. The [class*=...]
+   selector catches both same-element and descendant cases. */
+[data-register="console"] [class*="space-y-"] > div:has(> label):has(> input),
+[data-register="console"] [class*="space-y-"] > div:has(> label):has(> select),
+[data-register="console"] [class*="space-y-"] > div:has(> label):has(> textarea) {
   display: grid !important;
   grid-template-columns: minmax(7.5rem, 9rem) 1fr;
   align-items: center;
   gap: 0.625rem;
 }
-[data-register="console"] section .space-y-5 > div:has(> label) > label,
-[data-register="console"] section .space-y-6 > div:has(> label) > label,
-[data-register="console"] section .space-y-4 > div:has(> label) > label {
+[data-register="console"] [class*="space-y-"] > div:has(> label) > label {
   margin-bottom: 0 !important;
 }
-[data-register="console"] section .space-y-5 > div:has(> label) > p,
-[data-register="console"] section .space-y-6 > div:has(> label) > p,
-[data-register="console"] section .space-y-4 > div:has(> label) > p {
+[data-register="console"] [class*="space-y-"] > div:has(> label) > p {
   grid-column: 2;
   margin-top: 0.125rem !important;
   font-size: 0.625rem !important;
@@ -635,6 +632,14 @@ html {
 [data-register="console"] .console-hide {
   display: none !important;
 }
+
+/* N4 — register-conditional labels. .treasury-label shows only in
+   treasury; .console-label shows only in console. Used for things like
+   the /join "Or enter session details manually →" link that reads as
+   `--manual` in console. */
+.console-label { display: none; }
+[data-register="console"] .treasury-label { display: none; }
+[data-register="console"] .console-label { display: inline; }
 
 /* M4 — Compact primary CTA in console. Auto-width instead of full-width,
    tighter padding, smaller min-height. Looks like a terminal command,
@@ -658,6 +663,44 @@ html {
   font-size: 0.625rem !important;
   line-height: 1.4 !important;
   opacity: 0.75;
+}
+
+/* N3 — Compress table cells in console. /history's transaction log and
+   any other tabular surface get terminal-output cell paddings. */
+[data-register="console"] table th,
+[data-register="console"] table td {
+  padding-top: 0.3rem !important;
+  padding-bottom: 0.3rem !important;
+  padding-left: 0.625rem !important;
+  padding-right: 0.625rem !important;
+  font-size: 0.75rem !important;
+}
+[data-register="console"] table th {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.625rem !important;
+}
+
+/* N2 — .console-checklist. Numbered <ol>s render as `[ ]` checklists
+   in console (the engineer-tool prereq metaphor) while keeping decimal
+   numbering in treasury. Pure CSS swap. */
+[data-register="console"] .console-checklist {
+  list-style: none !important;
+  padding-left: 0;
+}
+[data-register="console"] .console-checklist > li {
+  position: relative;
+  padding-left: 1.5rem;
+  list-style: none;
+}
+[data-register="console"] .console-checklist > li::before {
+  content: "[ ]";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  opacity: 0.8;
 }
 
 /* L2 — Compact StepProgress in console: flat single-line breadcrumb.
