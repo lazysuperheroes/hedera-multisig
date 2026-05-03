@@ -1,233 +1,108 @@
-# Multi-Signature Best Practices on Hedera: A Complete Guide
+# Multi-sig on Hedera, the way we wish someone had built it for us
 
-*Secure your treasury, protect your team, and build trust with production-grade multi-sig patterns*
-
----
-
-## Introduction
-
-In the world of blockchain, single points of failure are unacceptable. Whether you're managing a DAO treasury, a corporate wallet, or a high-value smart contract, the question isn't *if* you need multi-signature security—it's *how* to implement it properly.
-
-Hedera Hashgraph offers native support for threshold keys, making it one of the most elegant platforms for multi-sig implementations. But native support doesn't mean native best practices. After building production multi-sig systems for Hedera, we've learned what works, what doesn't, and what keeps security teams up at night.
-
-This guide shares those lessons.
+*A 2.1.0 release note from Lazy Superheroes — what's in it, who it's for, and how to try it in five minutes.*
 
 ---
 
-## Why Multi-Sig Matters
+## The two-minute version
 
-### The $600 Million Problem
+If you came here for the elevator pitch:
 
-In 2022, the Ronin Bridge hack resulted in $625 million stolen—from a system that required only 5 of 9 validators to sign. The attackers compromised just 5 keys. If the threshold had been 7 of 9, or if the keys had been better protected, the outcome might have been different.
+> **`@lazysuperheroes/hedera-multisig` is the production-grade multi-signature toolkit for Hedera.** It ships a CLI, a server, a hosted dApp at [`multisig.lazysuperheroes.com`](https://multisig.lazysuperheroes.com) (and a testnet sibling at [`testnet-multisig.lazysuperheroes.com`](https://testnet-multisig.lazysuperheroes.com)), and an Agent SDK. v2.1.0 ships HIP-423 long-window scheduled transactions, two end-to-end walkthroughs, and a dual-register UX (Treasury for finance teams, Console for engineers). MIT-licensed. Open source. We use it ourselves.
 
-Multi-sig isn't just about requiring multiple signatures. It's about:
-
-- **Eliminating single points of failure** - No one person can authorize critical actions
-- **Enforcing separation of duties** - Different roles, different keys
-- **Creating audit trails** - Every signature is a record of approval
-- **Enabling recovery** - Lost keys don't mean lost funds
-
-### Hedera's Native Advantage
-
-Unlike Ethereum, where multi-sig requires smart contracts (with their own attack surface), Hedera supports threshold keys at the protocol level:
-
-```javascript
-// Native Hedera threshold key - no smart contract needed
-const thresholdKey = new KeyList([key1, key2, key3], 2); // 2-of-3
-```
-
-This means:
-- No contract deployment costs
-- No reentrancy vulnerabilities
-- No upgrade key risks
-- Faster finality (3-5 seconds vs. minutes)
+Now the longer version.
 
 ---
 
-## Five Workflow Modes
+## Who this is for
 
-Every multi-sig operation falls into one of five patterns. Choose based on your security requirements, team distribution, and timing needs.
+This release was written with two audiences in front of us at all times:
 
-### 1. Interactive Workflow (Real-Time)
+1. **Teams who want to manage shared assets more securely.** Treasuries, DAOs, project teams, families of co-signers. You want to move HBAR, tokens, NFTs, or call a contract — and you want it to take more than one person to authorise that.
+2. **Developers integrating multi-sig on Hedera.** You're building a product, an agent, or an internal tool, and you need the *coordination* layer — how do signers find each other, exchange the frozen transaction, return signatures, and verify execution — without inventing it from scratch.
 
-**Best for**: Teams in the same timezone, routine operations, time-sensitive transactions
-
-```
-Coordinator creates session -> Participants connect ->
-Transaction injected -> All sign within 120 seconds -> Execute
-```
-
-**When to use**: Daily operations, token transfers, routine contract calls
-
-### 2. Offline Workflow (Air-Gapped)
-
-**Best for**: High-security operations, geographically distributed teams, compliance requirements
-
-```
-Freeze transaction -> Export to file ->
-Distribute to signers -> Each signs on isolated machine ->
-Collect signatures -> Execute
-```
-
-**When to use**: Treasury movements over $100K, key rotations, contract upgrades
-
-### 3. Networked Workflow (WebSocket)
-
-**Best for**: Remote teams, mixed security environments, WalletConnect integration
-
-```
-Server creates session -> Participants connect via WebSocket ->
-Load keys (never transmitted) -> Transaction injected ->
-Sign locally -> Signatures collected -> Execute
-```
-
-**When to use**: Distributed teams, hardware wallet users, web-based approval flows
-
-### 4. Scheduled Workflow (Async)
-
-**Best for**: Cross-timezone teams, non-urgent operations, governance votes
-
-```
-Coordinator creates ScheduleCreate transaction ->
-Signers submit ScheduleSign over hours, days, or up to ~62 days (HIP-423) ->
-Network executes automatically when threshold met
-```
-
-This mode bypasses the 120-second transaction validity window entirely. Signers don't need to be online at the same time.
-
-**When to use**: Multi-day approval processes, cross-timezone treasury management, governance
-
-### 5. Agent Workflow (Automated)
-
-**Best for**: Programmatic signing with policy controls, bot-to-bot coordination
-
-```
-Agent connects to session -> Receives transaction ->
-PolicyEngine evaluates rules (amount limits, allowed recipients,
-time windows, rate limits) -> Auto-signs if policy passes
-```
-
-Agents use composable policy rules:
-- **MaxAmountRule**: Reject transfers above a threshold
-- **AllowedRecipientsRule**: Only sign for approved accounts
-- **AllowedTransactionTypesRule**: Restrict to specific TX types
-- **TimeWindowRule**: Only sign during business hours
-- **RateLimitRule**: Cap signatures per time period
-
-**When to use**: Automated treasury operations, programmatic approvals, agent-to-agent coordination
+Most multi-sig tooling assumes one of those audiences and ignores the other. We tried hard not to. Where the two diverge — in chrome density, default copy, what gets surfaced — the dApp now ships *two visual registers* for exactly that reason. More on that below.
 
 ---
 
-## Security Best Practices
+## Why multi-sig at all
 
-### 1. Never Transmit Private Keys
+If you've already had this conversation, skip ahead. If you haven't, the short version is:
 
-This sounds obvious, but it's violated constantly. The correct pattern:
+**Single-signer accounts are a single point of failure.** Whoever holds the key controls the funds. They can be coerced, phished, hacked, or have their device stolen. A treasury that depends on one person's diligence is a treasury that depends on one person's bad day.
 
-```javascript
-// WRONG - Key transmitted over network
-await server.submitSignature(privateKey);
+**Multi-sig requires M of N keys to authorise a transaction.** Compromising one key isn't enough. Losing one key isn't fatal. Different humans hold different keys, ideally with different operational habits and different attack surfaces.
 
-// RIGHT - Sign locally, submit only signature
-const signature = privateKey.signTransaction(frozenTransaction);
-await server.submitSignature(publicKey, signature);
-```
-
-Private keys should exist only in memory, only for the duration of signing, and should be cleared immediately after.
-
-### 2. Verify Before You Sign
-
-Every multi-sig participant should independently verify what they're signing. The dApp separates **verified data** (decoded from the frozen transaction bytes) from **unverified data** (coordinator-provided metadata):
-
-- **Green section**: What the transaction actually does (cryptographically verified)
-- **Yellow section**: What the coordinator claims it does (could be fraudulent)
-
-If these don't match, the system warns you. Never sign based solely on what the coordinator tells you.
-
-### 3. Use Appropriate Thresholds
-
-| Use Case | Recommended Threshold | Rationale |
-|----------|----------------------|-----------|
-| Hot wallet (daily ops) | 2-of-3 | Balance speed vs. security |
-| Warm wallet (weekly) | 3-of-5 | Stronger protection, still operational |
-| Cold storage | 4-of-7 or 5-of-9 | Maximum security, can survive multiple key losses |
-| Smart contract admin | 3-of-5 minimum | Contract upgrades are irreversible |
-
-**Key insight**: Your threshold should survive the loss of `N - threshold` keys while still blocking a single compromised insider.
-
-### 4. Implement Key Rotation
-
-Rotate keys when circumstances demand it — not on a calendar. Unlike passwords or API keys, threshold keys don't weaken with age, and rotation itself carries risk (a mistake can lock the account). Rotate when:
-- A team member with key access leaves the organization
-- Any security incident or suspected key compromise
-- Upgrading key storage (e.g., migrating to hardware wallets)
+Hedera does this *natively* — no smart contract required:
 
 ```javascript
-// Rotate keys without downtime
-const newKeyList = new KeyList([newKey1, newKey2, newKey3], 2);
+import { KeyList } from '@hashgraph/sdk';
 
-const updateTx = new AccountUpdateTransaction()
-  .setAccountId(accountId)
-  .setKey(newKeyList);
-
-// This transaction itself requires old threshold to approve
-await executeWithMultiSig(updateTx, oldSigners);
+// 2 of 3 — any two keys can sign; one alone can't
+const thresholdKey = new KeyList([key1, key2, key3], 2);
 ```
 
-### 5. Separate Roles, Separate Keys
+That's a real protocol-level threshold key. No deploy cost, no upgrade-key risk, no contract attack surface. Hedera's also fast (3-5 second finality), which matters because the protocol gives you a 120-second window between freezing a transaction and submitting it.
 
-The same person should never hold multiple keys for the same threshold:
-
-| Role | Key Access | Can Sign |
-|------|-----------|----------|
-| CEO | Key 1 | Yes |
-| CFO | Key 2 | Yes |
-| CTO | Key 3 | Yes |
-| COO | Key 4 | Yes |
-| Board Rep | Key 5 | Yes |
-
-No individual should be able to reach threshold alone, even with social engineering.
+That 120 seconds is the operational problem this whole library exists to solve.
 
 ---
 
-## Implementation Patterns
+## When to use multi-sig
 
-### Pattern 1: Treasury Management
+Roughly, in increasing order of "you need this now":
 
-```javascript
-// Treasury account with 3-of-5 threshold
-const treasuryKey = new KeyList([
-  ceoKey.publicKey,
-  cfoKey.publicKey,
-  ctoKey.publicKey,
-  cooKey.publicKey,
-  boardKey.publicKey
-], 3);
+- **Day-1 of operating a shared treasury.** Before the first real funds arrive.
+- **Any account holding more than a personal-loss-worth of assets.** Set your own number; for most teams it's somewhere between $5K and $50K.
+- **Any account that can call administrative functions on a contract.** Pause, upgrade, mint, set fee — these should never be a single key.
+- **Any agent that signs on your behalf.** Even with a tight policy engine, having a human co-signer for above-threshold transfers is cheap insurance.
+- **Any high-stakes one-off** — even if you usually run with single-sig, rotate to multi-sig for a specific event (an audit, an exchange transfer, a token launch). You can move back afterward.
 
-// Any withdrawal requires 3 executives to approve
-const withdrawal = new TransferTransaction()
-  .addHbarTransfer(treasuryAccount, Hbar.from(-50000))
-  .addHbarTransfer(vendorAccount, Hbar.from(50000));
+If you're nodding along but haven't pulled the trigger because you've been told it's complicated to coordinate — that's exactly what this library is for.
+
+---
+
+## When to use *which* signing pattern
+
+We've arrived at three coordination patterns that cover almost every real workflow. Pick by the question "do all signers need to be online at the same moment?"
+
+### Real-time signing — when everyone can be present
+**Use when:** routine treasury moves, daily ops, time-sensitive transactions where you can ping the team and get acknowledgements in 60 seconds.
+
+The coordinator creates a session, participants join, the transaction is injected, everyone signs within the 120-second window, the network executes. We host the dApp UI; you (or a teammate) host the coordinator process. Signatures aggregate, the transaction lands.
+
+This is the default flow on the dApp. CLI users can run the same flow from a terminal.
+
+### Scheduled signing — when timezones don't align
+**Use when:** signers in different timezones, multi-day approval cycles, governance votes, anything where waiting for everyone to be online together is impractical.
+
+This is the killer feature in v2.1.0, and it deserves its own paragraph.
+
+Hedera supports [**HIP-423 long-window scheduled transactions**](https://hips.hedera.com/hip/hip-423) — the network itself holds the transaction in escrow for up to ~62 days while signatures arrive piecemeal. No 120-second pressure. No "everyone be online at 3 PM UTC Tuesday." A signer in London can approve at lunchtime; a signer in Singapore can approve at breakfast the next day; a signer in San Francisco gets to it after their morning coffee. The network executes the moment threshold is met.
+
+```bash
+# Coordinator creates a 30-day window
+npx hedera-multisig schedule create \
+  --to 0.0.RECIPIENT --amount 50000 \
+  --expiration-time 30d
+
+# Each signer can sign whenever — over hours, days, weeks
+npx hedera-multisig schedule sign \
+  --schedule-id 0.0.SCHEDULE --keyfile signer1.key
 ```
 
-### Pattern 2: Smart Contract Admin
+`--expiration-time` accepts ISO-8601 (`2026-06-30T12:00:00Z`) or duration suffixes (`30d`, `8w`, `2h`). Capped at the HIP-423 horizon (~62 days).
 
-```javascript
-// Contract admin key with mandatory security officer
-const adminKey = new KeyList([
-  new KeyList([securityOfficer.publicKey], 1), // Must have security
-  new KeyList([dev1.publicKey, dev2.publicKey, dev3.publicKey], 2) // Plus 2 devs
-], 2);
+For UI users: the dApp's `/create` page lets you build a scheduled transaction the same way you'd build an interactive one — and the corresponding `--session-timeout` flag on `npx hedera-multisig server` keeps the coordination session alive long enough to match the schedule's window.
 
-// This creates: Security + 2-of-3 devs = 3 signatures minimum
-```
+### Agent signing — when a policy can decide for you
+**Use when:** automated treasury agents, programmatic approvals, agent-to-agent coordination on Hedera.
 
-### Pattern 3: Agent-Assisted Treasury
+The Agent SDK ships a headless signing client with a composable policy engine. You compose rules (max amount, allowed recipients, allowed transaction types, time windows, rate limits) and the agent auto-signs when the transaction passes the policy. Two presets ship out of the box: `treasury` (conservative, allowlist-based) and `approvalBot` (rate-limited, broad-recipient).
 
 ```javascript
 import { AgentSigningClient, PolicyEngine } from '@lazysuperheroes/hedera-multisig';
 
-// Agent that auto-signs transfers under $1,000 to approved recipients
 const agent = new AgentSigningClient({
   approvalPolicy: PolicyEngine.treasury({
     maxAmount: 1000,
@@ -236,105 +111,162 @@ const agent = new AgentSigningClient({
 });
 
 await agent.connect(serverUrl, sessionId, pin);
-// Agent automatically evaluates and signs qualifying transactions
+// Agent now auto-signs qualifying transactions; everything else falls
+// through to a human co-signer.
 ```
 
----
-
-## Common Mistakes (And How to Avoid Them)
-
-### Mistake 1: Storing Keys in Code or Environment Variables
-
-```javascript
-// NEVER DO THIS IN PRODUCTION
-const privateKey = process.env.TREASURY_KEY; // Disaster waiting to happen
-```
-
-**Solution**: Use encrypted key files with strong passphrases, or hardware wallets.
-
-### Mistake 2: Same Threshold for Everything
-
-Using 2-of-3 for your $10M treasury *and* your test account is wrong. Scale your security to match your risk.
-
-### Mistake 3: No Audit Trail
-
-If you can't answer "who signed what, when, and why?" for every transaction, you don't have operational security.
-
-**Solution**: Implement structured logging with the built-in audit logger.
-
-### Mistake 4: Ignoring the 120-Second Window
-
-Hedera transactions are valid for 120 seconds. If your signing process takes longer, the transaction expires.
-
-**Solution**: Use the pre-session workflow—connect and load keys *before* the transaction is created. Or use the Scheduled Workflow for async signing over hours, days, or up to ~62 days (HIP-423).
-
-### Mistake 5: Single Point of Infrastructure Failure
-
-Your multi-sig is only as distributed as your infrastructure. If all signers connect through one VPN, you've created a single point of failure.
-
-**Solution**: Use multiple connection paths, consider TLS with client certificates, implement proper rate limiting.
+You can mix patterns in one session — agents and humans can co-sign the same transaction. CLI participants and dApp participants can co-sign the same transaction. The server is signature-agnostic; it doesn't care how the signature was generated.
 
 ---
 
-## Production Checklist
+## How to try it — five-minute path
 
-Before going live with multi-sig, verify:
+You don't need to install anything to try the dApp. We host both networks:
 
-- [ ] **Key Generation**: Keys generated on air-gapped machines
-- [ ] **Key Storage**: Hardware wallets or encrypted files with strong passphrases
-- [ ] **Key Distribution**: Each key holder is a different person
-- [ ] **Threshold Selection**: Threshold survives loss of `N - threshold` keys
-- [ ] **Transaction Review**: All signers can independently verify transaction details
-- [ ] **Audit Logging**: All signatures logged with timestamps
-- [ ] **Key Rotation Plan**: Documented process for rotating keys
-- [ ] **Recovery Plan**: Documented process for lost/compromised keys
-- [ ] **TLS Enabled**: WebSocket connections use WSS, not WS
-- [ ] **Rate Limiting**: Authentication attempts are rate-limited
-- [ ] **Timeout Handling**: Process handles 120-second transaction window
-- [ ] **Agent Policies**: Automated signers have appropriate policy constraints
+- **Mainnet UI:** [`multisig.lazysuperheroes.com`](https://multisig.lazysuperheroes.com)
+- **Testnet UI:** [`testnet-multisig.lazysuperheroes.com`](https://testnet-multisig.lazysuperheroes.com) — go here first
 
----
+Important: **we host the UI; you host the coordinator.** The dApp is a frontend that connects to a WebSocket coordinator process running on your machine (or a teammate's). Vercel never sees your transactions. The coordinator never sees your private keys. Each participant signs locally and sends only the signature over the wire.
 
-## Getting Started
-
-Ready to implement production-grade multi-sig on Hedera?
+The fastest end-to-end test:
 
 ```bash
-# Install the library
-npm install @lazysuperheroes/hedera-multisig
+# Get a free testnet account at https://portal.hedera.com (auto-funded)
+# Then:
+git clone https://github.com/lazysuperheroes/hedera-multisig
+cd hedera-multisig
+npm install
+cp .env.example .env  # set OPERATOR_ID + OPERATOR_KEY from the portal
 
-# Start the server for networked signing
-npx hedera-multisig server --threshold 2 --keys "key1,key2,key3" --port 3001
+# Pre-flight check
+node examples/walkthrough-hbar/00-precheck.js
 
-# Join as a CLI participant
-npx hedera-multisig participant --connect hmsc:YOUR_CONNECTION_STRING
-
-# Or join via the browser dApp
-# Navigate to your-server.com/join and paste the connection string
+# Run the 30-minute walkthrough
+cat examples/walkthrough-hbar/README.md
 ```
 
-The library includes:
-- **CLI**: 8 command-line tools for server, participant, signing, transfers, tokens, sessions, and scheduling
-- **Server**: WebSocket server with TLS, rate limiting, coordinator tokens, and reconnection support
-- **dApp**: Next.js browser application with WalletConnect, transaction builder, QR codes, and dark mode
-- **Agent SDK**: Headless signing client with composable policy engine (5 rules, 2 presets)
-- **Scheduled TX**: Async signing via ScheduleCreate/ScheduleSign for cross-timezone teams
-- **129 unit tests** across 9 test suites with full CI pipeline
+The HBAR walkthrough takes you from a fresh testnet account to a successful 2-of-3 multi-sig transfer in about half an hour. You'll generate three keys, create a threshold-key account, run a real ceremony with a CLI participant + the dApp coordinator, and watch the transaction confirm on the mirror node.
+
+The contract walkthrough goes further: deploy a Counter contract as a single-sig EOA, interact normally, then convert the EOA to 2-of-3 multi-sig via `AccountUpdateTransaction`, run a *negative test* proving single-sig is dead, then run multi-sig `increment()` and `withdraw()` ceremonies. Covers every common contract path including the deploy-as-multisig (HIP-423) alternative.
+
+Both walkthroughs live at [`/learn`](https://testnet-multisig.lazysuperheroes.com/learn) on the testnet dApp, with prerequisites + GitHub links + a `[ ]` checklist of setup steps.
 
 ---
 
-## Conclusion
+## The dApp has two registers
 
-Multi-signature security isn't optional for serious blockchain operations. It's the difference between "we got hacked" and "the attack failed because they couldn't get enough keys."
+This is the thing we're proudest of in 2.1.0 and probably the thing that makes us different.
 
-Hedera's native threshold key support makes implementation straightforward. The hard part isn't the code—it's the operational discipline: proper key management, appropriate thresholds, independent verification, and continuous vigilance.
+We built the dApp for the two audiences in the intro. Forcing them into one visual treatment was the wrong call:
 
-Start with a simple 2-of-3 for your test accounts. Graduate to 3-of-5 for production. And remember: in security, the cost of doing it right is always less than the cost of doing it wrong.
+- **Treasury operators** want a calm, careful, premium-financial feel. Big headlines. Generous whitespace. Heebo and Unbounded typography. Stripe-meets-Mercury energy. The kind of UI where moving real money feels deliberate.
+- **Engineers and power users** want a dense, terminal-flavoured tool. Mono everything. Sharp corners. Compact forms with inline labels. A streaming connection log they can watch. Vercel-meets-Railway energy.
+
+So the toggle in the top-right of the dApp swaps between the two. **Treasury** is the default — that's what most visitors see. **Console** is one click away.
+
+Console is not "Treasury with a darker palette." It changes:
+- Body face goes monospace
+- Cards get sharp zero-radius corners and pane-header chrome (`~/connect.session`, `~/inject.tx`, `~/share`)
+- Form labels go inline (`server_url:    [ws://...]`) instead of stacked
+- The NavBar collapses into a one-line shell-prompt bar at the top: `lsh/multisig | $ ~/multisig:/create | /join /create /history /learn`
+- A streaming **ConsoleLog** drawer at the bottom shows wallet events, WebSocket messages, mirror-node polls in real-time
+- Page headings render as `$ create session` (literal command-line prompt)
+- Primary CTAs gain `$ ` prefix and `⏎` keyboard hint
+
+Both registers ship with the same accessibility baseline — focus rings, ARIA labels, keyboard navigation, focus traps in dialogs, prefers-reduced-motion support, semantic HTML. We put real work into making this not just a paint job.
 
 ---
 
-*Built with care by [Lazy Superheroes](https://lazysuperheroes.com) for the Hedera community.*
+## What's actually in the box
 
-*Open source: [github.com/lazysuperheroes/hedera-multisig](https://github.com/lazysuperheroes/hedera-multisig)*
+For the developer audience, here's the complete inventory:
 
-*npm: [@lazysuperheroes/hedera-multisig](https://www.npmjs.com/package/@lazysuperheroes/hedera-multisig)*
+**Library** (`@lazysuperheroes/hedera-multisig`, MIT, npm)
+- `core/`: TransactionFreezer, SignatureCollector, SignatureVerifier, TransactionExecutor (with mirror-node confirmation polling)
+- `workflows/`: InteractiveWorkflow, OfflineWorkflow, ScheduledWorkflow (HIP-423 native), WorkflowOrchestrator
+- `client/`: SigningClient (CLI/Node), AgentSigningClient (headless), PolicyEngine + 5 rules + 2 presets
+- `server/`: WebSocket server with TLS/WSS, per-IP + per-session rate limiting, origin validation, coordinator-token elevation, reconnection tokens, mirror-node verification, Redis session-store option
+- `keyManagement/`: KeyProvider abstraction with `sign()` + `canExposeKeys()` — supports opaque signers (HSM, MPC, hardware)
+- `shared/transaction-decoder/`: 20+ Hedera transaction types decoded to readable form, with ABI verification for `ContractCall`
+- 8 CLI commands: `server`, `participant`, `sign`, `inject`, `transfer`, `token`, `session`, `schedule`
+
+**dApp** (Next.js 16, hosted on Vercel)
+- 6 routes: `/`, `/join`, `/create`, `/history`, `/learn`, `/session/[id]`
+- Treasury + Console registers
+- WalletConnect (HashPack, Blade, Kabila support)
+- Build-from-form / paste-frozen-base64 / CLI-inject — three ways to get a transaction into a session
+- ABI editor for contract calls (arrays, tuples, structs)
+- Browser-local transaction history with CSV export
+- First-run onboarding (visit-counter-driven nudges; no auto-suggest)
+
+**Testing**
+- 84 unit tests in the core library + 245 coverage-suite tests
+- Coverage gate at lines 56 / functions 50 / branches 63 (measured 58.65 / 51.36 / 65.4)
+- 13 transaction-decoder fixture snapshots for cross-implementation parity
+- Two end-to-end walkthroughs (HBAR + Smart Contract) as scripted manual scenarios in `TESTING.md`
+
+**Documentation**
+- [`SECURITY.md`](https://github.com/lazysuperheroes/hedera-multisig/blob/main/SECURITY.md) — disclosure policy + threat model + supported versions
+- [`docs/THRESHOLD_GUIDE.md`](https://github.com/lazysuperheroes/hedera-multisig/blob/main/docs/THRESHOLD_GUIDE.md) — M-of-N choice + nested KeyList semantics with worked examples
+- [`docs/COORDINATOR_GUIDE.md`](https://github.com/lazysuperheroes/hedera-multisig/blob/main/docs/COORDINATOR_GUIDE.md) — running the coordinator, tunnel trust model, scheduled-tx workflow
+- [`docs/AGENT_INTEGRATION.md`](https://github.com/lazysuperheroes/hedera-multisig/blob/main/docs/AGENT_INTEGRATION.md) — Agent SDK integration patterns
+- [`docs/SECURITY_ARCHITECTURE.md`](https://github.com/lazysuperheroes/hedera-multisig/blob/main/docs/SECURITY_ARCHITECTURE.md) — threat model, trust boundaries, audit posture
+- [`docs/ENCRYPTED_KEYS_GUIDE.md`](https://github.com/lazysuperheroes/hedera-multisig/blob/main/docs/ENCRYPTED_KEYS_GUIDE.md) — AES-256-GCM + PBKDF2 key files
+
+---
+
+## Security model — the short version
+
+A few principles we hold to. There's a longer treatment in `SECURITY_ARCHITECTURE.md` if you want depth.
+
+- **Private keys never leave the device.** Only frozen transactions and signatures travel over the network. The coordinator orchestrates; it never holds a key.
+- **Verified vs unverified data are visually separate** in the UI. The transaction details that come from the cryptographically-signed bytes are presented in green; coordinator-supplied metadata that *could* be fraudulent is in yellow. Mismatches surface as warnings.
+- **Coordinator authorisation post-AUTH.** Privileged WebSocket messages (transaction inject, execute) verify `isCoordinator` on every receive — not just at connect. Closes the [post-AUTH role gap that we found in our v2.0 review](https://github.com/lazysuperheroes/hedera-multisig/blob/main/CHANGELOG.md#critical-1).
+- **Reconnection tokens bound to public key.** Eligibility is re-checked when a stale token is used; if you've been removed from the eligible-keys set, your old token is rejected.
+- **Mirror-node verification** confirms that what we *thought* the network executed actually was executed. The dApp shows a side-by-side intent-vs-actual diff after every transaction.
+- **No `protobufjs` ACE CVE** — we ship version-keyed `overrides` in `package.json` to force the patched releases (7.5.6 / 8.0.3) in the vulnerable ranges.
+- **GPG-signed releases.** The `release.yml` workflow verifies signed tags, checks the package version matches the tag, runs the production audit gate, and publishes to npm with provenance via OIDC.
+
+---
+
+## Common pitfalls
+
+In rough order of "we've seen people do this":
+
+- **Storing keys in `process.env`.** Don't. The library ships an `EncryptedFileProvider` (AES-256-GCM + PBKDF2, ≥12-character passphrase) and supports hardware wallets via WalletConnect. Use them.
+- **One threshold for everything.** A 2-of-3 makes sense for daily ops; it's wrong for your $10M cold-storage account. The threshold guide documents the trade-off.
+- **Ignoring the 120-second window.** If your signers can't be online together within 120 seconds of the transaction freezing, use scheduled signing. That's why HIP-423 exists.
+- **Single point of infrastructure failure.** Multi-sig is only as distributed as your infrastructure. Don't run all your signers through one VPN exit. Don't host the coordinator on the same instance as your eligible keys. Don't make the coordinator a single point of failure for your own org.
+- **Calendar-based key rotation.** Threshold keys don't weaken with age, and rotation itself is risky (a mistake can lock the account). Rotate when *circumstances demand* it — personnel change, suspected compromise, storage upgrade — not every 90 days.
+
+---
+
+## Where this came from, and where it's going
+
+We're [Lazy Superheroes](https://lazysuperheroes.com), an LSH-umbrella web3 project on Hedera. This library powers the multi-sig flows for the rest of our products and is licensed MIT for everyone else to use.
+
+v2.1.0 closed the multi-agent v2.0 review (3 critical findings, 8 highs), shipped HIP-423 long-window scheduled transactions through the CLI and dApp, added the dual-register UX, ran two end-to-end walkthroughs as scripted manual scenarios, and tightened the release supply chain (provenance, signed tags, weekly Dependabot, Node 20/22/24 CI matrix). 
+
+v2.2 is one item: **nested KeyList coordination** — tree-aware ceremony coordination so the server understands recursive `KeyList` thresholds (e.g. `(security_officer) AND (2 of 3 devs)`), not just flat lists. Hedera consensus already supports this; the gap is the coordination layer.
+
+Phase 6 is on the roadmap when [HCS-16 (Flora)](https://hashgraph.swirlds.com/improvement-proposals/) stabilises — we already have the `CoordinationTransport` abstraction with a `WebSocketTransport` adapter and a `FloraTransport` stub. When the standard ships, the protocol-level upgrade is a transport swap, not a rewrite.
+
+---
+
+## Try it
+
+In order from "least committed" to "most committed":
+
+1. **Visit the testnet dApp.** [`testnet-multisig.lazysuperheroes.com`](https://testnet-multisig.lazysuperheroes.com). Toggle between Treasury and Console in the top-right. No install, no account.
+2. **Get a free testnet account** at [`portal.hedera.com`](https://portal.hedera.com) — auto-funded with ~10,000 testnet ℏ.
+3. **Run the HBAR walkthrough.** 30 minutes, end-to-end, from key generation to mirror-node confirmation. [`examples/walkthrough-hbar/README.md`](https://github.com/lazysuperheroes/hedera-multisig/tree/main/examples/walkthrough-hbar).
+4. **Run the contract walkthrough.** 50 minutes. Adds the EOA→multi-sig migration arc. [`examples/walkthrough-contract/README.md`](https://github.com/lazysuperheroes/hedera-multisig/tree/main/examples/walkthrough-contract).
+5. **Install the library.** `npm install @lazysuperheroes/hedera-multisig`. Read the [README](https://github.com/lazysuperheroes/hedera-multisig#readme) and pick the workflow that fits.
+
+If you ship something interesting on top of this, [tell us](https://github.com/lazysuperheroes/hedera-multisig/issues) — we read every issue.
+
+---
+
+*MIT-licensed · open-source · production-grade · built by [Lazy Superheroes](https://lazysuperheroes.com) for the Hedera community.*
+
+*Source: [github.com/lazysuperheroes/hedera-multisig](https://github.com/lazysuperheroes/hedera-multisig) · npm: [`@lazysuperheroes/hedera-multisig`](https://www.npmjs.com/package/@lazysuperheroes/hedera-multisig) · Disclosure: [SECURITY.md](https://github.com/lazysuperheroes/hedera-multisig/blob/main/SECURITY.md)*
