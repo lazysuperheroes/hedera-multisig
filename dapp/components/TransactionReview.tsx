@@ -12,6 +12,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import type { ethers } from 'ethers';
 import {
   TransactionDecoder,
   DecodedTransaction,
@@ -22,8 +23,8 @@ import { Icon } from './Icon';
 
 export interface TransactionReviewProps {
   frozenTransactionBase64: string;
-  metadata?: Record<string, any>;
-  contractInterface?: any; // ethers Interface
+  metadata?: Record<string, unknown>;
+  contractInterface?: unknown; // ethers Interface
   onApprove: () => void;
   onReject: (reason: string) => void;
   disabled?: boolean;
@@ -115,8 +116,12 @@ export function TransactionReview({
         setLoading(true);
         setError(null);
 
-        // Decode transaction
-        const decodedTx = await TransactionDecoder.decode(frozenTransactionBase64, contractInterface);
+        // Decode transaction. contractInterface arrives typed as unknown
+        // because the WebSocket payload type can't statically reference ethers.
+        const decodedTx = await TransactionDecoder.decode(
+          frozenTransactionBase64,
+          contractInterface as ethers.Interface | undefined
+        );
         setDecoded(decodedTx);
 
         // Extract amounts and accounts

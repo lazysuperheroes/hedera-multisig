@@ -11,7 +11,7 @@
 
 export interface BaseMessage {
   type: string;
-  payload?: any;
+  payload?: unknown;
 }
 
 // ============================================================================
@@ -78,8 +78,8 @@ export interface SessionInfo {
     base64: string;
     bytes?: Uint8Array;
   };
-  metadata?: Record<string, any>;
-  contractInterface?: any;
+  metadata?: Record<string, unknown>;
+  contractInterface?: unknown;
   stats?: {
     participantsExpected: number;
     participantsConnected: number;
@@ -101,6 +101,10 @@ export interface TransactionDetails {
   amounts?: number[];
   accounts?: string[];
   memo?: string;
+  // Passthrough bag for transaction-type-specific fields (tokenIds, contractId,
+  // functionName, transactionMemo, maxTransactionFee, etc.). Decoder writes
+  // everything it extracts; consumers read what they expect.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -127,8 +131,8 @@ export interface TransactionReceivedMessage {
       bytes?: Uint8Array;
     };
     txDetails: TransactionDetails;
-    metadata?: Record<string, any>;
-    contractInterface?: any;
+    metadata?: Record<string, unknown>;
+    contractInterface?: unknown;
   };
 }
 
@@ -164,7 +168,7 @@ export interface TransactionExecutedMessage {
   payload: {
     transactionId: string;
     status: string;
-    receipt?: any;
+    receipt?: unknown;
   };
 }
 

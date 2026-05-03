@@ -34,8 +34,8 @@ export interface SigningSessionState {
   transaction: {
     frozenTransaction: { base64: string; bytes?: Uint8Array } | null;
     txDetails: TransactionDetails | null;
-    metadata: Record<string, any> | null;
-    contractInterface: any | null;
+    metadata: Record<string, unknown> | null;
+    contractInterface: unknown | null;
   };
   stats: {
     participantsConnected: number;

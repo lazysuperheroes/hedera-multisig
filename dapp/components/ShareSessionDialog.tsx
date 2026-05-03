@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeDisplay } from './QRCodeDisplay';
-import { CopyButton, CopyableText } from './CopyButton';
+import { CopyButton } from './CopyButton';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { generateConnectionString } = require('../../shared/connection-string');
@@ -164,7 +164,7 @@ export function ShareSessionDialog({
                   {connectionString}
                 </div>
                 <p className="text-xs text-accent mt-2">
-                  Participants can paste this in the dApp's "Quick Connect" field
+                  Participants can paste this in the dApp&apos;s &ldquo;Quick Connect&rdquo; field
                 </p>
               </div>
 

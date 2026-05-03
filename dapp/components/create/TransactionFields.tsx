@@ -334,6 +334,7 @@ function ContractAbiEditor({
       }
     });
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- per-arg parse feedback derived from current input state
     setArgErrors(newArgErrors);
     if (hasParseError) {
       setEncodingError(null);

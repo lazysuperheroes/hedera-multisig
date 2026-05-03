@@ -6,13 +6,12 @@
  */
 
 import { DAppConnector, HederaJsonRpcMethod, HederaSessionEvent, HederaChainId, type ExtensionData } from "@hashgraph/hedera-wallet-connect";
-import { LedgerId, type AccountId, Transaction } from "@hashgraph/sdk";
+import { LedgerId, Transaction } from "@hashgraph/sdk";
 import { type SignClientTypes } from "@walletconnect/types";
 import { fetchAccountData, getCachedAccountData } from "./mirror-node";
 import { emitConsoleLog } from "./console-log";
 
-// Import extensionQuery for manual extension discovery
-// @ts-ignore - Internal API but needed for manual extension refresh
+// Import extensionQuery for manual extension discovery (internal SDK API)
 import { extensionQuery } from "@hashgraph/hedera-wallet-connect/dist/lib/shared/extensionController";
 
 // Network configuration
@@ -360,7 +359,7 @@ export const fetchConnectedAccountData = async (): Promise<void> => {
  * @param transactionBytes - Frozen transaction bytes
  * @returns Signature result from wallet
  */
-export const signTransaction = async (transactionBytes: Uint8Array): Promise<any> => {
+export const signTransaction = async (transactionBytes: Uint8Array): Promise<{ result: Uint8Array }> => {
   if (!dappConnector) {
     throw new Error('Wallet not connected');
   }

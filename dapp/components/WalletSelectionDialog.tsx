@@ -38,11 +38,12 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  // Detect mobile
+  // Detect mobile (window-only API, must run after mount)
   useEffect(() => {
     const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       navigator.userAgent
     );
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from navigator
     setIsMobile(checkMobile);
   }, []);
 
@@ -56,6 +57,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
   // Wait for extensions to load (up to 3 seconds)
   useEffect(() => {
     if (open && isInitialized && extensions.length === 0 && !isMobile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- waiting flag tied to extension-load timer
       setIsWaitingForExtensions(true);
 
       const timer = setTimeout(() => {
@@ -71,6 +73,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
   // Reset QR code state when dialog closes
   useEffect(() => {
     if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- cleanup on dialog close
       setWalletConnectUri(null);
       setShowQRCode(false);
     }
@@ -140,7 +143,7 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
         {isMobile && (
           <div className="mb-4 p-3 bg-info-soft border border-info/40 rounded-lg">
             <p className="text-sm text-info-soft-fg">
-              <span className="font-semibold">Tip:</span> For the best experience, use your mobile wallet app's built-in browser.
+              <span className="font-semibold">Tip:</span> For the best experience, use your mobile wallet app&apos;s built-in browser.
             </p>
           </div>
         )}

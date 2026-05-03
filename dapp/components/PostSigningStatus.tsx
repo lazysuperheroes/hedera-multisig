@@ -130,7 +130,9 @@ export function PostSigningStatus({
   const [status, setStatus] = useState<'polling' | 'still-checking' | 'success' | 'error' | 'timeout'>('polling');
   const [txStatus, setTxStatus] = useState<TransactionStatus | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const startTimeRef = useRef(Date.now());
+  // Lazy-init: Date.now() must not run on every render per react-hooks/no-call-impure-render
+  const [startTime] = useState(() => Date.now());
+  const startTimeRef = useRef(startTime);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const elapsedIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -140,6 +142,7 @@ export function PostSigningStatus({
   useEffect(() => {
     // Skip polling if transaction ID is unknown or invalid
     if (!transactionId || transactionId === 'Unknown') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- short-circuit when no tx to poll
       setStatus('timeout');
       return;
     }

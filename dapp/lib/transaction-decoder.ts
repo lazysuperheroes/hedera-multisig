@@ -17,7 +17,15 @@
  *
  * Security-critical: Provides cryptographically verified transaction data
  * separate from unverified coordinator-provided metadata.
+ *
+ * `any` justification: this module reads private SDK fields (`_hbarTransfers`,
+ * `_tokenTransfers`, `transactionMemo`, etc.) that the SDK doesn't expose via
+ * its public type surface. Casting to specific shapes for each access point
+ * would bloat the file without changing what we read. The casts are
+ * intentional escape hatches into SDK internals.
  */
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- intentional access to private SDK fields, see header */
 
 import {
   Transaction,
@@ -46,8 +54,6 @@ import {
   ScheduleCreateTransaction,
   ScheduleSignTransaction,
   ScheduleDeleteTransaction,
-  AccountId,
-  Hbar,
 } from '@hashgraph/sdk';
 import { ethers } from 'ethers';
 

@@ -15,8 +15,8 @@ import {
 
 export interface UseTransactionReviewOptions {
   frozenTransactionBase64: string;
-  metadata?: Record<string, any>;
-  contractInterface?: any; // ethers Interface
+  metadata?: Record<string, unknown>;
+  contractInterface?: unknown; // ethers Interface
 }
 
 export interface TransactionReviewState {
@@ -61,10 +61,11 @@ export function useTransactionReview(options: UseTransactionReviewOptions | null
       try {
         setState((prev) => ({ ...prev, loading: true, error: null }));
 
-        // Decode transaction
+        // Decode transaction. contractInterface arrives typed as unknown
+        // because the WebSocket payload type can't statically reference ethers.
         const decoded = await TransactionDecoder.decode(
           frozenTransactionBase64,
-          contractInterface
+          contractInterface as Parameters<typeof TransactionDecoder.decode>[1]
         );
 
         // Extract amounts and accounts

@@ -78,11 +78,12 @@ export function useSessionRecovery() {
    */
   const saveSession = useCallback((session: Omit<SessionState, 'timestamp'>) => {
     try {
-      // Ensure PIN is never stored
-      const { pin, ...safeSession } = session as any;
+      // Ensure PIN is never stored — strip any legacy field
+      const safeSession: Record<string, unknown> = { ...(session as Record<string, unknown>) };
+      delete safeSession.pin;
 
       const sessionWithTimestamp: SessionState = {
-        ...safeSession,
+        ...(safeSession as Omit<SessionState, 'timestamp'>),
         timestamp: Date.now(),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionWithTimestamp));
@@ -99,17 +100,18 @@ export function useSessionRecovery() {
     try {
       const current = localStorage.getItem(STORAGE_KEY);
       if (current) {
-        const session = JSON.parse(current);
+        const session = JSON.parse(current) as Record<string, unknown>;
         // Strip PIN from updates too
-        const { pin, ...safeUpdates } = updates as any;
+        const safeUpdates: Record<string, unknown> = { ...(updates as Record<string, unknown>) };
+        delete safeUpdates.pin;
 
         const updated: SessionState = {
-          ...session,
-          ...safeUpdates,
+          ...(session as unknown as SessionState),
+          ...(safeUpdates as Partial<SessionState>),
           timestamp: Date.now(),
         };
         // Remove any legacy PIN that might exist
-        delete (updated as any).pin;
+        delete (updated as unknown as Record<string, unknown>).pin;
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
         setSavedSession(updated);

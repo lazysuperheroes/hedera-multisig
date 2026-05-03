@@ -18,6 +18,7 @@ import type {
   SessionInfo,
   TransactionDetails,
   ServerMessage,
+  ClientMessage,
 } from '../types/protocol';
 
 export interface BrowserSigningClientOptions {
@@ -39,7 +40,9 @@ export class BrowserSigningClient {
   private eventHandlers: Partial<SigningClientEvents> = {};
 
   // Connection promise resolvers
-  private connectResolve: ((value: any) => void) | null = null;
+  private connectResolve:
+    | ((value: { success: boolean; participantId: string; sessionInfo: SessionInfo }) => void)
+    | null = null;
   private connectReject: ((error: Error) => void) | null = null;
 
   // Auto-reconnect state
@@ -185,7 +188,7 @@ export class BrowserSigningClient {
 
     this.reconnectTimeout = setTimeout(() => {
       if (this.connectionParams) {
-        const { serverUrl, sessionId, pin, publicKey, reconnectionToken } = this.connectionParams as any;
+        const { serverUrl, sessionId, pin, publicKey } = this.connectionParams;
         // Prefer reconnection token over PIN for reconnecting
         this.connect(serverUrl, sessionId, pin || '', publicKey).catch((err) => {
           this.log(`Reconnection failed: ${err.message}`, 'error');
@@ -302,6 +305,7 @@ export class BrowserSigningClient {
    * @param handler - Event handler function
    */
   on<T extends EventName>(event: T, handler: EventHandler<T>): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variance erasure across the union of event types
     this.eventHandlers[event] = handler as any;
   }
 
@@ -343,7 +347,7 @@ export class BrowserSigningClient {
    * Send message to server
    * @private
    */
-  private send(message: any): void {
+  private send(message: ClientMessage | Record<string, unknown>): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not connected');
     }
@@ -434,7 +438,7 @@ export class BrowserSigningClient {
           break;
 
         default:
-          this.log(`Unknown message type: ${(message as any).type}`, 'warning');
+          this.log(`Unknown message type: ${(message as { type: string }).type}`, 'warning');
       }
     } catch (error) {
       this.log(`Error handling message: ${(error as Error).message}`, 'error');
@@ -499,8 +503,8 @@ export class BrowserSigningClient {
   private onTransactionReceived(payload: {
     frozenTransaction: string | { base64: string; bytes?: Uint8Array };
     txDetails: TransactionDetails;
-    metadata?: Record<string, any>;
-    contractInterface?: any;
+    metadata?: Record<string, unknown>;
+    contractInterface?: unknown;
   }): void {
     this.status = 'reviewing';
 
@@ -527,6 +531,7 @@ export class BrowserSigningClient {
   private emit<T extends EventName>(event: T, ...args: Parameters<EventHandler<T>>): void {
     const handler = this.eventHandlers[event];
     if (handler) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variance erasure: handler arg type is per-event
       (handler as any)(...args);
     }
   }

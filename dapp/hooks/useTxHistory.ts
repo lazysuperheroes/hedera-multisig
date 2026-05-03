@@ -49,8 +49,9 @@ function persistEntries(entries: TxHistoryEntry[]): void {
 export function useTxHistory() {
   const [entries, setEntries] = useState<TxHistoryEntry[]>([]);
 
-  // Load from localStorage on mount
+  // Load from localStorage on mount (window-only, must run after mount to avoid SSR mismatch)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from localStorage
     setEntries(loadEntries());
   }, []);
 
