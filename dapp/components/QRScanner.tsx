@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface QRScannerProps {
   onScan: (data: string) => void;
@@ -10,6 +11,17 @@ interface QRScannerProps {
 
 export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
+  // Escape-to-close
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const handleScan = useCallback(
     (detectedCodes: { rawValue: string }[]) => {
@@ -38,11 +50,13 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ background: 'var(--scrim)' }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="qr-dialog-title"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="bg-surface border border-border rounded-md p-4 max-w-md w-full mx-4 shadow-xl">
         <div className="flex items-center justify-between mb-4">

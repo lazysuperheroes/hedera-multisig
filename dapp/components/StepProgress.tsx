@@ -27,7 +27,7 @@ export function StepProgress({ steps, currentIndex }: StepProgressProps) {
                     isDone
                       ? 'bg-success text-white'
                       : isActive
-                      ? 'bg-accent text-white ring-4 ring-blue-100 dark:ring-blue-900/50'
+                      ? 'bg-accent text-white ring-4 ring-accent-soft'
                       : 'bg-surface-recessed text-foreground-subtle'
                   }`}
                   aria-current={isActive ? 'step' : undefined}

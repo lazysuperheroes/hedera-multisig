@@ -115,8 +115,8 @@ export default function HistoryPage() {
   // ---- Shared Tailwind tokens ----
   const selectClass =
     'px-3 py-2 border border-border-strong rounded-lg ' +
-    'bg-white dark:bg-surface text-foreground text-sm ' +
-    'focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+    'bg-surface text-foreground text-sm ' +
+    'focus:border-transparent';
 
   // ------------------------------------------------------------------
   // Render
@@ -143,6 +143,7 @@ export default function HistoryPage() {
         <div className="space-y-6">
 
         {/* Controls row — gets ~/filters pane chrome in console */}
+        <h2 className="sr-only">Filters</h2>
         <div
           className="console-pane bg-surface rounded-lg shadow-sm border border-border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3"
           data-pane-label="~/filters"
@@ -298,6 +299,8 @@ export default function HistoryPage() {
             </Link>
           </div>
         ) : (
+          <>
+          <h2 className="sr-only">Transactions</h2>
           <div
             className="console-pane bg-surface rounded-lg shadow-sm border border-border overflow-hidden"
             data-pane-label="~/log"
@@ -376,7 +379,7 @@ export default function HistoryPage() {
                           className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
                             entry.network === 'mainnet'
                               ? 'bg-success-soft text-success-soft-fg'
-                              : 'bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300'
+                              : 'bg-warning-soft text-warning-soft-fg'
                           }`}
                         >
                           {entry.network}
@@ -425,6 +428,7 @@ export default function HistoryPage() {
               )}
             </div>
           </div>
+          </>
         )}
 
         {/* Info — lighter treatment, separated from main content. Hidden in

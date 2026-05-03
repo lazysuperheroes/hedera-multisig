@@ -6,6 +6,7 @@
  */
 
 import { Hbar, HbarUnit } from '@hashgraph/sdk';
+import { emitConsoleLog } from './console-log';
 
 interface MirrorNodeAccountResponse {
   account: string;
@@ -61,13 +62,13 @@ export async function fetchAccountData(
   // Check cache first
   const cached = accountCache.get(accountId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    console.log(`Using cached data for ${accountId}`);
+    emitConsoleLog({ level: 'debug', source: 'mirror', message: `cache hit`, data: { accountId } });
     return cached;
   }
 
   // Fetch from mirror node
   const url = `${getMirrorNodeUrl(network)}/accounts/${accountId}`;
-  console.log(`Fetching account data from mirror node: ${accountId}`);
+  emitConsoleLog({ level: 'info', source: 'mirror', message: `GET /accounts/${accountId}` });
 
   try {
     const response = await fetch(url);
@@ -109,10 +110,11 @@ export async function fetchAccountData(
     // Cache the result
     accountCache.set(accountId, accountData);
 
-    console.log(`Account data cached for ${accountId}:`, {
-      publicKey: publicKey.substring(0, 20) + '...',
-      balance: balanceFormatted,
-      evmAddress: data.evm_address,
+    emitConsoleLog({
+      level: 'success',
+      source: 'mirror',
+      message: `cached ${accountId}`,
+      data: { balance: balanceFormatted, evm: data.evm_address },
     });
 
     return accountData;

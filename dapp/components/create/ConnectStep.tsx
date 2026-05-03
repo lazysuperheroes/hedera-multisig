@@ -2,7 +2,7 @@
 
 const inputClass =
   'w-full px-4 py-3 border border-border-strong rounded-lg ' +
-  'focus:ring-2 focus:ring-blue-500 focus:border-transparent ' +
+  'focus:border-accent ' +
   'bg-surface text-foreground ' +
   'placeholder:text-foreground-subtle';
 
@@ -72,6 +72,8 @@ export function ConnectStep({
             placeholder="ws://localhost:3001"
             value={serverUrl}
             onChange={(e) => onServerUrlChange(e.target.value)}
+            autoComplete="url"
+            spellCheck={false}
             required
           />
         </div>
@@ -87,6 +89,10 @@ export function ConnectStep({
             placeholder="Paste session ID from server output"
             value={sessionId}
             onChange={(e) => onSessionIdChange(e.target.value.trim())}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             required
           />
         </div>
@@ -102,6 +108,10 @@ export function ConnectStep({
             placeholder="XXXXXXXX"
             value={pin}
             onChange={(e) => onPinChange(e.target.value.trim())}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             required
           />
         </div>
@@ -117,6 +127,8 @@ export function ConnectStep({
             placeholder="Coordinator token from server output"
             value={coordinatorToken}
             onChange={(e) => onCoordinatorTokenChange(e.target.value.trim())}
+            autoComplete="off"
+            spellCheck={false}
             required
           />
           <p className="form-hint mt-1 text-xs text-foreground-subtle">

@@ -576,7 +576,7 @@ export default function SessionPage({ params }: PageProps) {
                   className="px-4 py-2 text-sm bg-info-soft text-info-soft-fg rounded hover:bg-info-soft dark:hover:bg-accent-hover flex items-center gap-2"
                   title="Share session with other participants"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                   </svg>
                   Share
@@ -616,7 +616,7 @@ export default function SessionPage({ params }: PageProps) {
         {errorMessage && (
           <div className="bg-destructive-soft border-2 border-destructive rounded-lg p-4">
             <div className="flex items-start space-x-3">
-              <svg className="w-6 h-6 text-destructive flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-destructive flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -729,7 +729,7 @@ export default function SessionPage({ params }: PageProps) {
         {currentStep === 'signing' && (
           <div className="bg-info-soft border-2 border-info rounded-lg p-8 text-center">
             <div className="animate-pulse mb-4">
-              <svg className="w-16 h-16 text-accent mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-16 h-16 text-accent mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -757,7 +757,7 @@ export default function SessionPage({ params }: PageProps) {
         {currentStep === 'completed' && (
           <div className="bg-success-soft border-2 border-success rounded-lg p-8 text-center">
             <div className="mb-4">
-              <svg className="w-20 h-20 text-success mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-20 h-20 text-success mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -792,7 +792,7 @@ export default function SessionPage({ params }: PageProps) {
         {currentStep === 'waiting' && (
           <div className="bg-info-soft border-2 border-info/40 rounded-lg p-8 text-center">
             <div className="animate-pulse mb-4">
-              <svg className="w-16 h-16 text-accent mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-16 h-16 text-accent mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"

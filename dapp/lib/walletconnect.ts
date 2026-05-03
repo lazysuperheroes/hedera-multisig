@@ -9,6 +9,7 @@ import { DAppConnector, HederaJsonRpcMethod, HederaSessionEvent, HederaChainId, 
 import { LedgerId, type AccountId, Transaction } from "@hashgraph/sdk";
 import { type SignClientTypes } from "@walletconnect/types";
 import { fetchAccountData, getCachedAccountData } from "./mirror-node";
+import { emitConsoleLog } from "./console-log";
 
 // Import extensionQuery for manual extension discovery
 // @ts-ignore - Internal API but needed for manual extension refresh
@@ -85,10 +86,7 @@ export const initializeWalletConnect = async (): Promise<void> => {
       const projectId = getProjectId();
       const chainId = getChainId();
 
-      console.log('🔌 Initializing WalletConnect v2.0.4...');
-      console.log('📍 Network:', network);
-      console.log('🆔 Chain ID:', chainId);
-      console.log('🔑 Project ID:', projectId?.substring(0, 8) + '...');
+      emitConsoleLog({ level: 'info', source: 'wc', message: 'initializing v2.0.4', data: { network, chainId } });
 
       dappConnector = new DAppConnector(
         metadata,
@@ -101,7 +99,7 @@ export const initializeWalletConnect = async (): Promise<void> => {
 
       await dappConnector.init({ logger: 'error' });
 
-      console.log('✅ WalletConnect initialized successfully');
+      emitConsoleLog({ level: 'success', source: 'wc', message: 'initialized' });
       isInitializing = false;
       resolve();
     } catch (error) {
@@ -167,11 +165,11 @@ export const connectWallet = async (extensionId?: string, onUri?: (uri: string) 
 
   if (extensionId) {
     // Connect to specific extension (HashPack, Blade, etc.)
-    console.log('🔌 Connecting to extension:', extensionId);
+    emitConsoleLog({ level: 'info', source: 'wc', message: `connecting to extension`, data: { extensionId } });
     await dappConnector.connectExtension(extensionId);
   } else if (onUri) {
     // Custom QR code flow - caller provides URI callback
-    console.log('🔌 Starting WalletConnect pairing with custom QR...');
+    emitConsoleLog({ level: 'info', source: 'wc', message: 'starting pairing (custom QR)' });
     await dappConnector.connect((uri) => {
       console.log('📱 WalletConnect URI generated');
       onUri(uri);
@@ -198,7 +196,7 @@ export const disconnectWallet = async (): Promise<void> => {
     return;
   }
 
-  console.log('🔌 Disconnecting wallet');
+  emitConsoleLog({ level: 'info', source: 'wc', message: 'disconnecting' });
   try {
     await dappConnector.disconnectAll();
   } catch (err) {

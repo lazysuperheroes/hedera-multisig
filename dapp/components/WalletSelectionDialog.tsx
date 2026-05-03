@@ -8,10 +8,11 @@
 
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import { QRCodeSVG } from 'qrcode.react';
 import { Icon } from './Icon';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 export interface WalletSelectionDialogProps {
   open: boolean;
@@ -24,6 +25,18 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
   const [isWaitingForExtensions, setIsWaitingForExtensions] = useState(false);
   const [walletConnectUri, setWalletConnectUri] = useState<string | null>(null);
   const [showQRCode, setShowQRCode] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
+
+  // Escape-to-close
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   // Detect mobile
   useEffect(() => {
@@ -97,7 +110,15 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="wallet-dialog-title">
+    <div
+      ref={dialogRef}
+      className="fixed inset-0 z-50 flex items-start justify-center pt-16"
+      style={{ background: 'var(--scrim)' }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wallet-dialog-title"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className="bg-surface rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
@@ -146,6 +167,8 @@ export function WalletSelectionDialog({ open, onClose }: WalletSelectionDialogPr
 
               {walletConnectUri ? (
                 <div className="space-y-4">
+                  {/* Pure white kept for QR scanability — every QR scanner
+                      expects high-contrast on #fff. Don't tokenize. */}
                   <div className="bg-white p-4 rounded-lg inline-block">
                     <QRCodeSVG
                       value={walletConnectUri}

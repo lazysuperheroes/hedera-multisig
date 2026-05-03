@@ -7,9 +7,10 @@
 
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeDisplay } from './QRCodeDisplay';
 import { CopyButton, CopyableText } from './CopyButton';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { generateConnectionString } = require('../../shared/connection-string');
 
@@ -43,6 +44,18 @@ export function ShareSessionDialog({
   pin,
 }: ShareSessionDialogProps) {
   const [activeTab, setActiveTab] = useState<'qr' | 'text'>('qr');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
+
+  // Escape-to-close
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   const connectionString = useMemo(
     () => generateConnectionString(serverUrl, sessionId, pin),
@@ -57,7 +70,15 @@ export function ShareSessionDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
+    <div
+      ref={dialogRef}
+      className="fixed inset-0 z-50 flex items-start justify-center pt-16"
+      style={{ background: 'var(--scrim)' }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="share-dialog-title"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className="bg-surface rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[85vh] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-border">

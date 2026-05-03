@@ -173,6 +173,10 @@ function JoinPageContent() {
                 value={connectionString}
                 onChange={handleConnectionStringChange}
                 placeholder="Paste connection string (hmsc:…)"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
                 className="
                   flex-1 px-4 py-3 rounded-md font-mono text-sm
                   bg-surface text-foreground placeholder:text-foreground-subtle
@@ -384,6 +388,10 @@ function Field({ id, name, label, placeholder, value, onChange, type = 'text', m
         onChange={onChange}
         placeholder={placeholder}
         required={required}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
         className={`
           w-full px-4 py-3 rounded-md
           bg-surface text-foreground placeholder:text-foreground-subtle

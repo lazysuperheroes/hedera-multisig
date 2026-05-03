@@ -584,7 +584,7 @@ export function TransactionReview({
                 placeholder="Enter optional rejection reason..."
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                className="w-full px-4 py-2 border border-border-strong bg-surface rounded focus:ring-2 focus:ring-red-500 text-foreground placeholder:text-foreground-subtle dark:placeholder:text-foreground-subtle"
+                className="w-full px-4 py-2 border border-border-strong bg-surface rounded focus:border-destructive text-foreground placeholder:text-foreground-subtle dark:placeholder:text-foreground-subtle"
               />
               <div className="flex space-x-2">
                 <button

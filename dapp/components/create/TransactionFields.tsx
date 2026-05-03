@@ -25,7 +25,7 @@ interface TransactionFieldsProps {
 
 const inputClass =
   'w-full px-4 py-3 border border-border-strong rounded-lg ' +
-  'focus:ring-2 focus:ring-blue-500 focus:border-transparent ' +
+  'focus:border-accent ' +
   'bg-surface text-foreground ' +
   'placeholder:text-foreground-subtle';
 
