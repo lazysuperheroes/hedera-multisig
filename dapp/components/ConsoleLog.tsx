@@ -1,14 +1,18 @@
 /**
  * ConsoleLog — bottom drawer streaming connection / event log.
  *
- * Visible only in console register. Subscribes to the global event bus
- * (lib/console-log.ts) and maintains a rolling buffer of the most
- * recent N entries. Toggleable open/closed; persists state across page
- * navigations via localStorage.
+ * Visible only in console register. Three states:
+ *   - 'closed'  ~32px header strip only. Last log line shown inline.
+ *   - 'tease'   ~120px (default). Header + last 5-6 entries visible
+ *               without dominating the viewport.
+ *   - 'open'    max-h-[40vh]. Full scrollable drawer.
  *
- * Design intent: in console register, the dApp should look like a
- * running shell session. The drawer makes wallet/WS/mirror activity
- * visible the way a terminal makes process activity visible.
+ * Header click cycles closed → tease → open → closed. A × button on
+ * the right fully closes from any state. Body gets matching
+ * padding-bottom so content never sits under the drawer.
+ *
+ * Subscribes to the global event bus (lib/console-log.ts) and keeps a
+ * rolling 200-entry buffer.
  */
 
 'use client';
@@ -19,20 +23,50 @@ import { subscribeConsoleLog, emitConsoleLog, type ConsoleLogEntry, type Console
 import { useOnboarding } from '../hooks/useOnboarding';
 
 const MAX_ENTRIES = 200;
-const STORAGE_KEY_OPEN = 'console-log-open';
+const STORAGE_KEY_STATE = 'console-log-state';
+
+type DrawerState = 'closed' | 'tease' | 'open';
+
+const STATE_HEIGHTS: Record<DrawerState, string> = {
+  closed: '2.25rem',  // header strip only (~36px)
+  tease:  '7.5rem',   // header + ~6 lines (~120px)
+  open:   '42vh',     // full drawer
+};
+
+function isValidState(s: string | null): s is DrawerState {
+  return s === 'closed' || s === 'tease' || s === 'open';
+}
+
+function nextState(s: DrawerState): DrawerState {
+  return s === 'closed' ? 'tease' : s === 'tease' ? 'open' : 'closed';
+}
 
 export function ConsoleLog() {
   const { register } = useTheme();
   const { state: onboarding, markTriedConsole } = useOnboarding();
   const [entries, setEntries] = useState<ConsoleLogEntry[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
+  const [drawerState, setDrawerState] = useState<DrawerState>('closed');
   const scrollRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(false);
   const welcomeEmittedRef = useRef(false);
 
-  // First-time welcome: when the user first activates Console mode, emit
-  // a one-line welcome entry to the log so the drawer announces what it
-  // is. Idempotent via onboarding.triedConsole + a session-local ref.
+  // Load saved state. Default to 'tease' on first console activation.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_STATE);
+      if (isValidState(stored)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setDrawerState(stored);
+      } else if (register === 'console') {
+        // Default-tease the first time a user lands in console
+        setDrawerState('tease');
+      }
+    } catch {}
+  }, [register]);
+
+  // First-time welcome: emit a multi-line init sequence so the drawer
+  // teaches the user what it streams + how to control it. Idempotent
+  // via onboarding.triedConsole + a session-local ref.
   useEffect(() => {
     if (
       register === 'console' &&
@@ -40,31 +74,18 @@ export function ConsoleLog() {
       !welcomeEmittedRef.current
     ) {
       welcomeEmittedRef.current = true;
-      emitConsoleLog({
-        level: 'info',
-        source: 'console',
-        message: 'welcome — this drawer streams wallet/ws events. close anytime via the toggle above.',
-      });
+      // Stagger the welcome so it reads like an init sequence.
+      const lines: Array<Omit<ConsoleLogEntry, 'ts'>> = [
+        { level: 'info',  source: 'console', message: 'register=console initialized' },
+        { level: 'debug', source: 'console', message: 'streaming wallet · ws · mirror events (rolling 200-entry buffer)' },
+        { level: 'info',  source: 'console', message: 'try connecting a wallet, joining a session, or building a transaction — events appear here' },
+        { level: 'debug', source: 'console', message: 'click the header to cycle: closed → tease → open · × to close fully' },
+        { level: 'info',  source: 'console', message: 'switch back to treasury anytime via the toggle in the top bar' },
+      ];
+      lines.forEach((line, i) => setTimeout(() => emitConsoleLog(line), 60 * i));
       markTriedConsole();
     }
   }, [register, onboarding.triedConsole, markTriedConsole]);
-
-  // Load saved open/closed state. Hydration setState — same canonical
-  // pattern as ThemeContext (localStorage isn't available on the server,
-  // so we sync after mount).
-  //
-  // Default-open in console register the first time a user lands here:
-  // engineer-tool registers should announce "this drawer exists" by
-  // showing it. Treasury never renders this component at all.
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_OPEN);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (stored === '1') setIsOpen(true);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      else if (stored === null && register === 'console') setIsOpen(true);
-    } catch {}
-  }, [register]);
 
   // Subscribe to log events
   useEffect(() => {
@@ -78,22 +99,43 @@ export function ConsoleLog() {
     return unsubscribe;
   }, []);
 
-  // Auto-scroll to bottom on new entries when open
+  // Auto-scroll on new entries when drawer is showing content
   useEffect(() => {
-    if (isOpen && scrollRef.current && wasOpenRef.current) {
+    if (drawerState !== 'closed' && scrollRef.current && wasOpenRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-    wasOpenRef.current = isOpen;
-  }, [entries, isOpen]);
+    wasOpenRef.current = drawerState !== 'closed';
+  }, [entries, drawerState]);
 
-  const toggle = () => {
-    const next = !isOpen;
-    setIsOpen(next);
-    try { localStorage.setItem(STORAGE_KEY_OPEN, next ? '1' : '0'); } catch {}
+  // Reserve body padding so content doesn't sit under the drawer.
+  // Cleared on register switch / unmount.
+  useEffect(() => {
+    if (register !== 'console') {
+      document.body.style.paddingBottom = '';
+      return;
+    }
+    document.body.style.paddingBottom = STATE_HEIGHTS[drawerState];
+    return () => {
+      document.body.style.paddingBottom = '';
+    };
+  }, [register, drawerState]);
+
+  const cycle = () => {
+    const next = nextState(drawerState);
+    setDrawerState(next);
+    try { localStorage.setItem(STORAGE_KEY_STATE, next); } catch {}
+  };
+
+  const close = () => {
+    setDrawerState('closed');
+    try { localStorage.setItem(STORAGE_KEY_STATE, 'closed'); } catch {}
   };
 
   // Render nothing in treasury register
   if (register !== 'console') return null;
+
+  const showBody = drawerState !== 'closed';
+  const bodyHeight = drawerState === 'tease' ? 'max-h-[5.5rem]' : 'max-h-[36vh]';
 
   return (
     <div
@@ -107,43 +149,56 @@ export function ConsoleLog() {
       aria-label="Console log"
       aria-live="polite"
     >
-      {/* Drawer header — always visible, clickable to toggle */}
-      <button
-        onClick={toggle}
-        className="
-          w-full flex items-center justify-between gap-3 px-4 py-1.5
-          text-left text-foreground-muted hover:text-foreground
-          border-b border-border transition-colors
-        "
-        aria-expanded={isOpen}
-        aria-controls="console-log-body"
-      >
-        <span className="flex items-center gap-3">
+      {/* Drawer header — clickable to cycle states */}
+      <div className="flex items-center justify-between gap-3 px-4 py-1.5 border-b border-border">
+        <button
+          onClick={cycle}
+          className="
+            flex items-center gap-3 text-left text-foreground-muted hover:text-foreground
+            transition-colors flex-1 min-w-0
+          "
+          aria-expanded={drawerState !== 'closed'}
+          aria-controls="console-log-body"
+          aria-label={`Console log. Currently ${drawerState}. Click to cycle.`}
+        >
           <span className="text-accent font-bold">$</span>
-          <span className="uppercase tracking-wider text-[10px]">console.log</span>
-          <span className="text-foreground-subtle tabular-nums">
+          <span className="uppercase tracking-wider text-[10px] flex-shrink-0">console.log</span>
+          <span className="text-foreground-subtle tabular-nums flex-shrink-0">
             {entries.length}{entries.length === MAX_ENTRIES ? '+' : ''} entries
           </span>
-        </span>
-        <span className="flex items-center gap-3 text-[11px]">
-          {!isOpen && entries.length > 0 && (
-            <span className="text-foreground-subtle truncate max-w-[40vw] hidden sm:inline">
-              {entries[entries.length - 1].source}: {entries[entries.length - 1].message}
+          {drawerState === 'closed' && entries.length > 0 && (
+            <span className="text-foreground-subtle truncate hidden sm:inline">
+              · {entries[entries.length - 1].source}: {entries[entries.length - 1].message}
             </span>
           )}
-          <span className="text-foreground-subtle">{isOpen ? '▼' : '▲'}</span>
-        </span>
-      </button>
+          <span className="ml-auto text-foreground-subtle text-[10px] uppercase tracking-wider">
+            {drawerState}
+          </span>
+          <span className="text-foreground-subtle">{stateGlyph(drawerState)}</span>
+        </button>
+        {drawerState !== 'closed' && (
+          <button
+            onClick={close}
+            aria-label="Close console log"
+            className="
+              flex-shrink-0 w-6 h-6 inline-flex items-center justify-center
+              text-foreground-subtle hover:text-foreground transition-colors
+            "
+          >
+            ×
+          </button>
+        )}
+      </div>
 
-      {/* Drawer body — only rendered when open */}
-      {isOpen && (
+      {/* Drawer body */}
+      {showBody && (
         <div
           id="console-log-body"
           ref={scrollRef}
-          className="max-h-[40vh] overflow-y-auto px-4 py-2 bg-surface-recessed"
+          className={`overflow-y-auto px-4 py-2 bg-surface-recessed ${bodyHeight}`}
         >
           {entries.length === 0 ? (
-            <p className="text-foreground-subtle italic py-4">
+            <p className="text-foreground-subtle italic py-2">
               # waiting for events. connect a wallet, join a session, or build a transaction.
             </p>
           ) : (
@@ -153,8 +208,8 @@ export function ConsoleLog() {
               ))}
             </ul>
           )}
-          {/* Footer with clear button */}
-          {entries.length > 0 && (
+          {/* Footer with clear button — only in 'open' state to save space in tease */}
+          {entries.length > 0 && drawerState === 'open' && (
             <div className="mt-3 pt-2 border-t border-border flex items-center gap-3 text-[11px]">
               <button
                 onClick={() => setEntries([])}
@@ -171,6 +226,10 @@ export function ConsoleLog() {
       )}
     </div>
   );
+}
+
+function stateGlyph(s: DrawerState): string {
+  return s === 'closed' ? '▲' : s === 'tease' ? '◆' : '▼';
 }
 
 function LogRow({ entry }: { entry: ConsoleLogEntry }) {

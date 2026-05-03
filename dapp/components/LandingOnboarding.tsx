@@ -71,26 +71,36 @@ export function LandingOnboarding() {
           role="note"
           className="
             animate-slide-up mt-6 max-w-2xl
-            border border-accent/40 bg-accent-soft/40
-            rounded-md px-4 py-3 text-sm text-foreground-muted
+            border-l-2 border-accent
+            bg-gradient-to-r from-accent-soft/60 to-transparent
+            rounded-r-md pl-5 pr-4 py-3.5 text-sm text-foreground-muted
             flex items-start gap-3
           "
         >
-          <span className="font-mono text-accent font-bold flex-shrink-0">$</span>
-          <div className="flex-1">
-            <span className="text-foreground font-medium">Tip — </span>
-            you&apos;ve been here a few times. There&apos;s a denser{' '}
+          <span className="font-mono text-accent font-bold flex-shrink-0 text-base leading-none mt-0.5">$</span>
+          <div className="flex-1 leading-relaxed">
+            <span className="text-foreground font-semibold">
+              You&apos;ve been here a few times.
+            </span>{' '}
+            There&apos;s a denser{' '}
             <button
               onClick={() => {
                 setRegister('console');
                 dismissPrompt('try-console');
+                // Force the ConsoleLog drawer open on first activation so the
+                // welcome init sequence is immediately visible. The drawer
+                // also default-opens via its own logic, but being explicit
+                // here means the nudge click === "show me everything."
+                try {
+                  localStorage.setItem('console-log-state', 'open');
+                } catch {}
               }}
-              className="text-accent font-semibold hover:underline"
+              className="text-accent font-semibold hover:underline whitespace-nowrap"
             >
-              Console mode
+              Console mode →
             </button>{' '}
-            for engineer / power-user views. Try it out — toggle back any time
-            from the top bar.
+            with mono type, terminal grammar, and a streaming connection log.
+            Toggle back from the top bar anytime.
           </div>
           <button
             onClick={() => dismissPrompt('try-console')}

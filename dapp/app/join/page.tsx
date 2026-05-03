@@ -186,7 +186,8 @@ function JoinPageContent() {
                 className="px-3 py-3 rounded-md text-sm text-foreground hover:bg-surface-recessed border border-border transition-colors"
                 title="Paste from clipboard"
               >
-                Paste
+                <span className="treasury-label">Paste</span>
+                <span className="console-label">[paste]</span>
               </button>
               <button
                 type="button"
@@ -194,7 +195,8 @@ function JoinPageContent() {
                 className="px-3 py-3 rounded-md text-sm bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
                 title="Scan QR code"
               >
-                Scan QR
+                <span className="treasury-label">Scan QR</span>
+                <span className="console-label">[scan]</span>
               </button>
             </div>
             <p className="mt-2 text-sm text-foreground-subtle">
@@ -234,7 +236,9 @@ function JoinPageContent() {
               {connectionString && (
                 <div className="flex justify-end -mb-2">
                   <span className="text-xs text-success-soft-fg flex items-center gap-1.5">
-                    <CheckIcon /> Auto-filled from connection string
+                    <CheckIcon />
+                    <span className="treasury-label">Auto-filled from connection string</span>
+                    <span className="console-label">connection_string: parsed</span>
                   </span>
                 </div>
               )}
@@ -316,7 +320,7 @@ function JoinPageContent() {
                 type="submit"
                 disabled={!formData.serverUrl || !formData.sessionId || !formData.pin}
                 className="
-                  w-full px-6 py-3.5 rounded-md text-base font-semibold
+                  cmd w-full px-6 py-3.5 rounded-md text-base font-semibold
                   bg-accent text-accent-fg hover:bg-accent-hover
                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors
                 "

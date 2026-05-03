@@ -250,7 +250,7 @@ export default function HistoryPage() {
                     clearHistory();
                     setConfirmClear(false);
                   }}
-                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-destructive text-white hover:bg-destructive transition-colors"
+                  className="cmd px-3 py-1.5 text-sm font-medium rounded-lg bg-destructive text-white hover:bg-destructive transition-colors"
                 >
                   Yes, delete all
                 </button>
@@ -292,7 +292,7 @@ export default function HistoryPage() {
             </p>
             <Link
               href="/create"
-              className="inline-block mt-6 px-6 py-3 bg-accent text-white font-semibold rounded-lg hover:bg-accent-hover transition-colors"
+              className="cmd inline-block mt-6 px-6 py-3 bg-accent text-white font-semibold rounded-lg hover:bg-accent-hover transition-colors"
             >
               Create a Transaction
             </Link>
@@ -309,22 +309,26 @@ export default function HistoryPage() {
                 <thead>
                   <tr className="border-b border-border bg-surface-recessed">
                     <th className="px-4 py-3 font-medium text-foreground-muted">
-                      Date
+                      <span className="treasury-label">Date</span>
+                      <span className="console-label">ts</span>
                     </th>
                     <th className="px-4 py-3 font-medium text-foreground-muted">
                       Type
                     </th>
                     <th className="px-4 py-3 font-medium text-foreground-muted">
-                      Transaction ID
+                      <span className="treasury-label">Transaction ID</span>
+                      <span className="console-label">tx_id</span>
                     </th>
                     <th className="px-4 py-3 font-medium text-foreground-muted">
                       Status
                     </th>
                     <th className="px-4 py-3 font-medium text-foreground-muted">
-                      Network
+                      <span className="treasury-label">Network</span>
+                      <span className="console-label">net</span>
                     </th>
                     <th className="px-4 py-3 font-medium text-foreground-muted">
-                      HashScan
+                      <span className="treasury-label">HashScan</span>
+                      <span className="console-label">scan</span>
                     </th>
                   </tr>
                 </thead>

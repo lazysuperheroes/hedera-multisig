@@ -419,9 +419,11 @@ html {
   content: "$ ";
   color: var(--accent);
   font-weight: 700;
-  font-size: 0.85em;
-  vertical-align: 0.05em;
-  opacity: 0.7;
+  /* Opacity carries the prompt-mark differentiation; size matches the
+     headline so the prefix doesn't shrink to invisibility on smaller
+     headings. (Critique #8 minor obs.) */
+  font-size: 0.95em;
+  opacity: 0.75;
 }
 
 /* K3 + L4 — primary-CTA grammar. Buttons + links with the .cmd class get
