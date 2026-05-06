@@ -26,6 +26,11 @@ interface ConnectStepProps {
   onPinChange: (v: string) => void;
   coordinatorToken: string;
   onCoordinatorTokenChange: (v: string) => void;
+  connectionString: string;
+  onConnectionStringChange: (v: string) => void;
+  onPasteConnectionString: () => void;
+  connectionStringError: string | null;
+  connectionStringFilled: boolean;
   isConnecting: boolean;
   connectError: string | null;
   onConnect: () => void;
@@ -40,6 +45,11 @@ export function ConnectStep({
   onPinChange,
   coordinatorToken,
   onCoordinatorTokenChange,
+  connectionString,
+  onConnectionStringChange,
+  onPasteConnectionString,
+  connectionStringError,
+  connectionStringFilled,
   isConnecting,
   connectError,
   onConnect,
@@ -61,6 +71,59 @@ export function ConnectStep({
         server command. You will authenticate as the coordinator.
       </p>
       <div className="space-y-5">
+        {/* Quick-connect: paste the HMSC string from the CLI to auto-fill
+            Server URL, Session ID, and PIN. The Coordinator Token isn't in
+            the HMSC and must still be entered manually below. */}
+        <div className="form-row">
+          <label htmlFor="connStr" className={labelClass}>
+            Connection string{' '}
+            <span className="font-normal text-foreground-subtle">
+              (optional shortcut)
+            </span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="connStr"
+              type="text"
+              className={inputClass + ' font-mono text-sm'}
+              placeholder="hmsc:… (auto-fills Server URL, Session ID, PIN)"
+              value={connectionString}
+              onChange={(e) => onConnectionStringChange(e.target.value)}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              onClick={onPasteConnectionString}
+              className="px-4 py-3 rounded-lg text-sm text-foreground hover:bg-surface-recessed border border-border-strong transition-colors whitespace-nowrap"
+              title="Paste from clipboard"
+            >
+              Paste
+            </button>
+          </div>
+          {connectionStringError ? (
+            <p
+              role="alert"
+              className="form-hint mt-1.5 text-xs text-destructive"
+            >
+              {connectionStringError}
+            </p>
+          ) : connectionStringFilled ? (
+            <p className="form-hint mt-1.5 text-xs text-success-soft-fg">
+              Auto-filled from connection string — Coordinator Token still
+              required below.
+            </p>
+          ) : (
+            <p className="form-hint mt-1.5 text-xs text-foreground-subtle">
+              Paste the <code className="font-mono">hmsc:</code> string
+              from the CLI server output. Or skip and fill the fields
+              below manually.
+            </p>
+          )}
+        </div>
+
         <div className="form-row">
           <label htmlFor="serverUrl" className={labelClass}>
             Server URL

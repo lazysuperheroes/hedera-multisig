@@ -1,10 +1,11 @@
 # Walkthrough: smart contracts + multi-sig
 
 > **Stop and read first:** if your treasury only moves HBAR or fungible
-> tokens, you're done after [`../walkthrough-hbar/`](../walkthrough-hbar/).
-> This walkthrough is for teams that need to deploy and call smart
-> contracts under multi-sig control. Roughly +20 minutes on top of the
-> HBAR walkthrough.
+> tokens, [`../walkthrough-hbar/`](../walkthrough-hbar/) is the simpler
+> path. This walkthrough is for teams that need to deploy and call smart
+> contracts under multi-sig control — roughly 30 minutes end-to-end and
+> fully self-contained (regenerate keys here, or copy them across from
+> walkthrough-hbar if you've already got them).
 
 This walkthrough teaches every common contract path:
 
@@ -26,22 +27,23 @@ single-key window.
 
 ## Prerequisites
 
-You must complete at least the first step of the HBAR walkthrough:
+This walkthrough is fully self-contained. Set your operator credentials
+in the project root `.env` (`OPERATOR_ID`, `OPERATOR_KEY`,
+`HEDERA_NETWORK`) — see `START_HERE.md` if you don't have a testnet
+account yet — then generate the three signing keys and run the precheck:
 
 ```bash
-cd ../walkthrough-hbar
-node 00-precheck.js
-node 01-generate-keys.js
+cd examples/walkthrough-contract
+node setup-keys.js   # generates alice / bob / carol keys (encrypted + plaintext index)
+node 00-precheck.js  # verifies env, keys, operator balance, Counter.json
 ```
 
-The contract walkthrough reuses the three keys (alice/bob/carol)
-generated there. If you've already completed the full HBAR walkthrough,
-you're set.
-
-```bash
-cd ../walkthrough-contract
-node 00-precheck.js
-```
+> **Already ran `walkthrough-hbar`?** You can copy the keys across
+> instead of regenerating:
+> ```bash
+> cp ../walkthrough-hbar/walkthrough-keys.* .
+> ```
+> Either path works; both produce the same `walkthrough-keys.json` shape.
 
 ## The Counter contract
 
@@ -186,8 +188,13 @@ npx hedera-multisig server \
   -t 2 \
   -k "$(node -p "require('./demo-account-state.json').thresholdConfig.publicKeys.join(',')")" \
   --port 3001 \
-  --no-tunnel
+  --no-tunnel \
+  --allowed-origins http://localhost:3000
 ```
+
+`--allowed-origins http://localhost:3000` is required for the dApp's
+browser tab to connect — the server denies browser origins by default.
+CLI participants are unaffected (no `Origin` header).
 
 Note the printed **session ID**, **PIN**, **coordinator token**, and
 **connection string**.
@@ -214,7 +221,7 @@ holding their key) or via the CLI:
 npx hedera-multisig participant \
   --connect "$(... connection string from 7b ...)" \
   --label alice \
-  --keyfile ../walkthrough-hbar/walkthrough-keys.alice.encrypted \
+  --keyfile ./walkthrough-keys.alice.encrypted \
   --passphrase walkthrough-test
 ```
 
@@ -222,16 +229,17 @@ npx hedera-multisig participant \
 # Bob (terminal 4):
 npx hedera-multisig participant \
   --connect "..." --label bob \
-  --keyfile ../walkthrough-hbar/walkthrough-keys.bob.encrypted \
+  --keyfile ./walkthrough-keys.bob.encrypted \
   --passphrase walkthrough-test
 ```
 
 > **Plaintext alternative.** If you'd rather use inline keys, swap
 > `--keyfile … --passphrase walkthrough-test` for
-> `-k "$(node -e "console.log(require('../walkthrough-hbar/walkthrough-keys.json').keys.alice.privateKey)")"`.
-> See the HBAR walkthrough's "Alternative: plaintext key" section for
-> the full pattern. The encrypted flow is the production-recommended
-> shape — see [`docs/ENCRYPTED_KEYS_GUIDE.md`](../../docs/ENCRYPTED_KEYS_GUIDE.md).
+> `-k "$(node -e "console.log(require('./walkthrough-keys.json').keys.alice.privateKey)")"`.
+> `-k` is marked DEPRECATED for production (visible in process lists and
+> shell history) but is a valid path for testnet experimentation. The
+> encrypted flow is the production-recommended pattern — see
+> [`docs/ENCRYPTED_KEYS_GUIDE.md`](../../docs/ENCRYPTED_KEYS_GUIDE.md).
 
 When the second signer approves, the coordinator submits the signed
 transaction to the network and prints the executed transaction ID.
@@ -239,7 +247,7 @@ transaction to the network and prints the executed transaction ID.
 ### 7e. Verify
 
 ```bash
-node ../walkthrough-hbar/06-verify-on-mirror.js TRANSACTION_ID_FROM_7d
+node verify-on-mirror.js TRANSACTION_ID_FROM_7d
 ```
 
 Mirror confirms `SUCCESS`, returns the consensus timestamp, fee, and
@@ -287,7 +295,7 @@ session works), have two of [alice, bob, carol] sign.
 Verify:
 
 ```bash
-node ../walkthrough-hbar/06-verify-on-mirror.js TRANSACTION_ID
+node verify-on-mirror.js TRANSACTION_ID
 ```
 
 Mirror confirms — the `transfers` array shows the contract debited 2 ℏ,

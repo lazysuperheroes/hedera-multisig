@@ -2,6 +2,12 @@
 
 Complete step-by-step guide for setting up multi-signature accounts and workflows for your team.
 
+> **Just want to test the library, not roll it out to a team?** This guide
+> is for production team onboarding (Day 1 / Day 2 / Day 3). For a fast
+> end-to-end test on testnet, use [TESTING.md → Quick start](./TESTING.md#quick-start)
+> with `npm run precheck` and `npm run setup-test-env` instead — that
+> path takes ~45 minutes including reading.
+
 ## Table of Contents
 
 1. [Overview](#overview)

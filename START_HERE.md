@@ -4,6 +4,16 @@
 
 ---
 
+> **First-time tester?** Skip the decision tree below and go straight to
+> [TESTING.md → Quick start](./TESTING.md#quick-start). Run
+> `npm run precheck` first, then pick a walkthrough:
+>
+> - [`examples/walkthrough-hbar/`](./examples/walkthrough-hbar/) — CLI participants, fully local. The canonical demo (~30 min, ~6 ℏ).
+> - [`examples/walkthrough-dapp/`](./examples/walkthrough-dapp/) — same flow but signing through the **public testnet dApp** at `testnet-multisig.lazysuperheroes.com` with HashPack on one side and CLI on the other. Best for "what does signing actually feel like for participants" (~30 min, ~6 ℏ).
+> - [`examples/walkthrough-contract/`](./examples/walkthrough-contract/) — smart-contract path: deploy as EOA, convert to multi-sig, ceremony for `increment()` + `withdraw()` (~45 min, ~10 ℏ).
+
+---
+
 ## What is this?
 
 This library helps you:

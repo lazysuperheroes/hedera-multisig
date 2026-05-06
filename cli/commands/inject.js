@@ -40,7 +40,7 @@ module.exports = function(program) {
     .option('--base64-file <path>', 'JSON file containing a `frozenBase64` field (e.g. output of 07-prepare-multisig-increment.js)')
     .option('--coordinator-token <token>', 'Coordinator token (also reads HEDERA_MULTISIG_COORDINATOR_TOKEN env var)')
     .option('--label <name>', 'Coordinator label for logs', 'cli-inject')
-    .option('--timeout <ms>', 'Inject timeout in milliseconds', parseInt, INJECT_TIMEOUT_MS)
+    .option('--timeout <ms>', 'Inject timeout in milliseconds', (v) => parseInt(v, 10), INJECT_TIMEOUT_MS)
     .addHelpText('after', `
 Examples:
   # Inline base64 (good for short transactions and shell pipelines)

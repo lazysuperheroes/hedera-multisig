@@ -958,6 +958,124 @@ function formatHbarTinybars(tinybars, options = {}) {
   }
 }
 
+/**
+ * Extract the `bodyBytes` of the first SignedTransaction inside a frozen
+ * Hedera transaction. This is the canonical message that each multi-sig
+ * participant signs and that Hedera's network verifies against.
+ *
+ * Background: `transaction.toBytes()` returns a `TransactionList` protobuf
+ * — the OUTER wrapper around N `Transaction` entries (one per node target).
+ * Each entry contains `signedTransactionBytes`, which decodes to a
+ * `SignedTransaction` carrying `bodyBytes` (the actual body for that
+ * specific node) plus a `sigMap`. Hedera's signature verification runs
+ * against `bodyBytes`, NOT the outer TransactionList.
+ *
+ * For multi-sig submission to work, every signer in this codebase must
+ * sign `bodyBytes` (not the full TransactionList encoding) and the
+ * internal verifier must check against the same `bodyBytes`. This helper
+ * is the single source of truth for that extraction.
+ *
+ * Implementation note: we use the SDK's public `signableNodeBodyBytesList`
+ * getter on a parsed Transaction, which exposes `bodyBytes` for exactly
+ * this purpose. We deliberately do NOT pull in `@hashgraph/proto` —
+ * that's a peer dep of the SDK that isn't installed at the root project
+ * level (only in `dapp/`), and using it broke the CLI participant with
+ * `Cannot find module '@hashgraph/proto'`.
+ *
+ * @param {Buffer|Uint8Array|string} txBytesOrBase64 - Frozen tx bytes or base64
+ * @returns {Buffer} bodyBytes of the first SignedTransaction
+ */
+function extractFirstBodyBytes(txBytesOrBase64) {
+  let bytes;
+  if (typeof txBytesOrBase64 === 'string') {
+    bytes = Buffer.from(txBytesOrBase64, 'base64');
+  } else if (Buffer.isBuffer(txBytesOrBase64)) {
+    bytes = txBytesOrBase64;
+  } else if (txBytesOrBase64) {
+    bytes = Buffer.from(txBytesOrBase64);
+  } else {
+    throw new Error('extractFirstBodyBytes: input is empty');
+  }
+
+  const tx = Transaction.fromBytes(bytes);
+
+  // Public SDK getter: each entry has `.bodyBytes` for the
+  // corresponding node target. For canonical multi-sig signing, we use
+  // the first entry — Hedera will pick whichever node receives the
+  // submission and verify its signature against THAT node's bodyBytes,
+  // so we sign one specific body. (For multi-node freezes, all bodies
+  // differ only in `nodeAccountID`; signing a single-node freeze is the
+  // canonical multi-sig pattern per the Hedera docs.)
+  let list;
+  try {
+    list = tx.signableNodeBodyBytesList;
+  } catch (err) {
+    throw new Error(`Failed to read signableNodeBodyBytesList: ${err.message}`);
+  }
+
+  if (!list || list.length === 0) {
+    throw new Error('Frozen transaction has no signable node bodies');
+  }
+
+  // SDK class is `SignableNodeTransactionBodyBytes` with property
+  // `signableTransactionBodyBytes` (the bodyBytes for that node target).
+  const first = list[0];
+  const body = first && (first.signableTransactionBodyBytes || first.bodyBytes);
+  if (!body || body.length === 0) {
+    throw new Error('First signable node body is empty');
+  }
+
+  return Buffer.from(body);
+}
+
+/**
+ * Extract `bodyBytes` of EVERY SignedTransaction inside a frozen Hedera
+ * transaction — one per node target. With multi-node freezes (the
+ * canonical Hedera multi-sig pattern, recommended over single-node
+ * because it gives the network multiple submission paths and is robust
+ * to individual node downtime), each participant produces ONE signature
+ * per body and the executor passes the full array to
+ * `transaction.addSignature(publicKey, signatureArray)`.
+ *
+ * Single-node freezes return a 1-element array — the verifier and
+ * signing paths can use the same code unchanged.
+ *
+ * @param {Buffer|Uint8Array|string} txBytesOrBase64
+ * @returns {Buffer[]} bodyBytes per SignedTransaction in the list order
+ */
+function extractAllBodyBytes(txBytesOrBase64) {
+  let bytes;
+  if (typeof txBytesOrBase64 === 'string') {
+    bytes = Buffer.from(txBytesOrBase64, 'base64');
+  } else if (Buffer.isBuffer(txBytesOrBase64)) {
+    bytes = txBytesOrBase64;
+  } else if (txBytesOrBase64) {
+    bytes = Buffer.from(txBytesOrBase64);
+  } else {
+    throw new Error('extractAllBodyBytes: input is empty');
+  }
+
+  const tx = Transaction.fromBytes(bytes);
+  let list;
+  try {
+    list = tx.signableNodeBodyBytesList;
+  } catch (err) {
+    throw new Error(`Failed to read signableNodeBodyBytesList: ${err.message}`);
+  }
+
+  if (!list || list.length === 0) {
+    throw new Error('Frozen transaction has no signable node bodies');
+  }
+
+  return list.map((item, idx) => {
+    const body = item && (item.signableTransactionBodyBytes || item.bodyBytes);
+    if (!body || body.length === 0) {
+      throw new Error(`Signable body at index ${idx} is empty`);
+    }
+    return Buffer.from(body);
+  });
+}
+
 // Export both the class and helper functions
 module.exports = {
   TransactionDecoder,
@@ -965,5 +1083,7 @@ module.exports = {
   formatHbarTinybars,
   sha256,
   generateChecksum,
-  bufferToHex
+  bufferToHex,
+  extractFirstBodyBytes,
+  extractAllBodyBytes
 };

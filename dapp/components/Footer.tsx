@@ -11,7 +11,19 @@ interface FooterProps {
   variant?: 'full' | 'compact';
 }
 
+// Injected by `next.config.ts` from `package.json`. Falls back to 'dev'
+// if running outside a Next.js build (e.g. unit tests, Storybook).
+const VERSION = process.env.NEXT_PUBLIC_DAPP_VERSION || 'dev';
+const BUILD_TIME = process.env.NEXT_PUBLIC_DAPP_BUILD_TIME || '';
+
 export function Footer({ variant = 'full' }: FooterProps) {
+  // Build-time tooltip so an operator can quickly confirm exactly which
+  // bundle they're running. Useful when chasing "is the deployed dApp
+  // actually picking up my changes?" without server-side correlation.
+  const versionTooltip = BUILD_TIME
+    ? `dApp v${VERSION} · built ${BUILD_TIME}`
+    : `dApp v${VERSION}`;
+
   return (
     <footer className="mt-16 border-t border-border">
       <div className="max-w-6xl mx-auto px-6 py-8">
@@ -52,6 +64,13 @@ export function Footer({ variant = 'full' }: FooterProps) {
             >
               npm
             </a>
+            <span className="hidden sm:inline w-px h-4 bg-border" aria-hidden="true" />
+            <span
+              className="text-xs font-mono opacity-70 cursor-help"
+              title={versionTooltip}
+            >
+              v{VERSION}
+            </span>
             <span className="hidden sm:inline w-px h-4 bg-border" aria-hidden="true" />
             <LSHLogo variant="attribution" />
           </div>

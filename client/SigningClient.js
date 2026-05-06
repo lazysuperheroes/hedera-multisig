@@ -6,9 +6,16 @@
  */
 
 const WebSocket = require('ws');
-const readlineSync = require('readline-sync');
+// NOTE: deliberately using Node's built-in `readline` (event-driven)
+// instead of the npm `readline-sync` package. The synchronous variant
+// blocks Node's event loop while the operator reads/types — during which
+// WebSocket pongs aren't sent, so the server's heartbeat watchdog
+// terminates the socket mid-review. The async readline keeps the loop
+// running so heartbeats and incoming server messages continue flowing.
+const readline = require('readline');
 const { PrivateKey, Transaction } = require('@hashgraph/sdk');
 const TransactionReviewer = require('./TransactionReviewer');
+const { extractAllBodyBytes } = require('../shared/transaction-decoder');
 
 class SigningClient {
   constructor(options = {}) {
@@ -175,8 +182,11 @@ class SigningClient {
         }
       }
 
-      // Decode transaction from bytes
-      const decodedTx = TransactionReviewer.decode(
+      // Decode transaction from bytes. NB: TransactionReviewer.decode is
+      // async (delegates to SharedDecoder.decode which awaits sha256 for
+      // the checksum). Without `await` here, `decodedTx` is the raw Promise
+      // and displayForApproval renders garbage / `[object Promise]`.
+      const decodedTx = await TransactionReviewer.decode(
         frozenTransaction.base64,
         resolvedInterface
       );
@@ -199,7 +209,11 @@ class SigningClient {
       }
 
     } catch (error) {
-      this._log(`Error processing transaction: ${error.message}`, 'error');
+      // Log the stack so the operator can paste it for diagnosis. The
+      // generic "Error during review: …" auto-reject was hiding things
+      // like Buffer/JSON-shape mismatches and invalid-public-key errors.
+      const stack = error && error.stack ? `\n${error.stack}` : '';
+      this._log(`Error processing transaction: ${error.message}${stack}`, 'error');
       await this.rejectTransaction(`Error during review: ${error.message}`);
     }
   }
@@ -210,15 +224,49 @@ class SigningClient {
    * @returns {Promise<boolean>} True if approved, false if rejected
    */
   async promptUserApproval() {
+    // Single-prompt safety: if a previous prompt is somehow still open
+    // (e.g. a fresh TRANSACTION_RECEIVED arrived while the operator was
+    // still reading the previous one — possible now that the event loop
+    // isn't blocked), close it cleanly so it resolves to "not approved"
+    // and we don't end up with two prompts racing for stdin.
+    if (this._activePromptRl) {
+      try { this._activePromptRl.close(); } catch { /* already closed */ }
+      this._activePromptRl = null;
+    }
+
     console.log('\n');
     console.log('═'.repeat(64));
     console.log('Do you approve this transaction?');
     console.log('Type "YES" (all caps) to approve, anything else to reject.');
     console.log('═'.repeat(64));
 
-    const response = readlineSync.question('\nYour decision: ');
+    return new Promise((resolve) => {
+      let resolved = false;
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: !!process.stdout.isTTY,
+      });
+      this._activePromptRl = rl;
 
-    return response === 'YES';
+      const finish = (approved) => {
+        if (resolved) return;
+        resolved = true;
+        if (this._activePromptRl === rl) {
+          this._activePromptRl = null;
+        }
+        try { rl.close(); } catch { /* already closed */ }
+        resolve(approved);
+      };
+
+      rl.question('\nYour decision: ', (answer) => {
+        finish(answer === 'YES');
+      });
+
+      // Stream end / SIGINT / explicit close from elsewhere — treat as
+      // "no decision = not approved" so the caller doesn't await forever.
+      rl.on('close', () => finish(false));
+    });
   }
 
   /**
@@ -235,20 +283,29 @@ class SigningClient {
       this.status = 'signing';
       this._log('\n✍️  Signing transaction...', 'info');
 
-      // Reconstruct transaction from bytes
+      // Multi-node freeze: each SignedTransaction in the list has a
+      // distinct bodyBytes (differs in nodeAccountID). Hedera's SDK
+      // requires one signature per body and refuses single-sig attach
+      // with "Signature array must match the number of transactions".
+      // We sign every body with this participant's private key and
+      // submit the full array. Single-node freezes (e.g. some legacy
+      // examples) yield a 1-element array transparently.
       const txBytes = Buffer.from(frozenTransaction.base64, 'base64');
-      const transaction = Transaction.fromBytes(txBytes);
+      const bodies = extractAllBodyBytes(txBytes);
+      const signaturesB64 = bodies.map((body) => {
+        const sig = this.privateKey.sign(body);
+        return Buffer.from(sig).toString('base64');
+      });
 
-      // Sign with private key (locally, never transmitted)
-      const signature = this.privateKey.signTransaction(transaction);
-      const signatureBytes = Buffer.from(signature).toString('base64');
-
-      // Submit signature to server (NOT the private key!)
+      // Submit signatures to server (NOT the private key!).
+      // `signature` is kept for backward compat with any pre-multi-sig
+      // server build still in flight; canonical field is `signatures`.
       this.ws.send(JSON.stringify({
         type: 'SIGNATURE_SUBMIT',
         payload: {
           publicKey: this.privateKey.publicKey.toString(),
-          signature: signatureBytes
+          signatures: signaturesB64,
+          signature: signaturesB64[0]
         }
       }));
 
@@ -259,7 +316,14 @@ class SigningClient {
       });
 
     } catch (error) {
-      this._log(`Failed to sign transaction: ${error.message}`, 'error');
+      // Surface the full stack so a sign failure during a multi-sig
+      // ceremony produces something diagnosable instead of a vague
+      // "Failed to sign transaction: …" line. The catch in
+      // _onTransactionReceived was historically masking the real cause
+      // (e.g. INVALID_PUBLIC_KEY mismatches between the eligible-keys
+      // list and the participant's derived pubkey serialization).
+      const stack = error && error.stack ? `\n${error.stack}` : '';
+      this._log(`Failed to sign transaction: ${error.message}${stack}`, 'error');
       throw error;
     }
   }
@@ -328,6 +392,10 @@ class SigningClient {
           break;
 
         case 'TRANSACTION_RECEIVED':
+          // Emit BEFORE the async review/sign flow so a CLI consumer can
+          // print a per-transaction countdown, status banner, etc. The
+          // _onTransactionReceived call still runs the prompt + sign.
+          this._emit('transactionReceived', message.payload);
           this._onTransactionReceived(message.payload);
           break;
 
@@ -335,6 +403,27 @@ class SigningClient {
           this._log('Signature accepted by server', 'success');
           this._emit('signatureAccepted', message.payload);
           break;
+
+        case 'SIGNATURE_RECEIVED': {
+          // Broadcast — informational notice that *some* participant's
+          // signature landed on the server. Not necessarily ours; the
+          // server already sent us SIGNATURE_ACCEPTED if it was. Surface
+          // the running tally so an operator watching the CLI sees
+          // progress as other participants sign.
+          const stats = message.payload?.stats || {};
+          const collected = stats.signaturesCollected;
+          const required = stats.signaturesRequired;
+          const isSelf = message.payload?.participantId === this.participantId;
+          if (typeof collected === 'number' && typeof required === 'number') {
+            const who = isSelf ? 'you' : `participant ${(message.payload?.participantId || '').slice(0, 8) || 'unknown'}`;
+            this._log(
+              `Signature received from ${who} — ${collected}/${required} collected`,
+              'info'
+            );
+          }
+          this._emit('signatureReceived', message.payload);
+          break;
+        }
 
         case 'SIGNATURE_REJECTED':
           this._log(`Signature rejected: ${message.payload.message}`, 'error');
@@ -365,6 +454,38 @@ class SigningClient {
         case 'PARTICIPANT_DISCONNECTED':
           this._log(`Participant disconnected: ${message.payload.participantId}`, 'info');
           this._emit('participantDisconnected', message.payload);
+          break;
+
+        case 'TRANSACTION_REJECTED':
+          // Another participant declined the in-flight tx. Don't change
+          // status here — let the consumer decide how to react. We stay
+          // on the WebSocket; threshold may or may not still be reachable.
+          this._emit('transactionRejected', message.payload);
+          break;
+
+        case 'TRANSACTION_EXPIRED':
+          // 120-second Hedera window elapsed before threshold was met.
+          // Server auto-resets the session back to 'waiting' so a new tx
+          // can be injected. Reset our local status so setReady-equivalent
+          // future handling works cleanly without the operator having to
+          // tear down the CLI.
+          this._log('⏱️  Transaction expired before threshold was met', 'warning');
+          if (this.status === 'reviewing' || this.status === 'signing' || this.status === 'rejected') {
+            this.status = 'ready';
+          }
+          this._emit('transactionExpired', message.payload);
+          break;
+
+        case 'TRANSACTION_RESET':
+          // Coordinator abandoned the in-flight transaction (clears the
+          // server-side state without expiring naturally). Mirror the
+          // logic of TRANSACTION_EXPIRED: drop the local 'reviewing' /
+          // 'rejected' status and wait for the next injection.
+          this._log('🔄  Coordinator reset the transaction', 'info');
+          if (this.status === 'reviewing' || this.status === 'signing' || this.status === 'rejected') {
+            this.status = 'ready';
+          }
+          this._emit('transactionReset', message.payload);
           break;
 
         case 'SESSION_EXPIRED':
@@ -499,6 +620,15 @@ class SigningClient {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+    // Close any in-flight YES/NO prompt so its Promise resolves (as
+    // "not approved") rather than dangling forever after the WS goes
+    // away. With the async readline, a Ctrl+C or programmatic disconnect
+    // that doesn't tear down the prompt would leave the process
+    // listening on stdin with no upstream connection.
+    if (this._activePromptRl) {
+      try { this._activePromptRl.close(); } catch { /* already closed */ }
+      this._activePromptRl = null;
     }
     if (this.ws) {
       this.ws.close();

@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ethers } from 'ethers';
 import { BalanceCard } from './BalanceCard';
+import {
+  AccountSuggestionsDatalist,
+  AccountSuggestionsChips,
+} from './AccountSuggestions';
 import type { AccountBalance } from '../../lib/mirror-node';
+import type { SignableAccountsState } from '../../hooks/useSessionSignableAccounts';
 
 type TransactionType =
   | 'hbar-transfer'
@@ -21,6 +26,7 @@ interface TransactionFieldsProps {
   balance: AccountBalance | null;
   isLoadingBalance: boolean;
   balanceError: string | null;
+  signableAccounts?: SignableAccountsState;
 }
 
 const inputClass =
@@ -32,6 +38,28 @@ const inputClass =
 const labelClass =
   'block text-sm font-medium text-foreground-muted mb-2';
 
+function UseMyWalletChip({
+  walletAccountId,
+  onUse,
+  fieldLabel,
+}: {
+  walletAccountId: string | null;
+  onUse: (id: string) => void;
+  fieldLabel: string;
+}) {
+  if (!walletAccountId) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onUse(walletAccountId)}
+      className="ml-2 text-xs px-2 py-1 rounded-md text-foreground hover:bg-surface-recessed border border-border transition-colors"
+      title={`Fill ${fieldLabel} with your connected wallet (${walletAccountId})`}
+    >
+      Use my wallet
+    </button>
+  );
+}
+
 function FromAccountField({
   txFields,
   setTxField,
@@ -40,12 +68,21 @@ function FromAccountField({
   balance,
   isLoadingBalance,
   balanceError,
+  signableAccounts,
 }: Omit<TransactionFieldsProps, 'txType'>) {
+  const datalistId = 'tx-from-suggestions';
   return (
     <div>
-      <label htmlFor="tx-from" className={labelClass}>
-        From Account
-      </label>
+      <div className="flex items-center justify-between mb-2">
+        <label htmlFor="tx-from" className={labelClass + ' mb-0'}>
+          From Account
+        </label>
+        <UseMyWalletChip
+          walletAccountId={walletAccountId}
+          onUse={(id) => setTxField('from', id)}
+          fieldLabel="From"
+        />
+      </div>
       <input
         id="tx-from"
         type="text"
@@ -54,9 +91,21 @@ function FromAccountField({
         value={txFields.from || ''}
         onChange={(e) => setTxField('from', e.target.value)}
         onBlur={onFromBlur}
+        list={signableAccounts ? datalistId : undefined}
       />
+      {signableAccounts && (
+        <>
+          <AccountSuggestionsDatalist datalistId={datalistId} accounts={signableAccounts.accounts} />
+          <AccountSuggestionsChips
+            accounts={signableAccounts.accounts}
+            onPick={(id) => setTxField('from', id)}
+            currentValue={txFields.from || ''}
+            isLoading={signableAccounts.status === 'loading'}
+          />
+        </>
+      )}
       <p className="mt-1 text-xs text-foreground-subtle">
-        Defaults to connected wallet if left blank.
+        Sends the value and pays the fee. See <strong>Fee payer</strong> below.
       </p>
       <BalanceCard balance={balance} isLoading={isLoadingBalance} error={balanceError} />
     </div>
@@ -197,9 +246,25 @@ export function TransactionFields(props: TransactionFieldsProps) {
               placeholder={props.walletAccountId || '0.0.xxxxx'}
               value={txFields.account || ''}
               onChange={(e) => setTxField('account', e.target.value)}
+              list={props.signableAccounts ? 'tx-account-suggestions' : undefined}
             />
+            {props.signableAccounts && (
+              <>
+                <AccountSuggestionsDatalist
+                  datalistId="tx-account-suggestions"
+                  accounts={props.signableAccounts.accounts}
+                />
+                <AccountSuggestionsChips
+                  accounts={props.signableAccounts.accounts}
+                  onPick={(id) => setTxField('account', id)}
+                  currentValue={txFields.account || ''}
+                  isLoading={props.signableAccounts.status === 'loading'}
+                />
+              </>
+            )}
             <p className="mt-1 text-xs text-foreground-subtle">
-              Defaults to connected wallet if left blank.
+              Associates the tokens and pays the fee. See{' '}
+              <strong>Fee payer</strong> below.
             </p>
           </div>
           <div>
@@ -222,6 +287,46 @@ export function TransactionFields(props: TransactionFieldsProps) {
     case 'contract-call':
       return (
         <>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="tx-caller" className={labelClass + ' mb-0'}>
+                Caller / fee payer
+              </label>
+              <UseMyWalletChip
+                walletAccountId={props.walletAccountId}
+                onUse={(id) => setTxField('caller', id)}
+                fieldLabel="Caller"
+              />
+            </div>
+            <input
+              id="tx-caller"
+              type="text"
+              className={inputClass}
+              placeholder={props.walletAccountId || '0.0.xxxxx'}
+              value={txFields.caller || ''}
+              onChange={(e) => setTxField('caller', e.target.value)}
+              list={props.signableAccounts ? 'tx-caller-suggestions' : undefined}
+            />
+            {props.signableAccounts && (
+              <>
+                <AccountSuggestionsDatalist
+                  datalistId="tx-caller-suggestions"
+                  accounts={props.signableAccounts.accounts}
+                />
+                <AccountSuggestionsChips
+                  accounts={props.signableAccounts.accounts}
+                  onPick={(id) => setTxField('caller', id)}
+                  currentValue={txFields.caller || ''}
+                  isLoading={props.signableAccounts.status === 'loading'}
+                />
+              </>
+            )}
+            <p className="mt-1 text-xs text-foreground-subtle">
+              This account invokes the contract and pays the fee. For a
+              multi-sig treasury, fill the threshold account. See{' '}
+              <strong>Fee payer</strong> below.
+            </p>
+          </div>
           <div>
             <label htmlFor="tx-contractId" className={labelClass}>
               Contract ID <span className="text-destructive">*</span>

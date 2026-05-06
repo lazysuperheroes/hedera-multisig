@@ -2,10 +2,13 @@
 /**
  * Walkthrough step 0 (contract): prerequisite check.
  *
- * The contract walkthrough builds on the HBAR walkthrough — it reuses the
- * three signing keys generated there (alice/bob/carol) for the multi-sig
- * stages. Verifies env, operator balance, and that the HBAR walkthrough
- * key file exists.
+ * The contract walkthrough is fully self-contained — it generates its
+ * own three signing keys (alice/bob/carol) via `setup-keys.js`. This
+ * precheck verifies env, operator balance, and that those keys exist.
+ *
+ * Reusing keys from the HBAR walkthrough? Copy them across:
+ *   cp ../walkthrough-hbar/walkthrough-keys.* .
+ * Otherwise run `node setup-keys.js` once before this precheck.
  */
 
 const path = require('path');
@@ -15,25 +18,26 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '..', '.env') });
 const { Client, AccountId, PrivateKey, AccountBalanceQuery } = require('@hashgraph/sdk');
 const chalk = require('chalk');
 
-const HBAR_KEYS_FILE = path.resolve(__dirname, '..', 'walkthrough-hbar', 'walkthrough-keys.json');
+const KEYS_FILE = path.resolve(__dirname, 'walkthrough-keys.json');
 const MIN_BALANCE_HBAR = 10; // need this for: demo account funding, contract deploy gas, contract balance, fees
 
 async function main() {
   console.log(chalk.bold.cyan('\n━━━ Walkthrough precheck (contract) ━━━\n'));
 
   for (const k of ['OPERATOR_ID', 'OPERATOR_KEY']) {
-    if (!process.env[k]) fail(`Missing env var: ${k}. See examples/walkthrough-hbar/README.md prerequisites.`);
+    if (!process.env[k]) fail(`Missing env var: ${k}. See README.md prerequisites.`);
   }
   const network = (process.env.HEDERA_NETWORK || 'testnet').toLowerCase();
   console.log(chalk.green('✓'), `Env loaded — network: ${network}`);
 
-  if (!fs.existsSync(HBAR_KEYS_FILE)) {
-    fail(`HBAR walkthrough keys not found: ${HBAR_KEYS_FILE}\n` +
-         `   Run the HBAR walkthrough first (examples/walkthrough-hbar/README.md) — at minimum step 1 to generate keys.`);
+  if (!fs.existsSync(KEYS_FILE)) {
+    fail(`Walkthrough keys not found: ${KEYS_FILE}\n` +
+         `   Run \`node setup-keys.js\` to generate them, or copy from\n` +
+         `   ../walkthrough-hbar/ if you already ran that walkthrough.`);
   }
-  const keysData = JSON.parse(fs.readFileSync(HBAR_KEYS_FILE, 'utf8'));
+  const keysData = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
   const signerCount = Object.keys(keysData.keys || {}).length;
-  if (signerCount !== 3) fail(`Expected 3 keys in walkthrough-hbar/walkthrough-keys.json, found ${signerCount}`);
+  if (signerCount !== 3) fail(`Expected 3 keys in walkthrough-keys.json, found ${signerCount}`);
   console.log(chalk.green('✓'), `Found 3 signing keys: ${Object.keys(keysData.keys).join(', ')}`);
 
   const client = network === 'mainnet' ? Client.forMainnet() : Client.forTestnet();

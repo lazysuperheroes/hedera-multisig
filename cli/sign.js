@@ -18,6 +18,7 @@ const readlineSync = require('readline-sync');
 const { PrivateKey } = require('@hashgraph/sdk');
 const TransactionFreezer = require('../core/TransactionFreezer');
 const SignatureVerifier = require('../core/SignatureVerifier');
+const { extractAllBodyBytes } = require('../shared/transaction-decoder');
 const {
   ExitCodes,
   parseCommonFlags,
@@ -154,9 +155,14 @@ async function main() {
     console.log('STEP 4: Generate Signature\n');
     console.log('🔐 Signing transaction...\n');
 
-    const signatureBytes = privateKey.sign(frozenTx.bytes);
+    // Multi-node freeze: one signature per SignedTransaction body
+    // (each carries a distinct nodeAccountID). Output format:
+    //   publicKey:sigB64_0,sigB64_1,...,sigB64_N
+    const bodies = extractAllBodyBytes(frozenTx.bytes);
     const publicKey = privateKey.publicKey.toString();
-    const signatureBase64 = Buffer.from(signatureBytes).toString('base64');
+    const signaturesB64 = bodies.map((body) =>
+      Buffer.from(privateKey.sign(body)).toString('base64')
+    );
 
     // Step 7: Display signature tuple
     console.log('✅ Signature generated successfully!\n');
@@ -168,24 +174,33 @@ async function main() {
     console.log('the transaction initiator via secure channel:\n');
 
     console.log('─────────────────────────────────────────────────────────');
-    const signatureTuple = `${publicKey}:${signatureBase64}`;
+    const signatureTuple = `${publicKey}:${signaturesB64.join(',')}`;
     console.log(signatureTuple);
     console.log('─────────────────────────────────────────────────────────\n');
 
     // Display breakdown for verification
     console.log('BREAKDOWN (for verification):');
-    console.log(`  Public Key: ${publicKey}`);
-    console.log(`  Signature:  ${signatureBase64.substring(0, 32)}...`);
-    console.log(`  Format:     publicKey:signature\n`);
+    console.log(`  Public Key:    ${publicKey}`);
+    console.log(`  Body count:    ${bodies.length} (multi-node freeze)`);
+    console.log(`  Signatures:    ${signaturesB64.length} (one per body)`);
+    console.log(`  First sig:     ${signaturesB64[0].substring(0, 32)}...`);
+    console.log(`  Format:        publicKey:sig0,sig1,...,sigN\n`);
 
-    // Verify the signature locally
-    console.log('🔍 Verifying signature...');
-    const isValid = privateKey.publicKey.verify(frozenTx.bytes, signatureBytes);
+    // Local sanity-verify — each sig against its corresponding body.
+    console.log('🔍 Verifying signatures...');
+    let allValid = true;
+    for (let i = 0; i < bodies.length; i++) {
+      const sigBytes = Buffer.from(signaturesB64[i], 'base64');
+      if (!privateKey.publicKey.verify(bodies[i], sigBytes)) {
+        allValid = false;
+        break;
+      }
+    }
 
-    if (isValid) {
-      console.log('✅ Signature is cryptographically valid\n');
+    if (allValid) {
+      console.log('✅ All signatures cryptographically valid\n');
     } else {
-      console.error('❌ WARNING: Signature verification failed!\n');
+      console.error('❌ WARNING: At least one signature failed verification!\n');
     }
 
     console.log('NEXT STEPS:');

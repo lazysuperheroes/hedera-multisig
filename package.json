@@ -84,6 +84,8 @@
 		"query-tx": "node scripts/query-transaction.js",
 		"sign-tx": "node scripts/sign-transaction.js",
 		"collect-keys": "node scripts/collect-team-keys.js",
+		"setup-test-env": "node scripts/setup-test-env.js",
+		"precheck": "node scripts/precheck-e2e.js",
 		"transfer-hbar": "node examples/transfer-hbar.js",
 		"transfer-token": "node examples/transfer-token.js",
 		"associate-token": "node examples/associate-token.js"

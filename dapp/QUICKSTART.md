@@ -2,12 +2,20 @@
 
 **5-Minute Setup for Testing**
 
+> **Looking for the full E2E test plan?** See [`../TESTING.md`](../TESTING.md)
+> for the canonical walkthroughs (Scenarios 11 + 12), tunnel/ngrok setup,
+> mixed CLI+wallet sessions, and failure-mode smoke. This file is the
+> minimal happy-path for the WalletConnect-only flow.
+
 ## Prerequisites
 
-- ✅ Node.js 18+ installed
+- ✅ Node.js 20+ installed (required by package.json `engines`)
 - ✅ Hedera testnet account (get one at https://portal.hedera.com/register)
 - ✅ HashPack or Blade wallet installed
-- ✅ WalletConnect Project ID (already in `.env.local`)
+- ✅ WalletConnect Project ID — get one free at https://cloud.walletconnect.com/, paste into `dapp/.env.local`
+
+**Tip:** run `npm run precheck` from the repo root first — it verifies all
+of the above in under 10 seconds.
 
 ---
 

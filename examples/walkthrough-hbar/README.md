@@ -132,7 +132,8 @@ npx hedera-multisig server \
   -t 2 \
   -k "$(node -e "console.log(require('./walkthrough-state.json').publicKeys.join(','))")" \
   --port 3001 \
-  --no-tunnel
+  --no-tunnel \
+  --allowed-origins http://localhost:3000
 ```
 
 The server prints:
@@ -144,39 +145,95 @@ The server prints:
 
 Leave this terminal running.
 
-> **Remote signers?** Drop `--no-tunnel` to get an ngrok / localtunnel URL.
-> Read `docs/COORDINATOR_GUIDE.md` for the trust model before doing this
-> in production.
+> **About `--allowed-origins`.** The server defaults to denying browser
+> WebSocket connections unless you list which origins are allowed —
+> otherwise any web page you visit could connect to your coordinator.
+> The dApp in step 4 runs on `http://localhost:3000` (Next.js default),
+> so we allowlist it here. CLI participants (step 5) don't send an
+> `Origin` header and aren't affected by this flag.
+>
+> If you skip the flag and see *"Rejected browser connection: no
+> allowedOrigins configured"* in the server log, that's why.
+
+> **Remote signers?** Drop `--no-tunnel` to get an ngrok / localtunnel
+> URL. Tunnel mode **requires** `--allowed-origins` (or
+> `--unsafe-any-origin` for development only) — the server will refuse
+> to start otherwise. Read `docs/COORDINATOR_GUIDE.md` for the trust
+> model before doing this in production.
 
 ---
 
-## Step 4: Build and inject the transaction (coordinator side)
+## Step 4: Connect as the coordinator and inject the transaction
 
-Open `http://localhost:3000` (the dApp — start it in **terminal 2** with
-`cd dapp && npm run dev` if it isn't running) and navigate to
-**Create Session**.
+In your browser, open **`http://localhost:3000/create`** (or click
+**Create Session** on the dApp's landing page). If the dApp isn't
+running yet, start it in **terminal 2** with `cd dapp && npm run dev`.
 
-Connect using the credentials printed by the server in step 3:
+> **Why `/create`, not `/join`?**
+> The dApp has two pages, one per role:
+>
+> - **`/join`** — for **participants** who will sign. Paste the HMSC
+>   connection string and load a key.
+> - **`/create`** — for the **coordinator** (you, in this walkthrough).
+>   Connect into the existing session, then build and inject the
+>   transaction the participants will sign.
+>
+> The CLI server in step 3 already created the session — `/create`
+> connects *into* it as coordinator. If you accidentally pasted the
+> HMSC string into `/join` first, that joined you as a participant.
+> Close that tab and start fresh on `/create`.
 
-- Server URL: `ws://localhost:3001`
-- Session ID, PIN, Coordinator Token: from terminal 1
+### Connect as coordinator
 
-Once connected, build a transaction:
+The fastest path: paste the **Connection String** from the CLI output
+into the *Connection string* field at the top of `/create`. It
+auto-fills Server URL, Session ID, and PIN. Then enter the
+**Coordinator Token** (the one field that isn't in the HMSC) and click
+**Connect as Coordinator**.
 
-- **Type:** HBAR transfer
-- **From:** the threshold account ID (from `walkthrough-state.json`)
+If you'd rather fill the fields manually, use these mappings from the
+CLI server output (terminal 1):
+
+| Field | Value from CLI output |
+|---|---|
+| Connection string | `Connection String` *(starts with `hmsc:`)* — auto-fills the next three |
+| Server URL | `Local URL` (e.g. `ws://localhost:3001`) |
+| Session ID | `Session ID` |
+| Session PIN | `PIN` |
+| Coordinator Token | `Coordinator Token` *(separate from PIN — kept secret, grants coordinator privileges)* |
+
+### Build and inject the transaction
+
+Once connected, the page advances to the **Build** step.
+
+> **You don't need to connect a wallet for this walkthrough.**
+> The dApp uses the **From** account as the network-fee payer. Filling
+> the threshold account into From means the threshold account pays its
+> own fee out of its 5 ℏ balance — exactly what you want for a multi-sig
+> treasury. The wallet button in the nav bar is a fallback for personal
+> sends, not a requirement for coordinating. Leave it disconnected.
+>
+> As you fill the form, a **Fee payer** line appears above the Build
+> button confirming which account will pay. Verify it matches the
+> threshold account before injecting.
+
+Build the transaction:
+
+- **Type:** HBAR Transfer
+- **From:** the threshold account ID (from `walkthrough-state.json`) —
+  this is also the fee payer
 - **To:** your operator account ID
-- **Amount:** 1 ℏ (the script funded the threshold account with 5; we
-  send some back to demonstrate the full round-trip)
+- **Amount:** `1` (the script funded the threshold account with 5 ℏ;
+  we send some back to demonstrate the full round-trip)
 - **Memo:** `walkthrough-hbar`
 
-Click **Inject Transaction**. The participants who join in step 5 will
-have 120 seconds from this moment to sign.
+Click **Build & inject transaction**. From this moment, the participants
+who join in step 5 have **120 seconds** to sign before the frozen
+transaction expires.
 
-> **CLI alternative:** if you prefer not to use the browser, the server
-> CLI emits enough metadata to construct and inject the transaction
-> programmatically. See `docs/COORDINATOR_GUIDE.md` "Building transactions
-> from a script" for the pattern.
+> **CLI alternative:** to inject from a script instead of the browser,
+> see `npx hedera-multisig inject --help` and the "Building transactions
+> from a script" section of `docs/COORDINATOR_GUIDE.md`.
 
 ---
 

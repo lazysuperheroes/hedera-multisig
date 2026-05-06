@@ -10,7 +10,8 @@
 const { ethers } = require('ethers');
 const {
   TransactionDecoder: SharedDecoder,
-  generateChecksum
+  generateChecksum,
+  formatHbarTinybars
 } = require('../shared/transaction-decoder');
 
 class TransactionReviewer {
@@ -101,22 +102,54 @@ class TransactionReviewer {
     output += `Transaction ID:   ${txDetails.transactionId || 'N/A'}\n`;
     output += `Checksum:         ${txDetails.checksum}\n`;
 
-    // Display amounts
-    const amounts = this.extractAmounts(txDetails);
-    if (amounts.length > 0) {
-      output += `\nAmounts:\n`;
-      amounts.forEach((amt, idx) => {
-        output += `  ${idx + 1}. ${amt} HBAR\n`;
-      });
+    // HBAR transfers — render with explicit FROM/TO direction and properly
+    // formatted amounts. The decoder stores raw tinybars on each transfer
+    // (signed: negative = sender, positive = recipient), so direction is
+    // recoverable from the sign of `amount`. Direct render — extractAmounts
+    // and extractAccounts both lose direction and the tinybar→HBAR
+    // conversion, which is why amounts looked wrong.
+    if (Array.isArray(txDetails.transfers) && txDetails.transfers.length > 0) {
+      output += `\nHBAR Transfers:\n`;
+      for (const t of txDetails.transfers) {
+        const amount = (t && t.amount !== undefined && t.amount !== null) ? String(t.amount) : '0';
+        let isOutgoing = false;
+        try { isOutgoing = BigInt(amount) < 0n; } catch { isOutgoing = amount.startsWith('-'); }
+        const label = isOutgoing ? 'FROM' : 'TO  ';
+        const formatted = formatHbarTinybars(amount);
+        output += `  ${label} ${t.accountId}  ${formatted}\n`;
+      }
     }
 
-    // Display accounts
-    const accounts = this.extractAccounts(txDetails);
-    if (accounts.length > 0) {
-      output += `\nAccounts Involved:\n`;
-      accounts.forEach((acc, idx) => {
-        output += `  ${idx + 1}. ${acc}\n`;
-      });
+    // Token / NFT transfers (non-HBAR) — same direction-preserving render.
+    if (Array.isArray(txDetails.tokenTransfers) && txDetails.tokenTransfers.length > 0) {
+      output += `\nToken Transfers:\n`;
+      for (const t of txDetails.tokenTransfers) {
+        const amount = String(t.amount ?? '0');
+        let isOutgoing = false;
+        try { isOutgoing = BigInt(amount) < 0n; } catch { isOutgoing = amount.startsWith('-'); }
+        const label = isOutgoing ? 'FROM' : 'TO  ';
+        output += `  ${label} ${t.accountId}  ${amount} (token ${t.tokenId})\n`;
+      }
+    }
+    if (Array.isArray(txDetails.nftTransfers) && txDetails.nftTransfers.length > 0) {
+      output += `\nNFT Transfers:\n`;
+      for (const t of txDetails.nftTransfers) {
+        output += `  FROM ${t.senderAccountId} → TO ${t.receiverAccountId}  (token ${t.tokenId} #${t.serialNumber})\n`;
+      }
+    }
+
+    // Fallback: for non-transfer transaction types we may still have a
+    // single account-of-interest (e.g. token-association, schedule sign).
+    if (
+      !Array.isArray(txDetails.transfers) || txDetails.transfers.length === 0
+    ) {
+      const accounts = this.extractAccounts(txDetails);
+      if (accounts.length > 0) {
+        output += `\nAccounts Involved:\n`;
+        accounts.forEach((acc, idx) => {
+          output += `  ${idx + 1}. ${acc}\n`;
+        });
+      }
     }
 
     // Display smart contract data if present

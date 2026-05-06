@@ -18,18 +18,17 @@ and no migration. Use this when:
 
 ## Prerequisites
 
-You need the threshold account from the HBAR walkthrough. If you ran
-`examples/walkthrough-hbar/02-create-threshold-account.js`, your
-`walkthrough-hbar/walkthrough-state.json` already records the
-`thresholdAccountId` (e.g. `0.0.6543210`).
+You need a threshold account funded with enough HBAR to cover deploy
+gas + fees (~3 ℏ is comfortable). Two options:
 
-Top up the threshold account so it has enough HBAR to cover deploy gas
-+ fees (~3 ℏ is comfortable). You can do this from the HBAR walkthrough
-itself — coordinate a multi-sig transfer FROM the threshold account, OR
-just send HBAR TO it from the operator (incoming transfers don't need
-the threshold's consent).
+- **Already ran the main contract walkthrough through step 5?** The
+  `demoAccountId` in `demo-account-state.json` is now a 2-of-3
+  threshold account — reuse that.
+- **Have a threshold account from the HBAR walkthrough?** Reference
+  its `thresholdAccountId` (recorded in
+  `../walkthrough-hbar/walkthrough-state.json`).
 
-Quick top-up from operator:
+Either way, top it up from the operator if needed:
 
 ```bash
 # In the repo root, with .env loaded:
@@ -39,13 +38,13 @@ require('dotenv').config();
 (async () => {
   const c = Client.forTestnet();
   c.setOperator(AccountId.fromString(process.env.OPERATOR_ID), PrivateKey.fromString(process.env.OPERATOR_KEY));
-  const state = require('./examples/walkthrough-hbar/walkthrough-state.json');
+  const targetAccountId = '0.0.YOUR_THRESHOLD_ACCOUNT'; // edit this
   const tx = await new TransferTransaction()
     .addHbarTransfer(process.env.OPERATOR_ID, new Hbar(-3))
-    .addHbarTransfer(state.thresholdAccountId, new Hbar(3))
+    .addHbarTransfer(targetAccountId, new Hbar(3))
     .execute(c);
   await tx.getReceipt(c);
-  console.log('Funded', state.thresholdAccountId, 'with 3 ℏ. Tx:', tx.transactionId.toString());
+  console.log('Funded', targetAccountId, 'with 3 ℏ. Tx:', tx.transactionId.toString());
 })();
 "
 ```
@@ -108,7 +107,7 @@ Each signer:
 ```bash
 npx hedera-multisig schedule sign \
   --schedule-id 0.0.SCHEDULE \
-  --keyfile ../walkthrough-hbar/walkthrough-keys.alice.encrypted \
+  --keyfile ./walkthrough-keys.alice.encrypted \
   --passphrase walkthrough-test
 ```
 
@@ -138,7 +137,7 @@ your deploy-as-multi-sig contract by editing the state file:
 
 ```json
 {
-  "demoAccountId": "0.0.THRESHOLD_FROM_HBAR_WALKTHROUGH",
+  "demoAccountId": "0.0.YOUR_THRESHOLD_ACCOUNT",
   "contractId": "0.0.YOUR_DEPLOYED_CONTRACT",
   "convertedToMultisigAt": "skipped — deployed as multi-sig directly",
   "thresholdConfig": {

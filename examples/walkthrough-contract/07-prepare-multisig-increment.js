@@ -31,6 +31,7 @@ const {
 } = require('@hashgraph/sdk');
 const { Interface } = require('ethers');
 const chalk = require('chalk');
+const { selectNodeAccountIds, DEFAULT_SUBSET_SIZE } = require('../../shared/node-selection');
 
 const STATE_FILE = path.resolve(__dirname, 'demo-account-state.json');
 const ARTIFACT = path.resolve(__dirname, 'Counter.json');
@@ -57,12 +58,21 @@ async function main() {
 
   // Build + freeze. We do NOT sign here — the multi-sig ceremony attaches
   // signatures after participants review.
+  //
+  // Multi-node freeze (canonical Hedera multi-sig pattern). Default is
+  // a random subset of 6 nodes — resilient to per-node downtime, well
+  // under Hedera's 6 KB tx-size cap. The shared helper validates the
+  // strategy + dedupes the network's gRPC/gRPC-Web entries.
+  const nodeAccountIds = selectNodeAccountIds(client, {
+    strategy: 'subset',
+    subsetSize: DEFAULT_SUBSET_SIZE,
+  });
   const tx = new ContractExecuteTransaction()
     .setContractId(ContractId.fromString(state.contractId))
     .setGas(100_000)
     .setFunctionParameters(Buffer.from(calldata.slice(2), 'hex'))
     .setTransactionId(txId)
-    .setNodeAccountIds([new AccountId(3), new AccountId(4), new AccountId(5)])
+    .setNodeAccountIds(nodeAccountIds)
     .setTransactionMemo('walkthrough-contract: multi-sig increment')
     .freeze();
 
@@ -100,7 +110,7 @@ async function main() {
   console.log(`     ${chalk.cyan('npx hedera-multisig server -t 2 -k "' + state.thresholdConfig.publicKeys.join(',') + '" --port 3001 --no-tunnel')}`);
   console.log(chalk.gray('  2. Inject this transaction via dApp /create OR programmatically.'));
   console.log(chalk.gray('  3. Two of [alice, bob, carol] join + sign — see README.'));
-  console.log(chalk.gray(`  4. Verify: ${chalk.cyan('node ../walkthrough-hbar/06-verify-on-mirror.js ' + txId.toString())}`));
+  console.log(chalk.gray(`  4. Verify: ${chalk.cyan('node verify-on-mirror.js ' + txId.toString())}`));
   console.log(chalk.gray(`\n  Artifact saved: ${OUT_FILE}\n`));
 
   client.close();

@@ -628,6 +628,7 @@ Environment Variables:
       } = require('@hashgraph/sdk');
       const TransactionFreezer = require('../../core/TransactionFreezer');
       const SignatureVerifier = require('../../core/SignatureVerifier');
+      const { extractAllBodyBytes } = require('../../shared/transaction-decoder');
 
       const jsonOutput = new JsonOutput(options.json || command.parent?.parent?.opts().json);
 
@@ -690,9 +691,14 @@ Environment Variables:
           throw new Error(`Insufficient signatures: ${signatureTuples.length} provided, ${threshold} required`);
         }
 
-        // Reconstruct the frozen transaction
+        // Reconstruct the frozen transaction. Multi-node freeze: one
+        // bodyBytes per SignedTransaction (each carries a distinct
+        // nodeAccountID). Each tuple's signature value is a comma-
+        // separated list of base64 sigs (one per body):
+        //   `publicKey:sig0,sig1,...,sigN`
+        // Single-node tuples remain `publicKey:sig0` (no comma).
         const frozenTx = TransactionFreezer.fromBase64(base64Input, Date.now());
-        const txBytes = frozenTx.bytes;
+        const bodies = extractAllBodyBytes(frozenTx.bytes);
 
         // Parse and verify signatures
         const verifiedSignatures = [];
@@ -714,28 +720,42 @@ Environment Variables:
           }
 
           const publicKeyStr = tuple.substring(0, colonIndex);
-          const signatureBase64 = tuple.substring(colonIndex + 1);
+          const signatureField = tuple.substring(colonIndex + 1);
+
+          // Multi-node tuple uses comma-joined base64 sigs. Single-node
+          // tuples (legacy) split into a 1-element array transparently.
+          const signaturesB64 = signatureField.split(',').map((s) => s.trim()).filter(Boolean);
 
           try {
             // Parse public key
             const publicKey = PublicKey.fromString(publicKeyStr);
 
-            // Decode signature
-            const signatureBytes = Buffer.from(signatureBase64, 'base64');
+            // Decode signature(s)
+            const signatureBytesArray = signaturesB64.map((s64) => Buffer.from(s64, 'base64'));
 
-            // Verify signature
-            const isValid = publicKey.verify(txBytes, signatureBytes);
+            // Verify each sig against its corresponding body. If the
+            // tuple has fewer sigs than bodies (legacy single-sig
+            // against multi-node freeze), only verify the first pair.
+            const pairCount = Math.min(signatureBytesArray.length, bodies.length);
+            let isValid = pairCount > 0;
+            for (let j = 0; j < pairCount; j++) {
+              if (!publicKey.verify(bodies[j], signatureBytesArray[j])) {
+                isValid = false;
+                break;
+              }
+            }
 
             if (isValid) {
               verifiedSignatures.push({
                 publicKey: publicKeyStr,
                 publicKeyObj: publicKey,
-                signature: signatureBytes,
-                signatureBase64
+                signatures: signatureBytesArray,
+                signaturesB64
               });
               if (!options.json && !jsonOutput.enabled) {
                 const shortKey = publicKeyStr.substring(0, 12) + '...' + publicKeyStr.substring(publicKeyStr.length - 8);
-                console.log(`  ✅ Signature ${i + 1}: Valid (${shortKey})`);
+                const sigSuffix = signaturesB64.length > 1 ? ` [${signaturesB64.length} sigs]` : '';
+                console.log(`  ✅ Signature ${i + 1}: Valid (${shortKey})${sigSuffix}`);
               }
             } else {
               errors.push({ index: i, publicKey: publicKeyStr, error: 'Signature verification failed' });
@@ -800,10 +820,13 @@ Environment Variables:
         const client = network === 'mainnet' ? Client.forMainnet() : Client.forTestnet();
         client.setOperator(AccountId.fromString(operatorId), PrivateKey.fromString(operatorKey));
 
-        // Add signatures to transaction
+        // Multi-node freeze: pass array of sig bytes (one per body) to
+        // the SDK so each SignedTransaction's sigMap gets the right
+        // signature. Legacy single-sig tuples were already promoted to
+        // a 1-element array during parsing.
         let signedTx = frozenTx.transaction;
         for (const sig of verifiedSignatures) {
-          signedTx = await signedTx.addSignature(sig.publicKeyObj, sig.signature);
+          signedTx = await signedTx.addSignature(sig.publicKeyObj, sig.signatures);
         }
 
         // Execute

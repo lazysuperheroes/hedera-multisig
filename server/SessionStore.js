@@ -264,10 +264,25 @@ class SessionStore {
       throw new Error('Participant not found');
     }
 
-    // Store signature
+    // Store signature. Canonical shape is `signatures: string[]`
+    // (one base64 sig per SignedTransaction body — multi-node freeze).
+    // We always persist both: `signatures` (canonical, used by the
+    // executor's addSignature(pk, array)) and `signature: string`
+    // (legacy single-sig consumers that expect signatures[0]).
+    const sigList = Array.isArray(signature.signatures) && signature.signatures.length > 0
+      ? signature.signatures
+      : (typeof signature.signature === 'string' && signature.signature.length > 0
+          ? [signature.signature]
+          : null);
+
+    if (!sigList) {
+      throw new Error('addSignature: no signature(s) supplied');
+    }
+
     session.signatures.set(signature.publicKey, {
       publicKey: signature.publicKey,
-      signature: signature.signature,
+      signatures: sigList,
+      signature: sigList[0],
       participantId,
       timestamp: Date.now()
     });
@@ -301,11 +316,19 @@ class SessionStore {
       session.stats.participantsReady--;
     }
 
-    if (participant.status !== 'signed') {
+    // Preserve any participant in a terminal-but-still-meaningful state so
+    // their participantId remains valid for reconnection-token re-auth.
+    // 'signed' must stay (so the threshold check still counts them); 'rejected'
+    // must stay so a participant who declined ONE transaction can come back
+    // and sign the NEXT one without the server losing their slot. Anything
+    // else (e.g. 'connected', 'ready' that abandoned mid-session) gets
+    // pruned to keep the connected count honest.
+    const preservedStates = new Set(['signed', 'rejected']);
+    if (!preservedStates.has(participant.status)) {
       session.participants.delete(participantId);
       session.stats.participantsConnected--;
     } else {
-      // Mark as disconnected but keep if signed
+      participant.previousStatus = participant.status;
       participant.status = 'disconnected';
       participant.websocket = null;
     }

@@ -32,6 +32,7 @@ Examples:
       const { PrivateKey } = require('@hashgraph/sdk');
       const TransactionFreezer = require('../../core/TransactionFreezer');
       const SignatureVerifier = require('../../core/SignatureVerifier');
+      const { extractAllBodyBytes } = require('../../shared/transaction-decoder');
       const { ExitCodes, JsonOutput } = require('../utils/cliUtils');
 
       const globalOpts = command.optsWithGlobals();
@@ -184,22 +185,39 @@ Examples:
         console.log('STEP 4: Generate Signature\n');
         console.log('🔐 Signing transaction...\n');
 
-        const signatureBytes = privateKey.sign(frozenTx.bytes);
+        // Multi-node freeze: produce one signature per SignedTransaction
+        // body (each carries a distinct nodeAccountID). Output format:
+        //   publicKey:sigB64_0,sigB64_1,...,sigB64_N
+        // The collector splits on `:` once to get the pubkey, then splits
+        // the remainder on `,` to recover the array. Single-node freezes
+        // round-trip cleanly as a 1-element comma-list (no comma).
+        const bodies = extractAllBodyBytes(frozenTx.bytes);
         const publicKey = privateKey.publicKey.toString();
-        const signatureBase64 = Buffer.from(signatureBytes).toString('base64');
+        const signaturesB64 = bodies.map((body) =>
+          Buffer.from(privateKey.sign(body)).toString('base64')
+        );
 
-        // Verify the signature locally
-        const isValid = privateKey.publicKey.verify(frozenTx.bytes, signatureBytes);
-        const signatureTuple = `${publicKey}:${signatureBase64}`;
+        // Verify locally — each sig against its corresponding body.
+        let allValid = true;
+        for (let i = 0; i < bodies.length; i++) {
+          const sigBytes = Buffer.from(signaturesB64[i], 'base64');
+          if (!privateKey.publicKey.verify(bodies[i], sigBytes)) {
+            allValid = false;
+            break;
+          }
+        }
+        const signatureTuple = `${publicKey}:${signaturesB64.join(',')}`;
 
         // Output
         if (isJson) {
           jsonOutput.set('signatureTuple', signatureTuple);
           jsonOutput.set('publicKey', publicKey);
-          jsonOutput.set('signature', signatureBase64);
-          jsonOutput.set('verified', isValid);
+          jsonOutput.set('signatures', signaturesB64);
+          jsonOutput.set('signature', signaturesB64[0]); // legacy
+          jsonOutput.set('verified', allValid);
+          jsonOutput.set('nodeBodyCount', bodies.length);
           jsonOutput.set('transactionHash', frozenTx.hash);
-          jsonOutput.print(isValid);
+          jsonOutput.print(allValid);
         } else {
           console.log('✅ Signature generated successfully!\n');
           console.log('╔═══════════════════════════════════════════════════════╗');
@@ -209,14 +227,16 @@ Examples:
           console.log(signatureTuple);
           console.log('─────────────────────────────────────────────────────────\n');
           console.log('BREAKDOWN (for verification):');
-          console.log(`  Public Key: ${publicKey}`);
-          console.log(`  Signature:  ${signatureBase64.substring(0, 32)}...`);
-          console.log(`  Format:     publicKey:signature\n`);
+          console.log(`  Public Key:    ${publicKey}`);
+          console.log(`  Body count:    ${bodies.length} (multi-node freeze)`);
+          console.log(`  Signatures:    ${signaturesB64.length} (one per body)`);
+          console.log(`  First sig:     ${signaturesB64[0].substring(0, 32)}...`);
+          console.log(`  Format:        publicKey:sig0,sig1,...,sigN\n`);
 
-          if (isValid) {
-            console.log('✅ Signature is cryptographically valid\n');
+          if (allValid) {
+            console.log('✅ All signatures cryptographically valid\n');
           } else {
-            console.error('❌ WARNING: Signature verification failed!\n');
+            console.error('❌ WARNING: At least one signature failed verification!\n');
           }
 
           console.log('NEXT STEPS:');

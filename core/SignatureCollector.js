@@ -2,6 +2,7 @@ const readlineSync = require('readline-sync');
 const TransactionFreezer = require('./TransactionFreezer');
 const TransactionDecoder = require('./TransactionDecoder');
 const SignatureVerifier = require('./SignatureVerifier');
+const { extractAllBodyBytes } = require('../shared/transaction-decoder');
 const log = require('../shared/logger').createLogger('SignatureCollector');
 
 /**
@@ -209,13 +210,20 @@ class SignatureCollector {
    * @private
    */
   static _signWithPrivateKey(frozenTx, privateKey) {
-    const signature = privateKey.sign(frozenTx.bytes);
+    // Multi-node freeze: produce one signature per SignedTransaction
+    // body (each has a distinct nodeAccountID). See SigningClient.js
+    // for the protocol rationale. Returns canonical `signatures` array
+    // plus `signature` for legacy single-sig consumers (= signatures[0]).
+    const bodies = extractAllBodyBytes(frozenTx.bytes);
     const publicKey = privateKey.publicKey.toString();
-    const signatureBase64 = Buffer.from(signature).toString('base64');
+    const signaturesB64 = bodies.map((body) =>
+      Buffer.from(privateKey.sign(body)).toString('base64')
+    );
 
     return {
       publicKey,
-      signature: signatureBase64
+      signatures: signaturesB64,
+      signature: signaturesB64[0]
     };
   }
 

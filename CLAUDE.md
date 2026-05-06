@@ -109,9 +109,20 @@ Scheduled transactions (`ScheduledWorkflow`) bypass this constraint entirely.
 - `KeyProvider.sign(txBytes)` is the preferred signing interface (works with opaque signers)
 - Use `shared/crypto-utils.js` for `timingSafeCompare`, `sanitizePublicKey` — no duplicating
 
+### Multi-node Freeze (canonical multi-sig pattern)
+
+- Multi-sig transactions must be frozen against multiple nodes via `setNodeAccountIds([...])`. Each `SignedTransaction` body has a distinct `nodeAccountID`, so signers produce **one ED25519 signature per body** and pass the array to `transaction.addSignature(publicKey, sigBytesArray)`. Single-sig attach against multi-node freeze fails with the SDK error "Signature array must match the number of transactions".
+- Use `selectNodeAccountIds(client, options)` from `shared/node-selection.js` (Node) or `dapp/lib/node-selection.ts` (browser). Default: random subset of 6 — resilient under per-node downtime, well within Hedera's 6 KB tx-size cap. Override only with reason. Strategies: `'subset'` (default), `'all'`, `'specific'`.
+- The 6 KB cap matters: a 5-of-9 multi-sig × 30-node freeze is ~22 KB and won't submit. Use `shared/tx-size-estimator.js` (Node) / `dapp/lib/tx-size-estimator.ts` (browser) to predict size before freezing; the dApp's `TxSizeEstimateBar` surfaces green/amber/red status pre-injection.
+- Wire protocol: `signatures: string[]` (canonical, base64-per-body). Legacy single-sig `signature: string` is accepted by promoting to a 1-element array. `SignatureCollector` outputs `publicKey:sig0,sig1,...,sigN` for offline workflows.
+
 ### Git Signing
 - ALWAYS use GPG-signed commits — Never use `--no-gpg-sign`
 - ALWAYS use signed tags — Use `git tag -s` for releases
+
+### Versioning
+- Bump `dapp/package.json` `version` (semver patch) for any non-trivial dApp change so users can see what they're running. The footer renders `v<version>` from `process.env.NEXT_PUBLIC_DAPP_VERSION` (set in `dapp/next.config.ts`); the `VersionConsoleBanner` component logs version + build time on first paint.
+- Bump root `package.json` `version` for any non-trivial CLI / server / shared-protocol change. The CLI participant prints version + per-file build hashes on startup (`cli/commands/participant.js`).
 
 ## Protocol
 

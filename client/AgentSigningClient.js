@@ -22,7 +22,7 @@
 
 const WebSocket = require('ws');
 const { PrivateKey, Transaction } = require('@hashgraph/sdk');
-const { TransactionDecoder, getTransactionTypeName } = require('../shared/transaction-decoder');
+const { TransactionDecoder, getTransactionTypeName, extractAllBodyBytes } = require('../shared/transaction-decoder');
 
 class AgentSigningClient {
   /**
@@ -310,20 +310,31 @@ class AgentSigningClient {
         throw new Error('Cannot extract transaction bytes');
       }
 
-      // Sign
+      // Multi-node freeze: one signature per SignedTransaction body
+      // (each carries a distinct nodeAccountID). See SigningClient
+      // for rationale — single-sig attach fails on multi-node txs
+      // with SDK error "Signature array must match the number of
+      // transactions".
       this.status = 'signing';
-      const signatureBytes = this.privateKey.sign(txBytes);
+      const bodies = extractAllBodyBytes(txBytes);
       const publicKey = this.privateKey.publicKey.toString();
-      const signatureBase64 = Buffer.from(signatureBytes).toString('base64');
+      const signaturesB64 = bodies.map((body) =>
+        Buffer.from(this.privateKey.sign(body)).toString('base64')
+      );
 
-      // Submit
+      // Submit (canonical = `signatures`; `signature` kept for legacy
+      // server compat).
       this.ws.send(JSON.stringify({
         type: 'SIGNATURE_SUBMIT',
-        payload: { publicKey, signature: signatureBase64 }
+        payload: {
+          publicKey,
+          signatures: signaturesB64,
+          signature: signaturesB64[0]
+        }
       }));
 
       this.status = 'signed';
-      this._emit('signed', { publicKey, signature: signatureBase64 });
+      this._emit('signed', { publicKey, signatures: signaturesB64 });
     } catch (error) {
       this._emit('error', { message: `Signing error: ${error.message}` });
     }

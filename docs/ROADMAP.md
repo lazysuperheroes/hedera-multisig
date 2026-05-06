@@ -132,6 +132,7 @@ Transform from developer tool to end-user product:
 - Video walkthroughs
 - One-click server deploy (Railway/Render/Fly.io)
 - Transaction templates
+- **Scheduled-transaction injection on `/create`** — CLI-only today (`hedera-multisig schedule create / sign / status`). dApp lacks the UI wrap. Queued; see *Scheduled-Transaction Coordinator UI* under Future Considerations for the scope.
 
 ### Phase 6: HOL Standards Integration (Flora)
 
@@ -198,6 +199,49 @@ All initial priorities completed across 20 sessions. See release history below.
 Allow mixed online/offline signing in the same session. Deferred because the 120-second transaction validity window makes the hybrid UX unacceptably stressful. Once scheduled transactions enable hours/days signing windows, the hybrid bridge becomes practical.
 
 See the [January 2026 8-agent analysis](#) for detailed architectural proposal.
+
+### Scheduled-Transaction Coordinator UI
+
+**Status**: Queued (next dApp session) | **Tracked from**: May 2026 walkthrough run
+
+The dApp's `/create` page only emits immediate transactions. Hedera scheduled transactions (HIP-423) — the project's headline feature for cross-timezone treasury, eliminating the 120-second pressure with windows up to ~62 days — are fully supported on the CLI side (`hedera-multisig schedule create / sign / status`, `ScheduledWorkflow`, the server's `--session-timeout` flag for scheduled-mode sessions). The dApp slice is unbuilt.
+
+**What's missing on `/create`:**
+
+- A "Schedule this transaction" toggle (or a 6th `txType`) in the build form.
+- Expiration time picker — default 24h, max ~62d (HIP-423). Match the picker to `--session-timeout`'s parser (`shared/connection-string.js` and CLI `schedule.js` already implement the format: ISO-8601 `2026-06-30T12:00:00Z` or duration `30d` / `2h`).
+- Optional admin key, optional schedule memo, optional payer override (the schedule's *creation* tx pays a small fee separately from the inner tx's fee).
+- In `useTransactionInjection.ts`, when `scheduled === true`, wrap the inner frozen transaction in `ScheduleCreateTransaction` before injecting. Inner tx must use `ScheduleCreate`'s rules (no `freezeWith`, transaction body only).
+- `SessionMonitor` needs a long-window mode: pollable rather than real-time, "come back tomorrow" framing, possibly a saved-link / reconnection-token affordance so the coordinator can close the tab and return.
+- Walkthrough-side: a sibling `examples/walkthrough-scheduled/` example to `walkthrough-hbar` and `walkthrough-contract`.
+
+**What's missing on `/session/[id]` (browser participant):**
+
+- The `SessionCountdown` component currently assumes a hardcoded ~120-second per-tx validity. For scheduled flows that's only the per-`ScheduleSign` deadline; the *underlying schedule's* expiration (hours to ~62 days) is the relevant context for the participant. Mirror-node lookup of `getScheduleInfo(scheduleId).expirationTime` should be added in lockstep with the `/create` scheduled-tx UI work — same pattern as the CLI participant's `fetchAndPrintScheduleExpiration` helper added in May 2026 (`cli/commands/participant.js`). Without this, browser participants of a scheduled flow see a panic-inducing 120s countdown for what's actually a multi-day signature window.
+- The transaction review banner copy (`TransactionReview.tsx` / `PostSigningStatus.tsx`) needs the same context split: live ceremony vs scheduled-tx flow. Mirror the CLI participant's three-regime display — `ScheduleCreateTransaction` (show inner tx + schedule expiration), `ScheduleSignTransaction` (show schedule on-chain expiration via mirror lookup), regular tx (current behavior).
+
+**Architectural seam (already in place):**
+
+- The session protocol already distinguishes scheduled-mode from realtime via `--session-timeout` on the server CLI.
+- `SigningSessionManager` accepts a `scheduledDefaultTimeout` option already (May 2026 Phase F2 work).
+- Mirror-node lookups for `ScheduleId` are in `shared/mirror-node-client.js` (`getScheduleInfo`).
+
+**Estimated scope**: ~300-500 lines across the form (`TransactionFields.tsx`), the inject hook (`useTransactionInjection.ts`), the monitor (`SessionMonitor.tsx`), plus a fresh walkthrough. No protocol changes needed.
+
+**Why deferred to its own session**: requires a coherent UX pass on long-window monitoring (reconnection, re-auth, status-polling-on-load) — not just a toggle. Doing it inside the walkthrough sprint would split the work badly.
+
+### Real Sponsorship + Nested Threshold Keys
+
+**Status**: Deferred | **Tracked from**: May 2026 dApp `/create` review
+
+Two related capabilities that both require multi-account signature collection inside a single ceremony:
+
+1. **Real sponsorship (sender ≠ fee payer).** A coordinator nominates a different account to pay the network fee from the sender. Both accounts must sign. The dApp's *Override* affordance on the **Fee payer** callout is the seam: today it conflates sender and payer (the override account becomes both). True sponsorship needs the ceremony to gather signatures for two distinct keysets and bind them to one frozen transaction.
+2. **Coverage validation for nested keylists.** Hedera supports keylists-within-keylists / threshold-within-threshold structures. The current Path 2 coverage check (`dapp/lib/account-keys.ts` `parseAccountKey`) flags these as `kind: 'nested'` and refuses to validate, blocking the Build button conservatively. Recursively walking the protobuf and computing coverage against the session's flat keyset is straightforward; doing it under the same UI without overwhelming the coordinator is the harder problem.
+
+**Why deferred**: Both require the ceremony / `SigningSessionManager` to collect signatures across multiple eligible-key sets within one session, which is a real architectural change. Path 2 (single-account coverage validation, May 2026) is the safe shipping point until there's user demand for either capability.
+
+**Architectural seam**: The `feePayerOverride` field on `txFields` and the `ResolvedFeePayer.source = 'override'` discriminator already exist. Extending the session protocol to carry `eligiblePublicKeysFor: { [accountId]: string[] }` (instead of a single global list) is the cleanest path; the FeePayerCallout copy and override panel can be re-used.
 
 ---
 

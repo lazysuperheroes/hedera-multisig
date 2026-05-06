@@ -283,10 +283,25 @@ class RedisSessionStore {
       throw new Error('Participant not found');
     }
 
-    // Store signature
+    // Store signature. Canonical shape is `signatures: string[]` (one
+    // base64 sig per SignedTransaction body — multi-node freeze).
+    // Persist both `signatures` (canonical, used by executor's
+    // addSignature(pk, array)) and `signature: string` (legacy
+    // single-sig consumers reading signatures[0]).
+    const sigList = Array.isArray(signature.signatures) && signature.signatures.length > 0
+      ? signature.signatures
+      : (typeof signature.signature === 'string' && signature.signature.length > 0
+          ? [signature.signature]
+          : null);
+
+    if (!sigList) {
+      throw new Error('addSignature: no signature(s) supplied');
+    }
+
     session.signatures[signature.publicKey] = {
       publicKey: signature.publicKey,
-      signature: signature.signature,
+      signatures: sigList,
+      signature: sigList[0],
       participantId,
       timestamp: Date.now()
     };

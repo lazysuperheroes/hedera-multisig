@@ -5,11 +5,41 @@
  */
 
 const { expect } = require('chai');
-const { PrivateKey } = require('@hashgraph/sdk');
+const {
+  PrivateKey,
+  TransferTransaction,
+  AccountId,
+  Hbar,
+  TransactionId,
+  Client,
+} = require('@hashgraph/sdk');
 const KeyValidator = require('../keyManagement/KeyValidator');
 const TransactionFreezer = require('../core/TransactionFreezer');
 const SignatureCollector = require('../core/SignatureCollector');
 const SignatureVerifier = require('../core/SignatureVerifier');
+
+// Build a real frozen TransferTransaction for the multi-key tests.
+// Multi-node freeze (canonical pattern, see shared/node-selection.js)
+// produces protobuf bytes that the SDK's signableNodeBodyBytesList
+// can decode — required because _signWithPrivateKey now signs body
+// bytes (not raw bytes). Doesn't hit the network: freeze is local.
+function buildFrozenTransferBytes() {
+  const operatorId = AccountId.fromString('0.0.1001');
+  const recipientId = AccountId.fromString('0.0.1002');
+  const tx = new TransferTransaction()
+    .addHbarTransfer(operatorId, new Hbar(-1))
+    .addHbarTransfer(recipientId, new Hbar(1))
+    .setTransactionId(TransactionId.generate(operatorId))
+    .setNodeAccountIds([
+      AccountId.fromString('0.0.3'),
+      AccountId.fromString('0.0.4'),
+      AccountId.fromString('0.0.5'),
+    ]);
+  // freeze() (no client) wires up the bodies. Sufficient for body
+  // extraction; we never submit.
+  tx.freeze();
+  return tx.toBytes();
+}
 
 describe('Multi-Key Type Support (Ed25519 & ECDSA)', function() {
   this.timeout(30000);
@@ -101,10 +131,16 @@ describe('Multi-Key Type Support (Ed25519 & ECDSA)', function() {
     let testData, mockFrozenTx;
 
     before(function() {
+      // Real frozen multi-node transfer — needed by SignatureCollector
+      // which decodes the bytes via signableNodeBodyBytesList. The
+      // sub-buffer (`testData`) stays as the raw-bytes target for
+      // length-only assertions (Ed25519/ECDSA produce 64-byte sigs
+      // regardless of input).
+      const frozenBytes = buildFrozenTransferBytes();
       testData = Buffer.from('Multi-sig test transaction');
       mockFrozenTx = {
-        bytes: testData,
-        base64: testData.toString('base64'),
+        bytes: frozenBytes,
+        base64: Buffer.from(frozenBytes).toString('base64'),
         hash: 'mock-hash',
         frozenAt: new Date(),
         expiresAt: new Date(Date.now() + 110000)
@@ -143,6 +179,9 @@ describe('Multi-Key Type Support (Ed25519 & ECDSA)', function() {
       expect(generatedSignatures[0].publicKey).to.equal(ed25519Key1.publicKey.toString());
       expect(generatedSignatures[1].publicKey).to.equal(ecdsaKey1.publicKey.toString());
       expect(generatedSignatures[2].publicKey).to.equal(ed25519Key2.publicKey.toString());
+      // Multi-node freeze: 3 nodes → 3 signatures per signer
+      expect(generatedSignatures[0].signatures).to.have.length(3);
+      expect(generatedSignatures[0].signature).to.equal(generatedSignatures[0].signatures[0]);
     });
   });
 
@@ -155,10 +194,11 @@ describe('Multi-Key Type Support (Ed25519 & ECDSA)', function() {
     let testData, mockFrozenTx, generatedSignatures;
 
     before(function() {
+      const frozenBytes = buildFrozenTransferBytes();
       testData = Buffer.from('Multi-sig test transaction');
       mockFrozenTx = {
-        bytes: testData,
-        base64: testData.toString('base64'),
+        bytes: frozenBytes,
+        base64: Buffer.from(frozenBytes).toString('base64'),
         hash: 'mock-hash',
         frozenAt: new Date(),
         expiresAt: new Date(Date.now() + 110000)

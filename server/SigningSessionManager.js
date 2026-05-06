@@ -456,9 +456,12 @@ class SigningSessionManager {
         await this.store.updateStatus(sessionId, 'signing');
       }
 
-      // Validate signature format
-      if (!signature.publicKey || !signature.signature) {
-        throw new Error('Invalid signature format: missing publicKey or signature');
+      // Validate signature format. Canonical: signatures: string[];
+      // legacy: signature: string. Either alone is acceptable.
+      const hasSigArray = Array.isArray(signature.signatures) && signature.signatures.length > 0;
+      const hasSigStr = typeof signature.signature === 'string' && signature.signature.length > 0;
+      if (!signature.publicKey || (!hasSigArray && !hasSigStr)) {
+        throw new Error('Invalid signature format: missing publicKey or signature(s)');
       }
 
       // Reject signatures if no frozen transaction is stored (prevents accepting
@@ -486,13 +489,28 @@ class SigningSessionManager {
         throw new Error('This public key has already signed');
       }
 
-      // Verify signature cryptographically against the frozen transaction
+      // Canonical wire form: signatures: string[] (one base64 sig per
+      // SignedTransaction body). Legacy single-sig promotes to a
+      // 1-element array. Always store the array form so the executor
+      // can attach all signatures via addSignature(pk, sigArray).
+      const sigList = hasSigArray
+        ? signature.signatures
+        : [signature.signature];
+      const canonicalSignature = {
+        publicKey: signature.publicKey,
+        signatures: sigList,
+        signature: sigList[0]
+      };
+
+      // Verify cryptographically against the frozen transaction.
+      // Multi-node freeze: each sig pairs with its corresponding
+      // bodyBytes; verifier walks the pairs.
       if (session.frozenTransaction) {
         const frozenTxBytes = this._getFrozenTransactionBytes(session.frozenTransaction);
         if (frozenTxBytes) {
           const verifyResult = await SignatureVerifier.verifySingle(
             { bytes: frozenTxBytes },
-            { publicKey: signature.publicKey, signature: signature.signature }
+            canonicalSignature
           );
 
           if (!verifyResult.valid) {
@@ -502,7 +520,7 @@ class SigningSessionManager {
       }
 
       // Add signature to session
-      await this.store.addSignature(sessionId, participantId, signature);
+      await this.store.addSignature(sessionId, participantId, canonicalSignature);
 
       // Emit signature received event
       const handlers = this.eventHandlers.get(sessionId);
@@ -632,16 +650,26 @@ class SigningSessionManager {
       for (const sig of signatures) {
         const publicKey = PublicKey.fromString(sig.publicKey);
 
-        // Handle both single signature (string) and multi-node signatures (array)
-        if (Array.isArray(sig.signature)) {
-          // Multi-node: array of signatures, one per node-specific transaction
-          const signatureArray = sig.signature.map(s => Buffer.from(s, 'base64'));
-          signedTx = signedTx.addSignature(publicKey, signatureArray);
-        } else {
-          // Single signature
-          const signatureBytes = Buffer.from(sig.signature, 'base64');
-          signedTx = signedTx.addSignature(publicKey, signatureBytes);
+        // Multi-node freeze: array of base64 sigs, one per body. SDK
+        // accepts an array on addSignature() and pairs them positionally
+        // with each SignedTransaction's sigMap. Legacy single-sig
+        // promotes to a 1-element array.
+        const sigList = Array.isArray(sig.signatures) && sig.signatures.length > 0
+          ? sig.signatures
+          : (typeof sig.signature === 'string' && sig.signature.length > 0
+              ? [sig.signature]
+              : null);
+        if (!sigList) {
+          throw new Error(`No signature stored for public key ${sig.publicKey}`);
         }
+
+        const sigBytesArray = sigList.map((sigStr) => (
+          sigStr.startsWith('0x')
+            ? Buffer.from(sigStr.slice(2), 'hex')
+            : Buffer.from(sigStr, 'base64')
+        ));
+
+        signedTx = signedTx.addSignature(publicKey, sigBytesArray);
       }
 
       // Execute transaction
@@ -1079,7 +1107,8 @@ class SigningSessionManager {
         status: participant.status,
         publicKey: participant.publicKey,
         label: participant.label,
-        connectedAt: participant.connectedAt
+        connectedAt: participant.connectedAt,
+        isAgent: !!participant.isAgent
       });
     }
 

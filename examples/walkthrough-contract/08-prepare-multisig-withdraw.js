@@ -25,6 +25,7 @@ const {
 } = require('@hashgraph/sdk');
 const { Interface } = require('ethers');
 const chalk = require('chalk');
+const { selectNodeAccountIds, DEFAULT_SUBSET_SIZE } = require('../../shared/node-selection');
 
 const STATE_FILE = path.resolve(__dirname, 'demo-account-state.json');
 const ARTIFACT = path.resolve(__dirname, 'Counter.json');
@@ -54,12 +55,19 @@ async function main() {
   const calldata = iface.encodeFunctionData('withdraw', []);
   const txId = TransactionId.generate(state.demoAccountId);
 
+  // Multi-node freeze with random subset of 6 — see
+  // shared/node-selection.js. Resilient to per-node downtime, well
+  // under Hedera's 6 KB tx-size cap.
+  const nodeAccountIds = selectNodeAccountIds(client, {
+    strategy: 'subset',
+    subsetSize: DEFAULT_SUBSET_SIZE,
+  });
   const tx = new ContractExecuteTransaction()
     .setContractId(ContractId.fromString(state.contractId))
     .setGas(120_000) // slightly higher — withdraw does a value transfer
     .setFunctionParameters(Buffer.from(calldata.slice(2), 'hex'))
     .setTransactionId(txId)
-    .setNodeAccountIds([new AccountId(3), new AccountId(4), new AccountId(5)])
+    .setNodeAccountIds(nodeAccountIds)
     .setTransactionMemo('walkthrough-contract: multi-sig withdraw')
     .freeze();
 
@@ -90,7 +98,7 @@ async function main() {
   console.log(chalk.bold.white('Frozen transaction (base64):'));
   console.log(chalk.cyan(base64));
   console.log(chalk.gray(`\nArtifact saved: ${OUT_FILE}`));
-  console.log(chalk.gray(`Verify after ceremony: node ../walkthrough-hbar/06-verify-on-mirror.js ${txId.toString()}\n`));
+  console.log(chalk.gray(`Verify after ceremony: node verify-on-mirror.js ${txId.toString()}\n`));
 
   client.close();
 }

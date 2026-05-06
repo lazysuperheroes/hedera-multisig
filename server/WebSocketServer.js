@@ -14,6 +14,7 @@ const { normalizePublicKey, isKeyEligible } = require('./utils/keyUtils');
 const { createLogger } = require('../shared/logger');
 const { timerController } = require('../shared/TimerController');
 const { ERROR_CODES } = require('../shared/protocol');
+const { TransactionDecoder: SharedDecoder, getTransactionTypeName } = require('../shared/transaction-decoder');
 
 class MultiSigWebSocketServer {
   constructor(sessionManager, options = {}) {
@@ -473,6 +474,21 @@ class MultiSigWebSocketServer {
             await this._handleExecuteTransaction(sessionId, message);
             break;
 
+          case 'RESET_TRANSACTION':
+            if (!isCoordinator) {
+              this.log.warn('Non-coordinator attempted RESET_TRANSACTION', { sessionId, participantId });
+              ws.send(JSON.stringify({
+                type: 'ERROR',
+                payload: {
+                  message: 'Only the coordinator can reset the transaction',
+                  code: ERROR_CODES.NOT_COORDINATOR
+                }
+              }));
+              break;
+            }
+            await this._handleResetTransaction(sessionId, ws);
+            break;
+
           case 'PING':
             ws.send(JSON.stringify({ type: 'PONG' }));
             break;
@@ -807,7 +823,8 @@ class MultiSigWebSocketServer {
             threshold: sessionInfo.threshold,
             eligiblePublicKeys: sessionInfo.eligiblePublicKeys,
             expectedParticipants: sessionInfo.stats.participantsExpected,
-            stats: sessionInfo.stats
+            stats: sessionInfo.stats,
+            expiresAt: sessionInfo.expiresAt
           }
         }
       }));
@@ -858,14 +875,35 @@ class MultiSigWebSocketServer {
    */
   async _handleSignatureSubmit(sessionId, participantId, message) {
     try {
-      const { publicKey, signature } = message.payload;
+      const { publicKey, signature, signatures } = message.payload;
 
-      this.log.debug('Signature submitted', { sessionId, participantId, publicKeyPreview: '...' + publicKey.slice(-8) });
+      // Multi-node freeze (canonical Hedera multi-sig pattern): one
+      // base64 signature per SignedTransaction body, indexed by node
+      // target. Wire-canonical field is `signatures: string[]`. Legacy
+      // single-sig (`signature: string`) is promoted to a 1-element
+      // array — verifier and executor handle the size mismatch.
+      let sigList;
+      if (Array.isArray(signatures) && signatures.length > 0) {
+        sigList = signatures;
+      } else if (typeof signature === 'string' && signature.length > 0) {
+        sigList = [signature];
+      } else {
+        throw new Error(
+          'No signature(s) in payload — expected `signatures: string[]` ' +
+          '(canonical) or `signature: string` (legacy)'
+        );
+      }
+
+      this.log.debug('Signature submitted', {
+        sessionId, participantId,
+        publicKeyPreview: '...' + publicKey.slice(-8),
+        signatureCount: sigList.length
+      });
 
       const result = await this.sessionManager.submitSignature(
         sessionId,
         participantId,
-        { publicKey, signature }
+        { publicKey, signatures: sigList, signature: sigList[0] }
       );
 
       this.log.info('Signature accepted', {
@@ -902,13 +940,46 @@ class MultiSigWebSocketServer {
             signaturesRequired: result.signaturesRequired
           }
         });
+
+        // Auto-submit to Hedera the moment threshold is reached. Without
+        // this, the server sits idle waiting for an explicit
+        // EXECUTE_TRANSACTION message — which the dApp does not send —
+        // and the fully-signed transaction silently expires after 120s.
+        // There's no meaningful "review before submit" step at this
+        // point: every eligible participant has already approved,
+        // signatures are cryptographically valid, and the only next
+        // sensible action is submission. Going through
+        // _handleExecuteTransaction reuses the existing broadcast logic
+        // so participants and coordinator both get TRANSACTION_EXECUTED
+        // (or EXECUTION_FAILED) with the resulting tx ID + mirror status.
+        await this._handleExecuteTransaction(sessionId, { payload: {} });
       }
 
     } catch (error) {
+      // Tell the failing participant directly (existing behavior).
       this.sendToParticipant(participantId, {
         type: 'SIGNATURE_REJECTED',
         payload: { message: error.message, code: error.code || ERROR_CODES.SIGNATURE_INVALID }
       });
+      // Also surface to the coordinator so the dApp monitor can show
+      // *which* participant's signature was rejected and *why* — without
+      // this notification, a sig-rejection cascade is invisible on the
+      // coordinator side until the 120s window expires.
+      this.sendToCoordinator(sessionId, {
+        type: 'SIGNATURE_REJECTED',
+        payload: {
+          participantId,
+          message: error.message,
+          code: error.code || ERROR_CODES.SIGNATURE_INVALID
+        }
+      });
+      // And echo to the server log so a verbose-mode operator sees it
+      // alongside the SIGNATURE_SUBMIT line.
+      if (this.options.verbose) {
+        console.log(chalk.red(
+          `\n❌ Signature rejected from participant ${participantId}: ${error.message}\n`
+        ));
+      }
     }
   }
 
@@ -932,6 +1003,43 @@ class MultiSigWebSocketServer {
         }
       });
 
+      // Late-joiner catch-up: if the coordinator already injected a
+      // transaction before this participant connected, the original
+      // TRANSACTION_RECEIVED broadcast went out before they were on the
+      // socket. The participant's SigningClient explicitly waits for this
+      // message before prompting the user — without it, they sit at
+      // "waiting for transaction injection" forever even though the tx is
+      // already in the session. Send them their own copy now.
+      //
+      // Use `session.frozenTransaction` as the inFlight indicator (not
+      // `session.txDetails`) because the dApp's TRANSACTION_INJECT path
+      // sends only the frozen bytes — txDetails ends up undefined while
+      // the frozen tx and serializable ABI ARE persisted. The participant
+      // SigningClient decodes the frozen bytes locally, so missing
+      // txDetails is non-fatal; the ABI restores verified contract-call
+      // display.
+      const session = await this.sessionManager.store.getSession(sessionId);
+      const inFlight =
+        session &&
+        (session.status === 'transaction-received' || session.status === 'signing') &&
+        session.frozenTransaction;
+
+      if (inFlight) {
+        this.sendToParticipant(participantId, {
+          type: 'TRANSACTION_RECEIVED',
+          payload: {
+            frozenTransaction: session.frozenTransaction,
+            txDetails: session.txDetails || null,
+            metadata: session.txDetails?.metadata || null,
+            abi: session.serializableAbi || null,
+            serverTimestamp: Date.now()
+          }
+        });
+        if (this.options.verbose) {
+          console.log(chalk.cyan(`   → Sent in-flight transaction to late-joining participant ${participantId}`));
+        }
+      }
+
     } catch (error) {
       this.sendToParticipant(participantId, {
         type: 'ERROR',
@@ -946,7 +1054,8 @@ class MultiSigWebSocketServer {
    */
   async _handleTransactionInject(sessionId, message) {
     try {
-      const { frozenTransaction, txDetails, metadata, contractInterface, abi } = message.payload;
+      const { frozenTransaction, metadata, contractInterface, abi } = message.payload;
+      let { txDetails } = message.payload;
 
       // Ensure ABI is JSON-serializable for transmission to participants.
       // ethers.js Interface objects do not survive JSON.stringify, so we extract
@@ -973,6 +1082,34 @@ class MultiSigWebSocketServer {
         throw new Error('Invalid frozen transaction format');
       }
 
+      // The dApp's TRANSACTION_INJECT only sends `frozenTransaction` — no
+      // pre-decoded txDetails. Without txDetails the server can't set up
+      // the 120-second expiration timer (it depends on
+      // validStartTimestamp), late-joiners get an empty review payload,
+      // and participants see degraded transaction info. Decode here as a
+      // fallback so the same code path works regardless of injection source.
+      if (!txDetails) {
+        try {
+          const { Transaction } = require('@hashgraph/sdk');
+          const decoded = await SharedDecoder.decode(normalizedTx.base64);
+          txDetails = decoded.details;
+          // SharedDecoder returns { details, type, checksum, ... } — we
+          // store the details and let downstream consumers (review, timer
+          // calculation) use them as if the dApp had pre-decoded.
+          // Transaction object isn't used here but the require keeps the
+          // SDK warm-loaded for the executor path.
+          if (Transaction && this.options.verbose) {
+            console.log(chalk.gray(`   [decoder] inferred txDetails for ${decoded.type || 'unknown type'}`));
+          }
+        } catch (decodeErr) {
+          if (this.options.verbose) {
+            console.log(chalk.yellow(
+              `   [decoder] could not decode incoming tx: ${decodeErr.message} — proceeding without txDetails`
+            ));
+          }
+        }
+      }
+
       // Store in session via SessionStore
       const session = await this.sessionManager.store.getSession(sessionId);
       if (session) {
@@ -983,6 +1120,10 @@ class MultiSigWebSocketServer {
 
         session.frozenTransaction = normalizedTx;
         session.txDetails = txDetails;
+        // Persist the JSON-serializable ABI so late-joining participants
+        // can reconstruct verified contract-call display. The original
+        // ethers Interface object can't be serialized.
+        session.serializableAbi = serializableAbi || null;
         session.status = 'transaction-received';
         session.transactionReceivedAt = Date.now();
 
@@ -1015,11 +1156,17 @@ class MultiSigWebSocketServer {
       }
 
       // Broadcast to all participants (use serializableAbi instead of contractInterface)
-      // Include server timestamp so clients can compute clock offset for accurate countdown
+      // Include server timestamp so clients can compute clock offset for accurate countdown.
+      // IMPORTANT: forward the *normalized* { bytes, base64 } form, not the raw
+      // payload field. The dApp's TRANSACTION_INJECT sends `frozenTransaction`
+      // as a base64 string — if we broadcast it as-is, participants doing
+      // `frozenTransaction.base64` get `undefined`, decoding throws, and the
+      // auto-reject catch in SigningClient._onTransactionReceived fires a
+      // spurious TRANSACTION_REJECTED for every connected participant.
       await this.broadcastToSession(sessionId, {
         type: 'TRANSACTION_RECEIVED',
         payload: {
-          frozenTransaction,
+          frozenTransaction: normalizedTx,
           txDetails,
           metadata,
           abi: serializableAbi,
@@ -1080,6 +1227,7 @@ class MultiSigWebSocketServer {
         // Clear the transaction from session but keep session alive
         session.frozenTransaction = null;
         session.txDetails = null;
+        session.serializableAbi = null;
         session.transactionExpiresAt = null;
 
         // Clear any collected signatures (they're for the expired transaction)
@@ -1090,6 +1238,105 @@ class MultiSigWebSocketServer {
         session.status = 'waiting';
       }
     }
+  }
+
+  /**
+   * Handle coordinator-initiated transaction reset.
+   *
+   * Allows the coordinator to abandon an in-flight transaction (e.g. a
+   * participant CLI crashed mid-signing, or the coordinator changed their
+   * mind) without tearing down the whole session. Mirrors the logic in
+   * `_handleTransactionExpired`: clear the frozen tx + collected signatures
+   * and reset the session status to `waiting`, ready for a new injection.
+   *
+   * Only valid while the transaction is still in flight — after `executing`
+   * we'd be racing the network, and after a terminal state (`completed`,
+   * `execution-failed`) the operator should investigate before retrying.
+   * @private
+   */
+  async _handleResetTransaction(sessionId, ws) {
+    const session = await this.sessionManager.store.getSession(sessionId);
+    if (!session) {
+      ws.send(JSON.stringify({
+        type: 'ERROR',
+        payload: { message: 'Session not found' }
+      }));
+      return;
+    }
+
+    // States from which a coordinator-initiated reset is meaningful
+    // OR idempotent (already at the post-reset state).
+    //
+    // - 'transaction-received' / 'signing': in-flight, normal reset.
+    // - 'transaction-expired': natural expiry path, normal reset.
+    // - 'waiting': the session has already auto-reset (expiration timer
+    //   in `_handleTransactionExpired` flips status to 'waiting' after
+    //   clearing the tx). The dApp's local SessionMonitor still shows
+    //   'expired' and renders the reset button, so the click arrives
+    //   here. Treat as a no-op success — tell the dApp the reset
+    //   succeeded so it routes back to the build step.
+    //
+    // Hard-blocked states ('completed', 'execution-failed', etc.) still
+    // reject — the operator should investigate before retrying.
+    const resetableStates = new Set([
+      'transaction-received',
+      'signing',
+      'transaction-expired',
+      'waiting',
+    ]);
+    if (!resetableStates.has(session.status)) {
+      ws.send(JSON.stringify({
+        type: 'ERROR',
+        payload: {
+          message: `Cannot reset transaction from status '${session.status}'. Reset is only allowed while a transaction is in flight, expired, or already at 'waiting'.`
+        }
+      }));
+      return;
+    }
+
+    const wasAlreadyWaiting = session.status === 'waiting';
+
+    // Clear any lingering tx state. This is a no-op if the session is
+    // already at 'waiting' (auto-reset already happened), but it's safe
+    // and idempotent — defensive-clear in case any field was missed.
+    session.frozenTransaction = null;
+    session.txDetails = null;
+    session.serializableAbi = null;
+    session.transactionExpiresAt = null;
+    if (session.signatures && typeof session.signatures.clear === 'function') {
+      session.signatures.clear();
+    }
+    if (session.stats) {
+      session.stats.signaturesCollected = 0;
+    }
+
+    if (!wasAlreadyWaiting) {
+      await this.sessionManager.store.updateStatus(sessionId, 'waiting');
+    }
+
+    if (this.options.verbose) {
+      if (wasAlreadyWaiting) {
+        console.log(chalk.gray(
+          `\n🔄  Coordinator reset acknowledged for session ${sessionId} (already at 'waiting').\n`
+        ));
+      } else {
+        console.log(chalk.yellow(`\n🔄  Coordinator reset transaction for session ${sessionId}`));
+        console.log(chalk.gray(`   Session is back to 'waiting' — ready for a new injection.\n`));
+      }
+    }
+
+    // Always broadcast TRANSACTION_RESET so the dApp's SessionMonitor
+    // can navigate back to the build step regardless of whether the
+    // reset was a no-op acknowledgment or an actual state transition.
+    await this.broadcastToSession(sessionId, {
+      type: 'TRANSACTION_RESET',
+      payload: {
+        sessionId,
+        message: wasAlreadyWaiting
+          ? 'Session was already at waiting — ready for a new injection.'
+          : 'Coordinator reset the transaction. Session is ready for a new injection.'
+      }
+    });
   }
 
   /**
@@ -1123,8 +1370,20 @@ class MultiSigWebSocketServer {
    * @private
    */
   async _handleExecuteTransaction(sessionId, message) {
+    if (this.options.verbose) {
+      console.log(chalk.cyan(`\n→ Executing transaction for session ${sessionId}...`));
+    }
     try {
       const result = await this.sessionManager.executeTransaction(sessionId);
+
+      if (this.options.verbose) {
+        console.log(chalk.green(
+          `✅ Execute returned: ` +
+          `txId=${result?.transactionId || 'unknown'} ` +
+          `status=${result?.status || 'unknown'} ` +
+          `mirrorConfirmed=${!!result?.mirrorConfirmed}`
+        ));
+      }
 
       // Broadcast to session
       await this.broadcastToSession(sessionId, {
@@ -1133,9 +1392,33 @@ class MultiSigWebSocketServer {
       });
 
     } catch (error) {
-      this.sendToCoordinator(sessionId, {
+      // Surface the full error on the server console — previously this
+      // catch silently sent EXECUTION_FAILED to the coordinator only,
+      // making a backend execute throw invisible if the coordinator's
+      // socket had already closed or never paid attention. With this
+      // log every operator running `--verbose` (default) sees the
+      // failure with stack.
+      const stack = error && error.stack ? `\n${error.stack}` : '';
+      console.error(chalk.red(
+        `\n❌ Execute failed for session ${sessionId}: ${error.message}${stack}\n`
+      ));
+      this.log.error('Transaction execution failed', {
+        sessionId,
+        error: error.message,
+        code: error.code
+      });
+
+      // Broadcast (not just sendToCoordinator) so participants also
+      // learn the network rejected. Without this, CLI participants
+      // sit idle until the 120s window expires even though the tx
+      // already failed on-chain.
+      await this.broadcastToSession(sessionId, {
         type: 'EXECUTION_FAILED',
-        payload: { message: error.message, code: error.code || ERROR_CODES.TRANSACTION_EXECUTION_FAILED }
+        payload: {
+          sessionId,
+          message: error.message,
+          code: error.code || ERROR_CODES.TRANSACTION_EXECUTION_FAILED
+        }
       });
     }
   }

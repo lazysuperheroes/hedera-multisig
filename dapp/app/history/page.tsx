@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { useTxHistory, TxHistoryEntry } from '../../hooks/useTxHistory';
+import {
+  useTxHistory,
+  updateTxHistoryEntryStatus,
+  TxHistoryEntry,
+} from '../../hooks/useTxHistory';
 import { CopyButton } from '../../components/CopyButton';
 import { Footer } from '../../components/Footer';
-import { getHashScanTransactionUrl } from '../../lib/mirror-node';
+import {
+  getHashScanTransactionUrl,
+  fetchTransactionStatus,
+} from '../../lib/mirror-node';
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -91,12 +98,85 @@ function StatusBadge({ status }: { status: TxHistoryEntry['status'] }) {
 // Page component
 // ---------------------------------------------------------------------------
 
+// Mirror-node lag (~3-5s). Treat anything older than this as "should have
+// landed by now" — if it's still missing on mirror, mark expired.
+const STALE_PENDING_MS = 130 * 1000; // 120s validity + 10s buffer
+
 export default function HistoryPage() {
-  const { entries, clearHistory, exportCsv } = useTxHistory();
+  const { entries, clearHistory, exportCsv, refresh } = useTxHistory();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [dateRange, setDateRange] = useState<DateRange>('all');
   const [confirmClear, setConfirmClear] = useState(false);
+
+  // Backfill PENDING entries by polling the mirror node. Without this, a tx
+  // that injected, signed, and executed on a previous visit would stay
+  // "PENDING" in localStorage forever — confusing for a treasury operator
+  // who looks at history days later. Local sessions have a 120s validity;
+  // if mirror still doesn't know about a tx that's older than that, it
+  // expired (signers didn't meet threshold in time).
+  useEffect(() => {
+    const pending = entries.filter(
+      (e) =>
+        e.status === 'PENDING' &&
+        e.transactionId &&
+        e.transactionId !== 'unknown'
+    );
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      let touched = false;
+      for (const e of pending) {
+        if (cancelled) return;
+        const network = (e.network === 'mainnet' ? 'mainnet' : 'testnet') as
+          | 'testnet'
+          | 'mainnet';
+        try {
+          const status = await fetchTransactionStatus(e.transactionId, network);
+          if (cancelled) return;
+          const ageMs = Date.now() - new Date(e.timestamp).getTime();
+
+          if (status.found) {
+            if (status.result === 'SUCCESS') {
+              updateTxHistoryEntryStatus(e.transactionId, 'SUCCESS', {
+                receiptStatus: status.result,
+                consensusTimestamp: status.consensusTimestamp,
+                chargedFee: status.chargedFee,
+                executedAt: new Date().toISOString(),
+              });
+            } else {
+              updateTxHistoryEntryStatus(e.transactionId, 'FAILURE', {
+                failureReason: status.result || 'Network rejected the transaction.',
+                consensusTimestamp: status.consensusTimestamp,
+                failedAt: new Date().toISOString(),
+              });
+            }
+            touched = true;
+          } else if (ageMs > STALE_PENDING_MS) {
+            // Older than the Hedera validity window AND mirror has no record
+            // — the tx was never submitted (signers didn't meet threshold
+            // before the 120s window closed).
+            updateTxHistoryEntryStatus(e.transactionId, 'FAILURE', {
+              failureReason:
+                'Not found on mirror node after the 120-second window — likely expired before threshold was met.',
+              expiredAt: new Date().toISOString(),
+            });
+            touched = true;
+          }
+        } catch {
+          // Mirror down / transient — leave PENDING; we'll retry next mount.
+        }
+      }
+      if (touched && !cancelled) refresh();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Re-run when the entry count changes (new injection while page is open).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries.length]);
 
   // Filter & sort (newest first)
   const filtered = useMemo(() => {

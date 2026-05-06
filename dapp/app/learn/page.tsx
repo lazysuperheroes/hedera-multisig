@@ -107,8 +107,40 @@ export default function LearnPage() {
             </span>
           </Link>
 
-          {/* Secondary — Contract walkthrough. Pulled out as a marginalia
-              note: smaller, indented. In console it gets its own pane
+          {/* Secondary — dApp walkthrough. Pulled out as a marginalia
+              note: smaller, indented. */}
+          <div className="ml-4 sm:ml-24 max-w-xl border-l-2 border-border pl-6 py-2 mb-10">
+            <Link
+              href={`${REPO_BASE}/walkthrough-dapp`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="console-pane group block"
+              data-pane-label="~/walkthrough.dapp"
+            >
+              <h2 className="font-heading text-xl font-bold text-foreground mb-3 group-hover:text-accent transition-colors">
+                Sign via the public dApp
+              </h2>
+              <p className="text-foreground-muted leading-relaxed text-sm mb-3">
+                Same multi-sig HBAR transfer, but signers participate
+                through this dApp + a Hedera wallet. Hybrid pattern:
+                alice in HashPack via WalletConnect, bob via CLI — same
+                ceremony, same coordinator. Best for &ldquo;what does signing
+                actually feel like for participants?&rdquo;
+              </p>
+              <ul className="text-xs text-foreground-subtle space-y-1 mb-3">
+                <li>· HTTPS dApp ⇒ WSS coordinator (<code className="font-mono">--tunnel ngrok</code>)</li>
+                <li>· HashPack key import + WalletConnect signing</li>
+                <li>· Mixed-mode: web wallet + CLI participant</li>
+                <li>· Receipt view on completion (no credentials, no clutter)</li>
+              </ul>
+              <span className="text-sm font-medium text-accent group-hover:underline">
+                Open on GitHub →
+              </span>
+            </Link>
+          </div>
+
+          {/* Tertiary — Smart-contract walkthrough. Same indented
+              marginalia treatment. In console it gets its own pane
               chrome (~/walkthrough.contract). */}
           <div className="ml-4 sm:ml-24 max-w-xl border-l-2 border-border pl-6 py-2">
             <Link

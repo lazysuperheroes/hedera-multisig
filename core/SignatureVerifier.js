@@ -1,5 +1,6 @@
 const { PublicKey } = require('@hashgraph/sdk');
 const crypto = require('crypto');
+const { extractAllBodyBytes } = require('../shared/transaction-decoder');
 
 /**
  * SignatureVerifier - Cryptographic verification of transaction signatures
@@ -127,28 +128,75 @@ class SignatureVerifier {
         return status;
       }
 
-      // Parse signature (support both base64 and hex)
-      let signatureBytes;
-      try {
-        if (sigTuple.signature.startsWith('0x')) {
-          // Hex format
-          signatureBytes = Buffer.from(sigTuple.signature.slice(2), 'hex');
-        } else {
-          // Base64 format
-          signatureBytes = Buffer.from(sigTuple.signature, 'base64');
-        }
-      } catch (error) {
-        status.error = `Invalid signature format: ${error.message}`;
+      // Multi-node freeze: each SignedTransaction body has a distinct
+      // nodeAccountID, so we expect one signature per body — passed as
+      // `signatures: string[]`. Legacy single-sig (`signature: string`)
+      // is accepted by promoting it to a 1-element array; in that case
+      // we verify against the matching first body.
+      let inputSigs;
+      if (Array.isArray(sigTuple.signatures) && sigTuple.signatures.length > 0) {
+        inputSigs = sigTuple.signatures;
+      } else if (typeof sigTuple.signature === 'string' && sigTuple.signature.length > 0) {
+        inputSigs = [sigTuple.signature];
+      } else {
+        status.error = 'No signature(s) provided in tuple';
         return status;
       }
 
-      // Verify signature cryptographically
-      const isValid = publicKey.verify(frozenTx.bytes, signatureBytes);
+      let bodies;
+      try {
+        bodies = extractAllBodyBytes(frozenTx.bytes);
+      } catch (extractErr) {
+        status.error = `Could not extract bodyBytes for verification: ${extractErr.message}`;
+        return status;
+      }
 
-      if (isValid) {
+      // Tolerate single-sig submission against multi-node freeze (older
+      // signers): only verify the first pair, but flag the mismatch so
+      // executor can decide whether to reject.
+      const pairCount = Math.min(inputSigs.length, bodies.length);
+      if (pairCount === 0) {
+        status.error = 'Empty signatures and/or empty signable body list';
+        return status;
+      }
+
+      let allValid = true;
+      let firstError = null;
+      for (let i = 0; i < pairCount; i++) {
+        const sigStr = inputSigs[i];
+        let signatureBytes;
+        try {
+          signatureBytes = sigStr.startsWith('0x')
+            ? Buffer.from(sigStr.slice(2), 'hex')
+            : Buffer.from(sigStr, 'base64');
+        } catch (error) {
+          allValid = false;
+          firstError = `Signature[${i}] invalid format: ${error.message}`;
+          break;
+        }
+
+        const isValid = publicKey.verify(bodies[i], signatureBytes);
+        if (!isValid) {
+          allValid = false;
+          firstError = `Signature[${i}] does not match bodyBytes[${i}]`;
+          break;
+        }
+      }
+
+      if (allValid && inputSigs.length !== bodies.length) {
+        // Partial verification — first pair valid but caller passed
+        // fewer sigs than bodies. Surface as soft error so the executor
+        // sees it but legacy single-sig flows still pass cryptographic
+        // verification against bodyBytes[0].
+        status.partial = true;
+        status.expectedCount = bodies.length;
+        status.providedCount = inputSigs.length;
+      }
+
+      if (allValid) {
         status.valid = true;
       } else {
-        status.error = 'Signature does not match transaction bytes';
+        status.error = firstError || 'Signature verification failed';
       }
     } catch (error) {
       status.error = `Verification failed: ${error.message}`;
@@ -171,23 +219,30 @@ class SignatureVerifier {
   /**
    * Validate signature tuple format
    *
-   * @param {string} input - Signature tuple string (format: "publicKey:signature")
-   * @returns {SignatureTuple|null} Parsed tuple or null if invalid
+   * Multi-node form: "publicKey:sig0,sig1,...,sigN" — one base64 sig
+   * per SignedTransaction body. Legacy single-sig form
+   * "publicKey:sig" round-trips as a 1-element array.
+   *
+   * @param {string} input - Signature tuple string
+   * @returns {{publicKey: string, signature: string, signatures: string[]}|null}
    */
   static parseSignatureTuple(input) {
     if (!input || typeof input !== 'string') {
       return null;
     }
 
-    const parts = input.split(':');
-    if (parts.length !== 2) {
+    // Public key uses ':' inside DER-prefix, so split on the LAST colon.
+    // Format invariant: everything before the last ':' is the public key,
+    // everything after is the signature(s).
+    const colonIndex = input.lastIndexOf(':');
+    if (colonIndex === -1) {
       return null;
     }
 
-    const [publicKey, signature] = parts;
+    const publicKey = input.substring(0, colonIndex);
+    const sigField = input.substring(colonIndex + 1);
 
-    // Basic validation
-    if (!publicKey || !signature) {
+    if (!publicKey || !sigField) {
       return null;
     }
 
@@ -199,15 +254,22 @@ class SignatureVerifier {
       return null;
     }
 
-    // Signature should be base64 or hex
-    const isValidSig = /^[A-Za-z0-9+/]+=*$/.test(signature) || // base64
-                       /^(0x)?[0-9a-fA-F]+$/.test(signature);  // hex
-
-    if (!isValidSig) {
+    const signatures = sigField.split(',').map((s) => s.trim()).filter(Boolean);
+    if (signatures.length === 0) {
       return null;
     }
 
-    return { publicKey, signature };
+    // Each signature must be base64 or hex
+    const sigRegex = /^([A-Za-z0-9+/]+=*|(0x)?[0-9a-fA-F]+)$/;
+    for (const s of signatures) {
+      if (!sigRegex.test(s)) return null;
+    }
+
+    return {
+      publicKey,
+      signature: signatures[0], // legacy single-sig consumers
+      signatures
+    };
   }
 
   /**

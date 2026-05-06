@@ -72,19 +72,32 @@ class TransactionExecutor {
         transaction = Transaction.fromBytes(frozenTx.bytes);
       }
 
-      // Add all signatures to the transaction
+      // Add all signatures to the transaction. Multi-node freeze: each
+      // tuple carries one base64 signature per SignedTransaction body
+      // (i.e. one per nodeAccountID target). The SDK's
+      // `addSignature(publicKey, sigBytes | sigBytesArray)` accepts an
+      // array — we always pass array form so the SDK attaches the right
+      // signature to the right node's sigMap. Legacy `signature: string`
+      // payloads (older signers) are promoted to a 1-element array.
       for (const sigTuple of signatures) {
         const publicKey = PublicKey.fromString(sigTuple.publicKey);
 
-        // Parse signature (support both base64 and hex)
-        let signatureBytes;
-        if (sigTuple.signature.startsWith('0x')) {
-          signatureBytes = Buffer.from(sigTuple.signature.slice(2), 'hex');
-        } else {
-          signatureBytes = Buffer.from(sigTuple.signature, 'base64');
+        const sigList = Array.isArray(sigTuple.signatures) && sigTuple.signatures.length > 0
+          ? sigTuple.signatures
+          : (typeof sigTuple.signature === 'string' && sigTuple.signature.length > 0
+              ? [sigTuple.signature]
+              : null);
+        if (!sigList) {
+          throw new Error('Signature tuple has no signature(s)');
         }
 
-        transaction.addSignature(publicKey, signatureBytes);
+        const sigBytesArray = sigList.map((sigStr) => (
+          sigStr.startsWith('0x')
+            ? Buffer.from(sigStr.slice(2), 'hex')
+            : Buffer.from(sigStr, 'base64')
+        ));
+
+        transaction.addSignature(publicKey, sigBytesArray);
       }
 
       log.info('Added %d signature(s) to transaction', signatures.length);

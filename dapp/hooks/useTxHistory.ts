@@ -55,6 +55,12 @@ export function useTxHistory() {
     setEntries(loadEntries());
   }, []);
 
+  /** Re-read localStorage. Use after standalone helpers (saveTxHistoryEntry,
+   * updateTxHistoryEntryStatus) write outside the hook. */
+  const refresh = useCallback(() => {
+    setEntries(loadEntries());
+  }, []);
+
   /** Add a new entry (id is auto-generated). */
   const addEntry = useCallback(
     (entry: Omit<TxHistoryEntry, 'id'>) => {
@@ -122,7 +128,7 @@ export function useTxHistory() {
     URL.revokeObjectURL(url);
   }, [entries]);
 
-  return { entries, addEntry, clearHistory, exportCsv };
+  return { entries, addEntry, clearHistory, exportCsv, refresh };
 }
 
 // ---------------------------------------------------------------------------
@@ -145,4 +151,30 @@ export function saveTxHistoryEntry(entry: Omit<TxHistoryEntry, 'id'>): void {
   };
   const updated = [newEntry, ...existing];
   persistEntries(updated);
+}
+
+/**
+ * Update an existing history entry by transactionId. Used to flip a PENDING
+ * entry to SUCCESS / FAILURE once the network settles. No-op if no entry
+ * matches. Patch fields are shallow-merged into `details`.
+ */
+export function updateTxHistoryEntryStatus(
+  transactionId: string,
+  status: TxHistoryEntry['status'],
+  detailsPatch?: Record<string, unknown>
+): void {
+  if (!transactionId || transactionId === 'unknown') return;
+  const entries = loadEntries();
+  let mutated = false;
+  const updated = entries.map((e) => {
+    if (e.transactionId !== transactionId) return e;
+    if (e.status === status && !detailsPatch) return e;
+    mutated = true;
+    return {
+      ...e,
+      status,
+      details: detailsPatch ? { ...(e.details || {}), ...detailsPatch } : e.details,
+    };
+  });
+  if (mutated) persistEntries(updated);
 }

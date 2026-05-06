@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Multi-node freeze (canonical Hedera multi-sig pattern)** — wire protocol restored to send `signatures: string[]` (one base64 sig per `SignedTransaction` body). `selectNodeAccountIds()` helper in `shared/node-selection.js` (Node) + `dapp/lib/node-selection.ts` (browser); default = random subset of 6 nodes, well within Hedera's 6 KB tx-size cap. Strategy override: `'subset' | 'all' | 'specific'`.
+- **`shared/tx-size-estimator.js` + `dapp/lib/tx-size-estimator.ts`** — predicts on-wire size from `(subsetSize, signerCount, txType)` so the dApp's freeze panel can warn green/amber/red before injecting.
+- **dApp `FreezeStrategy` panel** — single component combining size readout + advanced controls. Default-collapsed one-line summary; auto-expands when status is amber/red. Replaces the previous `TxSizeEstimateBar` + `NodeStrategyAdvanced` split where causality ran upward.
+- **dApp Share tab — three-state redesign** — `signing` shows credentials behind a re-share disclosure; `completed` flips to a focused receipt (transaction ID, HashScan link, signers, "Build another transaction"); `failed` surfaces the reason + retry guidance. State is lifted out of `SessionMonitor` via `onStateChange` so the page can route layout decisions on it.
+- **`examples/walkthrough-dapp/`** — third walkthrough demonstrating coordinated signing through the public testnet dApp at `testnet-multisig.lazysuperheroes.com`. Hybrid signing pattern: alice in HashPack via WalletConnect, bob via CLI participant — same ceremony, same coordinator, same multi-node freeze. Self-contained scripts; can also reuse keys + threshold account from `walkthrough-hbar` via `cp ../walkthrough-hbar/walkthrough-{keys.*,state.json} .`.
+- **TESTING.md Scenario 13** for the new walkthrough; release checklist updated for three walkthroughs (~22 ℏ recommended operator balance).
+
+### Changed
+- **`examples/walkthrough-contract/` is now self-contained** — adds `setup-keys.js` and `verify-on-mirror.js` locally so it no longer reads from `../walkthrough-hbar/`. The "copy from walkthrough-hbar" path is documented as an optional shortcut for users who already have the keys.
+- **dApp Share tab credential surfaces removed sacred-color decoration** — PIN no longer warning-yellow, Coordinator Token no longer destructive-red. Status colors stay reserved for actual semantic meaning per `.impeccable.md`. Coordinator Token gets a show/hide toggle (default hidden) to prevent screenshare/recording footguns.
+- **dApp version 2.1.4 → 2.1.6.** Root version unchanged; the changes here are dApp-side + walkthrough-side.
+
+### Fixed
+- Misleading "Transaction injected successfully — participants have 120 seconds from now to sign" banner that persisted into the post-execution state — removed entirely; the new completed-receipt view replaces it.
+- Build-tab cause/effect: changing the node strategy used to update a size readout in a panel *above* it. The new combined `FreezeStrategy` panel keeps the lever and readout together.
+
 ## [2.1.0] - 2026-05-01
 
 A security-led stabilization release that closes three CRITICALs found

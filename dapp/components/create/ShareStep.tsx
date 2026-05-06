@@ -1,11 +1,9 @@
 'use client';
 
-import Link from 'next/link';
+import { useState } from 'react';
 import { CopyButton } from '../CopyButton';
 import { QRCodeDisplay } from '../QRCodeDisplay';
-
-const sectionClass =
-  'bg-surface rounded-lg shadow-sm border border-border p-6';
+import type { SessionLiveState } from './SessionMonitor';
 
 interface SessionCredentials {
   sessionId: string;
@@ -22,10 +20,17 @@ interface ShareStepProps {
   serverUrl: string;
   connectionString: string;
   shareableUrl: string;
-  injectionDone: boolean;
-  /** Phase B1: opt-in to including PIN in shareable URL (default false) */
+  network: 'testnet' | 'mainnet';
+  /** Lifted from SessionMonitor — picks which sub-view to render. */
+  liveState: SessionLiveState | null;
+  /** Whether the URL form embeds the PIN. Off by default — explicit opt-in
+   * because the link becomes a credential. */
   includePinInLink?: boolean;
   onTogglePinInLink?: (next: boolean) => void;
+  /** Triggered from the completed/failed view to route back to the build
+   * step with form state cleared, so the coordinator can inject another
+   * transaction without losing the session or participants. */
+  onStartAnother?: () => void;
 }
 
 export function ShareStep({
@@ -33,265 +38,511 @@ export function ShareStep({
   serverUrl,
   connectionString,
   shareableUrl,
-  injectionDone,
+  network,
+  liveState,
   includePinInLink = false,
   onTogglePinInLink,
+  onStartAnother,
 }: ShareStepProps) {
+  // Phase: signing (default) / completed / failed. `idle` collapses to
+  // signing — when we land on the Share step we've just injected, so
+  // there's always a transaction in flight from the coordinator's
+  // perspective.
+  const phase = liveState?.phase === 'completed' || liveState?.phase === 'failed'
+    ? liveState.phase
+    : 'signing';
+
+  if (phase === 'completed') {
+    return (
+      <CompletedReceipt
+        liveState={liveState!}
+        threshold={sessionCredentials.threshold}
+        network={network}
+        onStartAnother={onStartAnother}
+      />
+    );
+  }
+
+  if (phase === 'failed') {
+    return (
+      <FailedReceipt
+        liveState={liveState!}
+        network={network}
+        onStartAnother={onStartAnother}
+      />
+    );
+  }
+
+  return (
+    <SigningShare
+      sessionCredentials={sessionCredentials}
+      serverUrl={serverUrl}
+      connectionString={connectionString}
+      shareableUrl={shareableUrl}
+      includePinInLink={includePinInLink}
+      onTogglePinInLink={onTogglePinInLink}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase: signing (in-flight). Live monitor sits above this in page.tsx and
+// carries the action; this view exists for re-share. Credentials are
+// demoted behind a disclosure since the 120s window has already started.
+// ---------------------------------------------------------------------------
+
+function SigningShare({
+  sessionCredentials,
+  serverUrl,
+  connectionString,
+  shareableUrl,
+  includePinInLink,
+  onTogglePinInLink,
+}: {
+  sessionCredentials: SessionCredentials;
+  serverUrl: string;
+  connectionString: string;
+  shareableUrl: string;
+  includePinInLink?: boolean;
+  onTogglePinInLink?: (next: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
   return (
     <section aria-label="Share session" className="space-y-6">
-      {/* Success banner — outside the share pane */}
-      {injectionDone && (
-        <div className="p-4 bg-success-soft border border-success/40 rounded-lg flex items-start gap-3">
-          <svg
-            className="w-6 h-6 text-success flex-shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <div>
-            <p className="font-semibold text-success-soft-fg">
-              Transaction injected successfully
-            </p>
-            <p className="text-sm text-success-soft-fg">
-              Share the credentials below so participants can join and
-              sign. Remember: participants have 120 seconds from now to
-              sign.
-            </p>
-          </div>
+      <p className="text-sm text-foreground-muted leading-relaxed">
+        Signing in progress. Participants who already have the connection
+        string will receive the transaction automatically.
+      </p>
+
+      <details
+        className="group border-t border-border pt-4"
+        open={open}
+        onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary className="cursor-pointer list-none flex items-center justify-between text-sm text-foreground-muted hover:text-foreground transition-colors py-1">
+          <span>Need to re-share with someone?</span>
+          <span aria-hidden className="text-xs opacity-60 group-open:hidden">show</span>
+          <span aria-hidden className="text-xs opacity-60 hidden group-open:inline">hide</span>
+        </summary>
+
+        <div className="mt-4">
+          <ShareKit
+            sessionCredentials={sessionCredentials}
+            serverUrl={serverUrl}
+            connectionString={connectionString}
+            shareableUrl={shareableUrl}
+            includePinInLink={includePinInLink}
+            onTogglePinInLink={onTogglePinInLink}
+          />
         </div>
-      )}
-
-      {/* Single outer pane in console (~/share). In treasury this is just a
-          stack of cards with their own H2s — no chrome difference. The
-          three sub-sections (credentials / share-links / monitor) sit
-          inside as siblings separated by hairline dividers. */}
-      <div className={`console-pane ${sectionClass}`} data-pane-label="~/share">
-
-        {/* — Credentials sub-section — */}
-        <section aria-label="Session credentials">
-          <h2 className="text-lg font-semibold text-foreground mb-4">
-            Session Credentials
-          </h2>
-          <div className="space-y-4">
-            <CredentialRow
-              label="Session ID"
-              value={sessionCredentials.sessionId}
-              copyLabel="Session ID"
-              variant="neutral"
-            />
-            <CredentialRow
-              label="PIN (share with participants)"
-              value={sessionCredentials.pin}
-              copyLabel="PIN"
-              variant="warning"
-              large
-            />
-            <CredentialRow
-              label="Coordinator Token (keep private)"
-              value={sessionCredentials.coordinatorToken}
-              copyLabel="Coordinator Token"
-              variant="danger"
-            />
-            <CredentialRow
-              label="Server URL"
-              value={serverUrl}
-              copyLabel="Server URL"
-              variant="neutral"
-            />
-          </div>
-        </section>
-
-        {/* — Share links sub-section — */}
-        {connectionString && (
-          <section
-            aria-label="Share with participants"
-            className="mt-8 pt-6 border-t border-border"
-          >
-            <h2 className="text-lg font-semibold text-foreground mb-4">
-              Share with Participants
-            </h2>
-            <div className="flex flex-col items-center gap-6">
-              <QRCodeDisplay
-                value={connectionString}
-                size={200}
-                description="Participants scan this QR code with the dApp to join"
-                showDownload
-                downloadFilename={`hedera-multisig-${sessionCredentials.sessionId.slice(0, 8)}`}
-              />
-
-              <CopyableField label="Connection String" value={connectionString} />
-
-              {shareableUrl && (
-                <div className="w-full space-y-3">
-                  <CopyableField
-                    label="Shareable Link"
-                    value={shareableUrl}
-                    hint={
-                      includePinInLink
-                        ? 'This link includes the PIN — anyone with the URL can join. Treat it like a credential.'
-                        : 'This link auto-fills server + session ID. Participants type the PIN themselves.'
-                    }
-                  />
-                  {onTogglePinInLink && (
-                    <label className="flex items-start gap-2 text-sm text-foreground-muted cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={includePinInLink}
-                        onChange={(e) => onTogglePinInLink(e.target.checked)}
-                        className="mt-0.5"
-                      />
-                      <span>
-                        <strong>Include PIN in link</strong> (less secure — only enable for low-risk testnet demos).
-                        The PIN is base64-encoded, not encrypted, so anyone who sees the URL can join.
-                      </span>
-                    </label>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* — Monitor sub-section — */}
-        <section
-          aria-label="Monitor session"
-          className="mt-8 pt-6 border-t border-border"
-        >
-          <h2 className="text-lg font-semibold text-foreground mb-3">
-            Monitor Session
-          </h2>
-          <p className="text-sm text-foreground-muted mb-4 console-hide">
-            Open the session page to watch participants join and monitor
-            signature progress in real time.
-          </p>
-          <Link
-            href={`/session/${sessionCredentials.sessionId}`}
-            onClick={() => {
-              // Phase B2: per-tab handoff via sessionStorage. The session page
-              // reads, AUTHs, then deletes it immediately. PIN no longer
-              // persists in localStorage.
-              try {
-                sessionStorage.setItem(
-                  'hedera-multisig-pending-join',
-                  JSON.stringify({
-                    serverUrl,
-                    sessionId: sessionCredentials.sessionId,
-                    pin: sessionCredentials.pin,
-                  })
-                );
-              } catch {
-                // sessionStorage unavailable in private browsing
-              }
-              // Best-effort purge of any legacy key that may still be around.
-              try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
-            }}
-            className="cmd inline-flex items-center gap-2 px-4 py-2 bg-accent text-white font-medium rounded-lg hover:bg-accent-hover transition-colors"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-              />
-            </svg>
-            Open Session Monitor
-          </Link>
-        </section>
-      </div>
+      </details>
     </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components (internal to ShareStep)
+// Phase: completed. Receipt view — transaction ID + HashScan + signers.
+// No credentials, no banner.
+// ---------------------------------------------------------------------------
+
+function CompletedReceipt({
+  liveState,
+  threshold,
+  network,
+  onStartAnother,
+}: {
+  liveState: SessionLiveState;
+  threshold: number;
+  network: 'testnet' | 'mainnet';
+  onStartAnother?: () => void;
+}) {
+  const txId = liveState.transactionId || '';
+  const signedSigners = liveState.signers.filter((s) => s.status === 'signed');
+
+  return (
+    <section aria-label="Transaction executed" className="space-y-6">
+      <header className="border-t border-border pt-4">
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 className="font-heading text-lg font-semibold text-foreground">
+            Transaction executed
+          </h2>
+          <span className="text-xs text-success font-medium tabular-nums">
+            {liveState.mirrorConfirmed
+              ? 'mirror confirmed'
+              : 'consensus confirmed'}
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-foreground-muted">
+          {signedSigners.length} of {threshold} required signatures collected.
+          The network accepted the transaction.
+        </p>
+      </header>
+
+      {txId && (
+        <div className="space-y-3">
+          <div>
+            <span className="block text-xs font-medium text-foreground-subtle mb-1">
+              Transaction ID
+            </span>
+            <div className="flex items-center justify-between gap-3">
+              <code className="font-mono text-sm text-foreground break-all">
+                {txId}
+              </code>
+              <CopyButton text={txId} label="Transaction ID" variant="button" size="sm" />
+            </div>
+          </div>
+
+          <a
+            href={hashscanUrl(txId, network)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent-hover transition-colors"
+          >
+            View on HashScan
+            <ExternalLinkIcon />
+          </a>
+        </div>
+      )}
+
+      {signedSigners.length > 0 && (
+        <div className="border-t border-border pt-4">
+          <h3 className="text-xs font-medium text-foreground-subtle mb-2">
+            Signers ({signedSigners.length}/{threshold})
+          </h3>
+          <ul className="space-y-1.5">
+            {signedSigners.map((s) => (
+              <li
+                key={s.participantId}
+                className="flex items-center gap-2 text-sm tabular-nums"
+              >
+                <CheckIcon />
+                <span className="text-foreground">{s.label}</span>
+                {s.isAgent && (
+                  <span className="text-xs text-foreground-subtle">(agent)</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {onStartAnother && (
+        <div className="border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={onStartAnother}
+            className="text-sm font-medium text-foreground hover:text-accent border border-border-strong hover:border-accent rounded-md px-4 py-2 transition-colors"
+          >
+            Build another transaction
+          </button>
+          <p className="mt-2 text-xs text-foreground-subtle">
+            Returns to the build step. The session and connected participants
+            stay live — they don&apos;t need to reconnect.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase: failed. Failure summary + retry guidance.
+// ---------------------------------------------------------------------------
+
+function FailedReceipt({
+  liveState,
+  network,
+  onStartAnother,
+}: {
+  liveState: SessionLiveState;
+  network: 'testnet' | 'mainnet';
+  onStartAnother?: () => void;
+}) {
+  const txId = liveState.transactionId || '';
+  return (
+    <section aria-label="Transaction failed" className="space-y-6">
+      <header className="border-t border-border pt-4">
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 className="font-heading text-lg font-semibold text-foreground">
+            Transaction did not execute
+          </h2>
+          <span className="text-xs text-destructive font-medium">failed</span>
+        </div>
+        {liveState.failureReason && (
+          <p className="mt-2 text-sm text-foreground leading-relaxed">
+            <span className="text-foreground-subtle">Reason: </span>
+            <span className="font-mono">{liveState.failureReason}</span>
+          </p>
+        )}
+      </header>
+
+      {txId && (
+        <div className="space-y-3">
+          <div>
+            <span className="block text-xs font-medium text-foreground-subtle mb-1">
+              Transaction ID
+            </span>
+            <div className="flex items-center justify-between gap-3">
+              <code className="font-mono text-sm text-foreground break-all">
+                {txId}
+              </code>
+              <CopyButton text={txId} label="Transaction ID" variant="button" size="sm" />
+            </div>
+          </div>
+
+          <a
+            href={hashscanUrl(txId, network)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent-hover transition-colors"
+          >
+            View on HashScan
+            <ExternalLinkIcon />
+          </a>
+        </div>
+      )}
+
+      <div className="border-t border-border pt-4 text-sm text-foreground-muted leading-relaxed">
+        <p className="font-medium text-foreground mb-2">What to try next</p>
+        <ul className="space-y-1 list-disc list-inside text-foreground-muted">
+          <li>Check the failure reason above and the HashScan record for the network status code.</li>
+          <li>Common: insufficient balance on the fee payer, or the transaction expired before threshold was met (120s window).</li>
+          <li>You can reset the session and inject a new transaction; participants stay connected.</li>
+        </ul>
+      </div>
+
+      {onStartAnother && (
+        <button
+          type="button"
+          onClick={onStartAnother}
+          className="text-sm font-medium text-foreground hover:text-accent border border-border-strong hover:border-accent rounded-md px-4 py-2 transition-colors"
+        >
+          Build another transaction
+        </button>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sharing toolkit — used by SigningShare's disclosure. QR + link is the
+// happy path; individual values live behind a nested disclosure since
+// 95% of operators only need the link or QR.
+// ---------------------------------------------------------------------------
+
+function ShareKit({
+  sessionCredentials,
+  serverUrl,
+  connectionString,
+  shareableUrl,
+  includePinInLink,
+  onTogglePinInLink,
+}: {
+  sessionCredentials: SessionCredentials;
+  serverUrl: string;
+  connectionString: string;
+  shareableUrl: string;
+  includePinInLink?: boolean;
+  onTogglePinInLink?: (next: boolean) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-6 md:grid-cols-[auto_1fr] md:items-start">
+        <div className="flex md:block justify-center">
+          <QRCodeDisplay
+            value={connectionString}
+            size={180}
+            description="Participants scan to join"
+            showDownload
+            downloadFilename={`hedera-multisig-${sessionCredentials.sessionId.slice(0, 8)}`}
+          />
+        </div>
+
+        <div className="space-y-4 min-w-0">
+          <div>
+            <span className="block text-xs font-medium text-foreground-subtle mb-1">
+              Connection string
+            </span>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 min-w-0 font-mono text-xs text-foreground bg-surface-recessed px-2 py-1.5 rounded border border-border break-all">
+                {connectionString}
+              </code>
+              <CopyButton
+                text={connectionString}
+                label="Connection string"
+                variant="button"
+                size="sm"
+              />
+            </div>
+          </div>
+
+          {shareableUrl && (
+            <div>
+              <span className="block text-xs font-medium text-foreground-subtle mb-1">
+                Share link
+              </span>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 min-w-0 font-mono text-xs text-foreground bg-surface-recessed px-2 py-1.5 rounded border border-border break-all">
+                  {shareableUrl}
+                </code>
+                <CopyButton
+                  text={shareableUrl}
+                  label="Share link"
+                  variant="button"
+                  size="sm"
+                />
+              </div>
+              {onTogglePinInLink && (
+                <label className="mt-2 flex items-start gap-2 text-xs text-foreground-subtle cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!includePinInLink}
+                    onChange={(e) => onTogglePinInLink(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Embed PIN in link (less secure — anyone with the URL can
+                    join). Off by default; participants type the PIN themselves.
+                  </span>
+                </label>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <details className="border-t border-border pt-3">
+        <summary className="cursor-pointer list-none text-xs text-foreground-subtle hover:text-foreground transition-colors py-1">
+          Show individual credentials
+        </summary>
+        <div className="mt-3 space-y-3">
+          <CredentialRow
+            label="Session ID"
+            value={sessionCredentials.sessionId}
+            copyLabel="Session ID"
+          />
+          <CredentialRow
+            label="PIN"
+            value={sessionCredentials.pin}
+            copyLabel="PIN"
+            mono={false}
+          />
+          <CredentialRow
+            label="Coordinator token"
+            value={sessionCredentials.coordinatorToken}
+            copyLabel="Coordinator token"
+            secret
+            hint="Re-auth secret. Keep this private — anyone with it can act as coordinator."
+          />
+          <CredentialRow
+            label="Server URL"
+            value={serverUrl}
+            copyLabel="Server URL"
+            hint="Auto-detected. Already encoded into the connection string above."
+          />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Atoms
 // ---------------------------------------------------------------------------
 
 function CredentialRow({
   label,
   value,
   copyLabel,
-  variant,
-  large,
-}: {
-  label: string;
-  value: string;
-  copyLabel: string;
-  variant: 'neutral' | 'warning' | 'danger';
-  large?: boolean;
-}) {
-  const bg = {
-    neutral: 'bg-surface-recessed',
-    warning: 'bg-warning-soft border border-warning/40',
-    danger: 'bg-destructive-soft border border-destructive/40',
-  }[variant];
-
-  const labelColor = {
-    neutral: 'text-foreground-subtle',
-    warning: 'text-warning-soft-fg',
-    danger: 'text-destructive-soft-fg',
-  }[variant];
-
-  const valueColor = {
-    neutral: 'text-foreground',
-    warning: 'text-warning-soft-fg',
-    danger: 'text-destructive-soft-fg',
-  }[variant];
-
-  return (
-    <div className={`flex items-center justify-between gap-2 p-3 rounded-lg ${bg}`}>
-      <div className="min-w-0">
-        <span className={`text-xs font-medium ${labelColor} block`}>{label}</span>
-        <span className={`font-mono break-all ${valueColor} ${large ? 'text-lg font-bold tracking-widest' : 'text-sm'}`}>
-          {value}
-        </span>
-      </div>
-      <CopyButton text={value} label={copyLabel} variant="button" size="sm" />
-    </div>
-  );
-}
-
-function CopyableField({
-  label,
-  value,
+  mono = true,
+  secret = false,
   hint,
 }: {
   label: string;
   value: string;
+  copyLabel: string;
+  mono?: boolean;
+  secret?: boolean;
   hint?: string;
 }) {
+  const [revealed, setRevealed] = useState(!secret);
+  const display = revealed ? value : '•'.repeat(Math.min(24, value.length));
+
   return (
-    <div className="w-full bg-surface-recessed rounded-lg p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-foreground-muted">{label}</span>
-        <CopyButton text={value} label={label} variant="button" size="sm" />
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-xs font-medium text-foreground-subtle">
+          {label}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {secret && (
+            <button
+              type="button"
+              onClick={() => setRevealed((r) => !r)}
+              className="text-xs text-foreground-subtle hover:text-foreground transition-colors"
+              aria-pressed={revealed}
+            >
+              {revealed ? 'hide' : 'show'}
+            </button>
+          )}
+          <CopyButton text={value} label={copyLabel} variant="icon" size="sm" />
+        </div>
       </div>
-      <div className="font-mono text-xs text-foreground-muted break-all bg-surface p-2 rounded border border-border-strong">
-        {value}
-      </div>
+      <code
+        className={`block ${mono ? 'font-mono' : ''} text-sm text-foreground break-all`}
+      >
+        {display}
+      </code>
       {hint && (
-        <p className="text-xs text-foreground-subtle mt-2">{hint}</p>
+        <p className="text-xs text-foreground-subtle">{hint}</p>
       )}
     </div>
   );
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-success"
+      aria-hidden="true"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function hashscanUrl(txId: string, network: 'testnet' | 'mainnet') {
+  // Hedera tx IDs from the SDK are `0.0.X@T.N`; HashScan wants `0.0.X-T-N`
+  // for the deep-link route.
+  const formatted = txId.replace('@', '-').replace(/\.(?=\d+$)/, '-');
+  return `https://hashscan.io/${network}/transactionsById/${formatted}`;
 }

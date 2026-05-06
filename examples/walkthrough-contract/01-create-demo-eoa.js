@@ -25,16 +25,16 @@ const {
 } = require('@hashgraph/sdk');
 const chalk = require('chalk');
 
-const HBAR_KEYS_FILE = path.resolve(__dirname, '..', 'walkthrough-hbar', 'walkthrough-keys.json');
+const KEYS_FILE = path.resolve(__dirname, 'walkthrough-keys.json');
 const STATE_FILE = path.resolve(__dirname, 'demo-account-state.json');
 const INITIAL_BALANCE_HBAR = 8;
 
 async function main() {
   console.log(chalk.bold.cyan('\n━━━ Create demo EOA (single-sig with alice key) ━━━\n'));
 
-  const keysData = JSON.parse(fs.readFileSync(HBAR_KEYS_FILE, 'utf8'));
+  const keysData = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
   const aliceKey = keysData.keys.alice;
-  if (!aliceKey) fail('No alice key found in walkthrough-keys.json. Re-run examples/walkthrough-hbar/01-generate-keys.js');
+  if (!aliceKey) fail('No alice key found in walkthrough-keys.json. Run `node setup-keys.js`.');
 
   const network = (process.env.HEDERA_NETWORK || 'testnet').toLowerCase();
   const client = network === 'mainnet' ? Client.forMainnet() : Client.forTestnet();

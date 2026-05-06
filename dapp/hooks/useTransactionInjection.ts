@@ -1,19 +1,31 @@
 import { useState, useCallback } from 'react';
 import { DEFAULT_NETWORK } from '../lib/walletconnect-config';
+import { resolveFeePayer, type TransactionType } from '../lib/fee-payer';
 import { saveTxHistoryEntry } from './useTxHistory';
+import {
+  selectNodeAccountIds,
+  DEFAULT_SUBSET_SIZE,
+  type NodeStrategy,
+} from '../lib/node-selection';
 
-type TransactionType =
-  | 'hbar-transfer'
-  | 'token-transfer'
-  | 'nft-transfer'
-  | 'token-association'
-  | 'contract-call';
+interface NodeSelection {
+  strategy?: NodeStrategy;
+  subsetSize?: number;
+  nodeIds?: string[];
+}
 
 interface InjectParams {
   txType: TransactionType;
   txFields: Record<string, string>;
-  walletAccountId: string;
+  walletAccountId: string | null;
   sessionId?: string;
+  /**
+   * Node-freeze strategy. Default: random subset of 6 (resilient to
+   * per-node downtime, well under Hedera's 6 KB tx-size cap). Set to
+   * `'all'` for small/local networks, or `'specific'` with `nodeIds`
+   * to pin to particular nodes (e.g. for testing).
+   */
+  nodeSelection?: NodeSelection;
 }
 
 interface UseTransactionInjectionReturn {
@@ -28,7 +40,13 @@ interface UseTransactionInjectionReturn {
    * — and the dApp pushes it through `TRANSACTION_INJECT` without rebuilding.
    * No wallet required.
    */
-  injectFrozenBase64: (base64: string, options?: { sessionId?: string; label?: string }) => Promise<void>;
+  injectFrozenBase64: (
+    base64: string,
+    options?: { sessionId?: string; label?: string; abiJson?: string }
+  ) => Promise<void>;
+  /** Clear injectionDone / injectError so the next inject starts clean.
+   * Used after a coordinator-initiated TRANSACTION_RESET. */
+  reset: () => void;
 }
 
 const TX_TYPE_LABELS: Record<TransactionType, string> = {
@@ -47,15 +65,23 @@ export function useTransactionInjection(
   const [injectionDone, setInjectionDone] = useState(false);
 
   const inject = useCallback(async (params: InjectParams) => {
-    const { txType, txFields, walletAccountId, sessionId } = params;
+    const { txType, txFields, walletAccountId, sessionId, nodeSelection } = params;
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setInjectError('WebSocket is not connected.');
       return;
     }
 
-    if (!walletAccountId) {
-      setInjectError('Connect your wallet first. The operator account pays fees.');
+    // Operator (= fee payer / `TransactionId` account) is resolved by a
+    // single shared helper so the build hook and the FeePayerCallout
+    // component always agree.
+    const resolved = resolveFeePayer(txType, txFields, walletAccountId);
+    const operatorAccountStr = resolved.accountId || '';
+    if (!operatorAccountStr) {
+      setInjectError(
+        'No fee payer set. Fill the From / Account / Caller field, connect a ' +
+        'wallet, or use the Override option in the Fee payer line.'
+      );
       return;
     }
 
@@ -78,7 +104,7 @@ export function useTransactionInjection(
 
       const network = DEFAULT_NETWORK;
       const client = network === 'mainnet' ? Client.forMainnet() : Client.forTestnet();
-      const operatorId = AccountId.fromString(walletAccountId);
+      const operatorId = AccountId.fromString(operatorAccountStr);
 
       // Build the appropriate transaction
       let tx: InstanceType<typeof TransferTransaction> |
@@ -87,7 +113,7 @@ export function useTransactionInjection(
 
       switch (txType) {
         case 'hbar-transfer': {
-          const from = txFields.from || walletAccountId;
+          const from = txFields.from || operatorAccountStr;
           const to = txFields.to;
           const amount = parseFloat(txFields.amount || '0');
           if (!to) throw new Error('Recipient account is required.');
@@ -100,7 +126,7 @@ export function useTransactionInjection(
 
         case 'token-transfer': {
           const tokenId = txFields.tokenId;
-          const from = txFields.from || walletAccountId;
+          const from = txFields.from || operatorAccountStr;
           const to = txFields.to;
           const amount = parseInt(txFields.amount || '0', 10);
           if (!tokenId) throw new Error('Token ID is required.');
@@ -115,7 +141,7 @@ export function useTransactionInjection(
         case 'nft-transfer': {
           const tokenId = txFields.tokenId;
           const serial = parseInt(txFields.serial || '0', 10);
-          const from = txFields.from || walletAccountId;
+          const from = txFields.from || operatorAccountStr;
           const to = txFields.to;
           if (!tokenId) throw new Error('Token ID is required.');
           if (!to) throw new Error('Recipient account is required.');
@@ -126,7 +152,7 @@ export function useTransactionInjection(
         }
 
         case 'token-association': {
-          const account = txFields.account || walletAccountId;
+          const account = txFields.account || operatorAccountStr;
           const tokenIds = (txFields.tokenIds || '').split(',').map((t) => t.trim()).filter(Boolean);
           if (tokenIds.length === 0) throw new Error('At least one Token ID is required.');
           tx = new TokenAssociateTransaction()
@@ -156,6 +182,33 @@ export function useTransactionInjection(
 
       // Generate transaction ID BEFORE freezing (multi-sig hash stability)
       tx.setTransactionId(TransactionId.generate(operatorId));
+
+      // Multi-node freeze (canonical Hedera multi-sig pattern). Each
+      // SignedTransaction body carries a distinct nodeAccountID, so
+      // signers produce one ED25519 signature per body and the
+      // executor can submit to any of the targeted nodes.
+      //
+      // Default = random subset of 6: 1−p^6 ≈ 1−10⁻⁸ availability for
+      // p=0.01 per-node downtime, comfortably under the 6 KB tx-size
+      // cap (5-of-9 multi-sig × subset 6 ≈ 4 KB; full 30+ mainnet
+      // freeze would blow past 22 KB and never submit).
+      //
+      // The audit trail (SessionMonitor) records "Frozen against N
+      // nodes [strategy]" so coordinators can verify the choice.
+      const strategy: NodeStrategy = nodeSelection?.strategy || 'subset';
+      const subsetSize = nodeSelection?.subsetSize ?? DEFAULT_SUBSET_SIZE;
+      const nodeIds = nodeSelection?.nodeIds;
+      const selectedNodes = await selectNodeAccountIds(client, {
+        strategy,
+        subsetSize,
+        nodeIds,
+      });
+      // SDK typing for setNodeAccountIds expects AccountId[]; cast via
+      // unknown[] avoids structural-equality mismatches when the dynamic
+      // import returns a slightly different AccountId class identity
+      // than the one TypeScript inferred at parse time.
+      (tx as unknown as { setNodeAccountIds(ids: unknown[]): unknown })
+        .setNodeAccountIds(selectedNodes as unknown[]);
 
       // Freeze the transaction
       const frozenTx = await tx.freezeWith(client);
@@ -190,9 +243,36 @@ export function useTransactionInjection(
         };
 
         ws.addEventListener('message', handler);
+        // For contract calls, pass the parsed ABI so participants get the
+        // verified function-name display. The server stores it on the
+        // session so late-joiners get it too.
+        let abiForInject: unknown[] | null = null;
+        if (txType === 'contract-call' && txFields.abiJson) {
+          try {
+            const parsed = JSON.parse(txFields.abiJson);
+            if (Array.isArray(parsed)) abiForInject = parsed;
+          } catch {
+            // Form-level ABI parsing already surfaces errors to the user;
+            // injecting without ABI is a graceful fallback.
+          }
+        }
+        // Audit-trail metadata: which strategy was used and how many
+        // nodes the freeze targeted. Surfaced in SessionMonitor so a
+        // coordinator can prove "yes, this multi-sig was bound to a
+        // 6-node subset" after the fact.
+        const nodeStrategyMeta = {
+          nodeStrategy: strategy,
+          nodeCount: selectedNodes.length,
+          nodeAccountIds: selectedNodes.map((n) => n.toString()),
+        };
+
         ws.send(JSON.stringify({
           type: 'TRANSACTION_INJECT',
-          payload: { frozenTransaction: frozenBase64 },
+          payload: {
+            frozenTransaction: frozenBase64,
+            metadata: { customFields: nodeStrategyMeta },
+            ...(abiForInject ? { abi: abiForInject } : {}),
+          },
         }));
       });
 
@@ -206,7 +286,12 @@ export function useTransactionInjection(
         status: 'PENDING',
         network: DEFAULT_NETWORK,
         sessionId: sessionId || undefined,
-        details: { ...txFields, transactionType: txType },
+        details: {
+          ...txFields,
+          transactionType: txType,
+          nodeStrategy: strategy,
+          nodeCount: selectedNodes.length,
+        },
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error.';
@@ -217,7 +302,10 @@ export function useTransactionInjection(
     }
   }, [wsRef]);
 
-  const injectFrozenBase64 = useCallback(async (base64: string, options?: { sessionId?: string; label?: string }) => {
+  const injectFrozenBase64 = useCallback(async (
+    base64: string,
+    options?: { sessionId?: string; label?: string; abiJson?: string }
+  ) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setInjectError('WebSocket is not connected.');
       return;
@@ -270,9 +358,24 @@ export function useTransactionInjection(
         };
 
         ws.addEventListener('message', handler);
+        // Optional ABI for paste-mode contract calls: the operator may
+        // have a Counter.json (or similar) handy from the prep script;
+        // passing it lets participants see verified function names.
+        let pasteAbi: unknown[] | null = null;
+        if (options?.abiJson && options.abiJson.trim()) {
+          try {
+            const parsed = JSON.parse(options.abiJson);
+            if (Array.isArray(parsed)) pasteAbi = parsed;
+          } catch {
+            // Bad JSON — skip ABI rather than failing the inject.
+          }
+        }
         ws.send(JSON.stringify({
           type: 'TRANSACTION_INJECT',
-          payload: { frozenTransaction: trimmed },
+          payload: {
+            frozenTransaction: trimmed,
+            ...(pasteAbi ? { abi: pasteAbi } : {}),
+          },
         }));
       });
 
@@ -295,5 +398,11 @@ export function useTransactionInjection(
     }
   }, [wsRef]);
 
-  return { isInjecting, injectError, injectionDone, inject, injectFrozenBase64 };
+  const reset = useCallback(() => {
+    setIsInjecting(false);
+    setInjectError(null);
+    setInjectionDone(false);
+  }, []);
+
+  return { isInjecting, injectError, injectionDone, inject, injectFrozenBase64, reset };
 }

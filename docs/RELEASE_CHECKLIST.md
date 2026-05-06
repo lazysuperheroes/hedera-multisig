@@ -23,34 +23,27 @@ confirm it landed.
 
 If any of these are red, stop and fix before proceeding.
 
-## 1. Run the manual E2E walkthroughs (TESTING.md Scenarios 11 + 12)
+## 1. Run the manual E2E walkthroughs
 
-You said you'd run these before publish. They cover the full happy
-path on testnet:
+You said you'd run these before publish. The procedure is documented as a
+single playbook in [`../TESTING.md`](../TESTING.md). For a release, run at
+minimum:
 
 ```bash
-# Scenario 11 — HBAR walkthrough (~30 min, ~6 ℏ)
-cd examples/walkthrough-hbar
-node 00-precheck.js
-node 01-generate-keys.js
-node 02-create-threshold-account.js
-# … then start coordinator + dApp + 2 participants per README
-node 06-verify-on-mirror.js <txId>
+# 1a. Precheck the environment (under 10 s)
+npm run precheck
 
-# Scenario 12 — contract walkthrough (~30 min, ~10 ℏ; requires Scenario 11's keys)
-cd ../walkthrough-contract
-node 00-precheck.js
-node 01-create-demo-eoa.js
-node 02-deploy-as-eoa.js
-node 03-fund-contract.js
-node 04-call-increment-as-eoa.js
-node 05-convert-eoa-to-multisig.js
-node 06-prove-eoa-rejected.js   # MUST exit 0
-node 07-prepare-multisig-increment.js   # then ceremony via dApp /create
-node 08-prepare-multisig-withdraw.js    # then ceremony via dApp /create
+# 1b. TESTING.md Phase 1 — three scripted walkthroughs (~90 min, ~22 ℏ)
+#     Scenario 11: examples/walkthrough-hbar/        (CLI signers, fully local)
+#     Scenario 12: examples/walkthrough-contract/    (smart-contract; self-contained or reuses 11's keys)
+#     Scenario 13: examples/walkthrough-dapp/        (hosted dApp + HashPack hybrid)
+
+# 1c. TESTING.md Phase 2 — Scenario 13 already covers 2.1 (ngrok tunnel) + 2.2 (mixed CLI + HashPack);
+#     2.3-2.6 still need targeted runs. Phase 3 (failure smoke) and Phase 4 (dApp surface)
+#     are also recommended for releases.
 ```
 
-**Test all three injection paths during the contract ceremonies:**
+**During the contract walkthrough, hit all three injection paths at least once:**
 
 - **Path A** — dApp `/create` "Build from form" tab (paste ABI from
   `Counter.json`, pick function, click Inject)
@@ -59,7 +52,8 @@ node 08-prepare-multisig-withdraw.js    # then ceremony via dApp /create
 - **Path C** — `npx hedera-multisig inject --connect "..." --base64-file
   multisig-increment-tx.json --coordinator-token "..."`
 
-If any walkthrough fails, file an issue and stop the release.
+If any walkthrough or required Phase 2 scenario fails, file an issue and
+stop the release.
 
 ## 2. Commit the release
 
@@ -215,9 +209,15 @@ deploy from the Vercel UI for that project.
 ```bash
 # Local artifacts from your walkthrough dry runs
 rm -f examples/walkthrough-hbar/walkthrough-keys*.json
+rm -f examples/walkthrough-hbar/walkthrough-keys.*.encrypted
 rm -f examples/walkthrough-hbar/walkthrough-state.json
+rm -f examples/walkthrough-contract/walkthrough-keys*.json
+rm -f examples/walkthrough-contract/walkthrough-keys.*.encrypted
 rm -f examples/walkthrough-contract/demo-account-state.json
 rm -f examples/walkthrough-contract/multisig-*-tx.json
+rm -f examples/walkthrough-dapp/walkthrough-keys*.json
+rm -f examples/walkthrough-dapp/walkthrough-keys.*.encrypted
+rm -f examples/walkthrough-dapp/walkthrough-state.json
 
 # Clear local environment
 unset HEDERA_MULTISIG_COORDINATOR_TOKEN  # if you set it during the dry run

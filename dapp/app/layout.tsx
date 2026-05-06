@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Heebo, Unbounded } from "next/font/google";
 import "./globals.css";
 import { NavBar } from "../components/NavBar";
 import { ConsoleLog } from "../components/ConsoleLog";
+import { VersionConsoleBanner } from "../components/VersionConsoleBanner";
 import { ThemeProvider } from "../contexts/ThemeContext";
 
 // Geist — kept as fallback + dev-register face (functional, terminal-adjacent)
@@ -60,6 +61,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${heebo.variable} ${unbounded.variable} antialiased`}
       >
         <ThemeProvider>
+          <VersionConsoleBanner />
           <NavBar />
           {children}
           {/* Console-only: streaming event log drawer at the bottom.

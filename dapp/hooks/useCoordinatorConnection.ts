@@ -1,6 +1,19 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { emitConsoleLog } from '../lib/console-log';
 
+/** Server-side participant entry from `_formatParticipants` in
+ * `server/SigningSessionManager.js`. Lets the coordinator UI seed its
+ * monitor from the AUTH_SUCCESS snapshot for participants who connected
+ * before the coordinator opened /create. */
+export interface ServerParticipant {
+  participantId: string;
+  status: 'connected' | 'ready' | 'signed' | 'rejected' | 'disconnected' | string;
+  publicKey?: string;
+  label?: string;
+  connectedAt?: number;
+  isAgent?: boolean;
+}
+
 interface SessionCredentials {
   sessionId: string;
   pin: string;
@@ -9,6 +22,9 @@ interface SessionCredentials {
   eligibleKeys: string[];
   status: string;
   expiresAt: string;
+  /** Participants already on the session at AUTH time. Empty unless the
+   * coordinator reconnects to (or arrives at) a session with prior joins. */
+  participants: ServerParticipant[];
 }
 
 interface ConnectParams {
@@ -20,6 +36,11 @@ interface ConnectParams {
 
 interface UseCoordinatorConnectionReturn {
   wsRef: React.MutableRefObject<WebSocket | null>;
+  /** State-tracked WebSocket. Use this in `useEffect` deps when you want
+   * the effect to re-run as soon as the connection becomes live. The
+   * `wsRef` form is kept for code that only needs imperative access
+   * (e.g. message-send-then-await-reply patterns). */
+  ws: WebSocket | null;
   isConnecting: boolean;
   connectError: string | null;
   sessionCredentials: SessionCredentials | null;
@@ -28,6 +49,7 @@ interface UseCoordinatorConnectionReturn {
 
 export function useCoordinatorConnection(): UseCoordinatorConnectionReturn {
   const wsRef = useRef<WebSocket | null>(null);
+  const [ws, setWs] = useState<WebSocket | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [sessionCredentials, setSessionCredentials] = useState<SessionCredentials | null>(null);
@@ -58,6 +80,9 @@ export function useCoordinatorConnection(): UseCoordinatorConnectionReturn {
       emitConsoleLog({ level: 'info', source: 'ws', message: `connecting to ${serverUrl}` });
       const ws = new WebSocket(serverUrl);
       wsRef.current = ws;
+      // Mirror to state so consumers using ws as a useEffect dep
+      // (e.g. SessionMonitor) re-subscribe when the socket comes alive.
+      setWs(ws);
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -108,6 +133,9 @@ export function useCoordinatorConnection(): UseCoordinatorConnectionReturn {
                 expiresAt: info?.expiresAt
                   ? new Date(info.expiresAt).toLocaleString()
                   : '',
+                participants: Array.isArray(info?.participants)
+                  ? (info.participants as ServerParticipant[])
+                  : [],
               });
 
               hasTransaction =
@@ -161,5 +189,5 @@ export function useCoordinatorConnection(): UseCoordinatorConnectionReturn {
     return { hasTransaction };
   }, []);
 
-  return { wsRef, isConnecting, connectError, sessionCredentials, connect };
+  return { wsRef, ws, isConnecting, connectError, sessionCredentials, connect };
 }

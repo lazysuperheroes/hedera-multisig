@@ -34,7 +34,7 @@ const {
 const chalk = require('chalk');
 
 const STATE_FILE = path.resolve(__dirname, 'demo-account-state.json');
-const HBAR_KEYS_FILE = path.resolve(__dirname, '..', 'walkthrough-hbar', 'walkthrough-keys.json');
+const KEYS_FILE = path.resolve(__dirname, 'walkthrough-keys.json');
 const THRESHOLD = 2;
 
 async function main() {
@@ -42,7 +42,7 @@ async function main() {
 
   if (!fs.existsSync(STATE_FILE)) fail('Run 01-create-demo-eoa.js first.');
   const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  const keysData = JSON.parse(fs.readFileSync(HBAR_KEYS_FILE, 'utf8'));
+  const keysData = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
 
   if (state.convertedToMultisigAt) {
     fail(`Account ${state.demoAccountId} was already converted at ${state.convertedToMultisigAt}.\n` +
