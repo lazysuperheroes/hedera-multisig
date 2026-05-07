@@ -59,8 +59,42 @@ async function main() {
     .setBytecode(artifact.bytecode)
     .setGas(DEPLOY_GAS);
 
-  const submit = await flow.execute(client);
-  const receipt = await submit.getReceipt(client);
+  let submit, receipt;
+  try {
+    submit = await flow.execute(client);
+    receipt = await submit.getReceipt(client);
+  } catch (err) {
+    // Most common failure here is INSUFFICIENT_PAYER_BALANCE — the demo
+    // EOA pays for the entire ContractCreateFlow (FileCreate + optional
+    // FileAppend + ContractCreate), and 800k gas at testnet pricing can
+    // run 5–10 ℏ. Surface the diagnostic with a concrete remediation
+    // before re-throwing.
+    if (err && /INSUFFICIENT_PAYER_BALANCE/i.test(err.message || '')) {
+      console.error(chalk.red(
+        `\n❌ Demo account ${state.demoAccountId} ran out of HBAR mid-deploy.\n`
+      ));
+      console.error(chalk.gray(
+        `   The demo EOA pays for the entire ContractCreateFlow (FileCreate +\n` +
+        `   ${DEPLOY_GAS.toLocaleString()} gas ContractCreate). On a testnet day with\n` +
+        `   elevated gas pricing this can exceed the initial funding.\n\n` +
+        `   Fix: top up the demo account from your operator, then re-run\n` +
+        `   this script. Try +20 ℏ for safety:\n\n`
+      ));
+      console.error(chalk.cyan(
+        `     node -e "(async()=>{const{Client,AccountId,PrivateKey,TransferTransaction,Hbar}=require('@hashgraph/sdk');\\n` +
+        `       require('dotenv').config({path:'../../.env'});const c=Client.forTestnet();\\n` +
+        `       c.setOperator(AccountId.fromString(process.env.OPERATOR_ID),PrivateKey.fromString(process.env.OPERATOR_KEY));\\n` +
+        `       const tx=await new TransferTransaction().addHbarTransfer(process.env.OPERATOR_ID,new Hbar(-20)).addHbarTransfer('${state.demoAccountId}',new Hbar(20)).execute(c);\\n` +
+        `       await tx.getReceipt(c);console.log('Funded ${state.demoAccountId} +20 ℏ');})()"\n\n`
+      ));
+      console.error(chalk.gray(
+        `   Step 01 was updated post-incident to fund 20 ℏ by default; if you\n` +
+        `   pulled this repo recently and got a fresh demo account from\n` +
+        `   01-create-demo-eoa.js, this error shouldn't recur.\n`
+      ));
+    }
+    throw err;
+  }
   const contractId = receipt.contractId.toString();
 
   console.log(chalk.green(`\n✅ Counter deployed: ${chalk.bold(contractId)}`));

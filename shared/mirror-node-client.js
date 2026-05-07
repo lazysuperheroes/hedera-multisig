@@ -310,6 +310,203 @@ class MirrorNodeClient {
       waitForExpiry: response.wait_for_expiry || false,
     };
   }
+
+  /**
+   * Single-attempt POST to a mirror-node JSON endpoint.
+   *
+   * Mirrors `_fetchOnce` for the POST shape `/api/v1/contracts/call` uses
+   * (HIP-584's free read-only contract execution). Errors are tagged
+   * `retryable` for the same reasons as the GET path.
+   *
+   * @private
+   */
+  _postOnce(path, body) {
+    return new Promise((resolve, reject) => {
+      const payload = Buffer.from(JSON.stringify(body), 'utf8');
+      const options = {
+        hostname: this.baseHost,
+        port: 443,
+        path,
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Content-Length': payload.length,
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            const err = new Error(`Mirror node POST failed: HTTP ${res.statusCode} for ${path} — ${data.slice(0, 200)}`);
+            err.statusCode = res.statusCode;
+            err.responseBody = data;
+            // The mirror's contract-call endpoint can return 404 for a
+            // contract that exists on consensus but hasn't propagated yet
+            // (HIP-584 docs note this propagation delay). Treat 404 as
+            // retryable so the wait/retry layer can absorb the lag.
+            err.retryable = res.statusCode >= 500 || res.statusCode === 404;
+            reject(err);
+            return;
+          }
+          try {
+            resolve(JSON.parse(data));
+          } catch (parseErr) {
+            const err = new Error(`Failed to parse mirror node POST response for ${path}: ${parseErr.message}`);
+            err.retryable = false;
+            reject(err);
+          }
+        });
+      });
+
+      req.on('error', (netErr) => {
+        const err = new Error(`Mirror node POST connection error for ${path}: ${netErr.message}`);
+        err.retryable = true;
+        err.code = netErr.code;
+        reject(err);
+      });
+
+      req.setTimeout(15000, () => {
+        req.destroy();
+        const err = new Error(`Mirror node POST timed out for ${path}`);
+        err.retryable = true;
+        err.code = 'ETIMEDOUT';
+        reject(err);
+      });
+
+      req.write(payload);
+      req.end();
+    });
+  }
+
+  async _post(path, body, options = {}) {
+    const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 3;
+    const backoffMs = [1000, 2000, 4000, 8000];
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await this._postOnce(path, body);
+      } catch (err) {
+        lastError = err;
+        if (!err.retryable || attempt === maxRetries) throw err;
+        const delay = backoffMs[Math.min(attempt, backoffMs.length - 1)];
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+    throw lastError;
+  }
+
+  /**
+   * Resolve a Hedera AccountId to an EVM-format address.
+   *
+   * Mirror lookup first — for ECDSA-keyed accounts the canonical EVM
+   * address is derived from the public key (an EIP-55 / 20-byte
+   * derivation, NOT long-zero), and the mirror node returns it in the
+   * `evm_address` field of `/api/v1/accounts/{id}`. For ED25519-keyed
+   * accounts the mirror returns `null` for that field, in which case
+   * long-zero (account num packed into 20-byte hex) is the correct
+   * representation.
+   *
+   * Long-zero is the unconditional fallback when the mirror lookup
+   * fails entirely. **It is wrong for ECDSA accounts**, so callers
+   * should ensure the mirror is reachable before running operations
+   * where address correctness is load-bearing.
+   *
+   * @param {string|import('@hashgraph/sdk').AccountId} accountId
+   * @returns {Promise<string>} 0x-prefixed 20-byte EVM address
+   */
+  async accountToEvmAddress(accountId) {
+    const idStr = typeof accountId === 'string' ? accountId : accountId.toString();
+    let mirrorEvm = null;
+    try {
+      const response = await this._fetch(`/api/v1/accounts/${idStr}`);
+      mirrorEvm = response.evm_address || null;
+    } catch {
+      // mirror lookup failed; fall through to long-zero
+    }
+    if (mirrorEvm) {
+      return mirrorEvm.startsWith('0x') ? mirrorEvm : '0x' + mirrorEvm;
+    }
+    const { AccountId } = require('@hashgraph/sdk');
+    const acc = typeof accountId === 'string' ? AccountId.fromString(accountId) : accountId;
+    return '0x' + acc.toSolidityAddress();
+  }
+
+  /**
+   * Resolve a Hedera ContractId to an EVM-format address.
+   *
+   * Contracts don't have ECDSA-derived aliases the way externally-owned
+   * accounts can — their canonical EVM address is the long-zero form
+   * (contract num packed into 20-byte hex). No mirror lookup needed.
+   *
+   * @param {string|import('@hashgraph/sdk').ContractId} contractId
+   * @returns {string} 0x-prefixed 20-byte EVM address
+   */
+  contractToEvmAddress(contractId) {
+    const { ContractId } = require('@hashgraph/sdk');
+    const c = typeof contractId === 'string' ? ContractId.fromString(contractId) : contractId;
+    return '0x' + c.toSolidityAddress();
+  }
+
+  /**
+   * Free read-only contract call via the mirror node (HIP-584).
+   *
+   * Use this for `view` / `pure` functions instead of `ContractCallQuery`
+   * — it's gas-free, reads from the mirror's archived state, and doesn't
+   * require an operator to pay a query fee. Mirror state lags consensus
+   * by a few seconds; if you call this immediately after a state-changing
+   * transaction, set `pollMs` / `maxAttempts` so the client absorbs the
+   * propagation lag with backoff.
+   *
+   * Reference: https://docs.hedera.com/api-reference/contracts/invoke-a-smart-contract
+   *
+   * @param {Object} args
+   * @param {string} args.to - Contract ID (`0.0.X`) or EVM address (`0x…`)
+   * @param {string} args.data - ABI-encoded calldata, 0x-prefixed
+   * @param {string} [args.from] - Caller address (required for some simulations)
+   * @param {string|number} [args.block='latest'] - Block selector
+   * @param {boolean} [args.estimate=false] - Gas estimation rather than read
+   * @param {number} [args.value] - tinybars to send (state-change simulations)
+   * @param {Object} [args.opts]
+   * @param {number} [args.opts.pollMs=2500] - Delay between attempts
+   * @param {number} [args.opts.maxAttempts=1] - 1 = single shot, raise to wait through mirror lag
+   * @returns {Promise<{result: string}>} `{ result: "0x..." }` from the API
+   */
+  async callContract(args) {
+    if (!args || !args.to || !args.data) {
+      throw new Error('callContract requires { to, data } at minimum');
+    }
+    const body = {
+      block: args.block || 'latest',
+      data: args.data,
+      to: args.to,
+      ...(args.from ? { from: args.from } : {}),
+      ...(args.value !== undefined ? { value: args.value } : {}),
+      ...(args.estimate !== undefined ? { estimate: args.estimate } : { estimate: false }),
+    };
+    const opts = args.opts || {};
+    const maxAttempts = Math.max(1, opts.maxAttempts || 1);
+    const pollMs = opts.pollMs || 2500;
+
+    let lastError = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await this._post('/api/v1/contracts/call', body, { maxRetries: 1 });
+      } catch (err) {
+        lastError = err;
+        // Retry only when the contract is unreachable on the mirror yet
+        // (404) or transient — if the call comes back with a deterministic
+        // 4xx (bad calldata, contract revert), bail immediately.
+        const transient = err.statusCode === 404 || err.retryable;
+        if (!transient || attempt === maxAttempts - 1) throw err;
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+    }
+    throw lastError;
+  }
 }
 
 module.exports = MirrorNodeClient;

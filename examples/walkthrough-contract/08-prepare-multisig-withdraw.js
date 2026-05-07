@@ -97,7 +97,14 @@ async function main() {
 
   console.log(chalk.bold.white('Frozen transaction (base64):'));
   console.log(chalk.cyan(base64));
-  console.log(chalk.gray(`\nArtifact saved: ${OUT_FILE}`));
+
+  // Compact one-line ABI for the dApp's "Contract ABI" textarea —
+  // pasting it alongside the base64 unlocks verified function-name
+  // display ("withdraw()" badge) in the participant review screen.
+  console.log(chalk.bold.white('\nContract ABI (paste into dApp ABI textarea):'));
+  console.log(chalk.cyan(JSON.stringify(artifact.abi)));
+
+  console.log(chalk.gray(`\nArtifact saved: ${OUT_FILE} (also has abi/frozenBase64 fields if you prefer file-based pickup)`));
   console.log(chalk.gray(`Verify after ceremony: node verify-on-mirror.js ${txId.toString()}\n`));
 
   client.close();

@@ -8,8 +8,19 @@
  *   ceremonies replace the EOA's old powers.
  *
  * This script creates a fresh Hedera account whose key is `alice`'s single
- * Ed25519 key. The operator funds it with 8 ℏ — enough for the contract
- * deployment gas + a 2 ℏ value to send to the contract + transaction fees.
+ * Ed25519 key. The operator funds it with 40 ℏ — sized to comfortably
+ * cover the entire downstream walkthrough:
+ *
+ *   - 02-deploy-as-eoa.js: ContractCreateFlow (FileCreate + FileAppend +
+ *     ContractCreate with 800k gas). Observed cost: ~13 ℏ on a busy
+ *     testnet day; this is by far the dominant expense.
+ *   - 03-fund-contract.js: 2 ℏ moved demo → contract.
+ *   - 04 / 07 / 08 multi-sig ceremonies: small per-tx fees (~0.05 ℏ each).
+ *
+ * Earlier versions used 8 ℏ (~9 ℏ short on a real run) and 20 ℏ (only
+ * 7 ℏ headroom after the deploy). 40 ℏ gives the demo account plenty
+ * of room to absorb pricing volatility without forcing a manual top-up
+ * mid-walkthrough, and still costs the operator nothing real (testnet).
  *
  * Saves demo-account-state.json so subsequent steps can pick up the new
  * account ID.
@@ -27,7 +38,7 @@ const chalk = require('chalk');
 
 const KEYS_FILE = path.resolve(__dirname, 'walkthrough-keys.json');
 const STATE_FILE = path.resolve(__dirname, 'demo-account-state.json');
-const INITIAL_BALANCE_HBAR = 8;
+const INITIAL_BALANCE_HBAR = 40;
 
 async function main() {
   console.log(chalk.bold.cyan('\n━━━ Create demo EOA (single-sig with alice key) ━━━\n'));

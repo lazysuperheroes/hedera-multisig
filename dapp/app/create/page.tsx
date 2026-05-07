@@ -646,6 +646,12 @@ export default function CreatePage() {
                 setTxFields({});
                 setPastedBase64('');
                 setPastedAbiJson('');
+                // Clear lifted live state too — SessionMonitor will
+                // republish fresh state when the next TRANSACTION_RECEIVED
+                // arrives, but null-ing here avoids a brief flash of the
+                // previous CompletedReceipt if the user route-flips
+                // before the new event lands.
+                setLiveSessionState(null);
               }}
             />
           )}

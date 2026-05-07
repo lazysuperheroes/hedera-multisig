@@ -331,7 +331,76 @@ export function SessionMonitor({
             }
             return next;
           }
+          case 'PARTICIPANT_STATUS_UPDATE': {
+            // Server-driven status change — fired when the server
+            // resets per-tx participant state on a fresh injection
+            // (signed/rejected → ready/connected) or when a
+            // participant explicitly sends STATUS_UPDATE. Lets the
+            // server stay source of truth for participant statuses;
+            // we don't infer them from TRANSACTION_RECEIVED.
+            const id = (p.participantId as string) || 'unknown';
+            const incoming = (p.status as string) || '';
+            const mapped = participantStatusToMonitor(incoming);
+            const existing = next.participants[id];
+            if (existing) {
+              next.participants[id] = { ...existing, status: mapped };
+            }
+            // If the broadcast carries fresh stats (server attaches
+            // them on tx-reset PARTICIPANT_STATUS_UPDATEs), reflect
+            // the count too.
+            const stats = (p.stats as Record<string, number> | undefined);
+            if (stats && typeof stats.signaturesCollected === 'number') {
+              next.signaturesCollected = stats.signaturesCollected;
+            }
+            return next;
+          }
           case 'TRANSACTION_RECEIVED': {
+            // If we're transitioning out of a terminal state — a
+            // previous transaction completed, failed, or expired —
+            // this `TRANSACTION_RECEIVED` represents a brand-new
+            // ceremony in the same session. Clear all per-tx fields
+            // so the share view doesn't carry forward the previous
+            // transaction ID, signature count, mirror flag, etc.
+            //
+            // We deliberately do NOT touch `next.participants` here.
+            // Participant statuses are owned by the server: when it
+            // runs `clearTransactionState`, it broadcasts a
+            // `PARTICIPANT_STATUS_UPDATE` for each participant whose
+            // status it changed (signed/rejected → ready/connected),
+            // and the handler below picks those up. That keeps the
+            // server as the single source of truth for who's
+            // connected and what state they're in — versus the
+            // earlier "let the dApp guess" approach which wiped
+            // entries the user genuinely wanted to see.
+            //
+            // We detect "fresh ceremony" off `prev.transactionId`
+            // (only set after a successful execution) OR a
+            // failed/expired sessionState; in any other case
+            // (waiting/received/signing/executing) this is a
+            // late-joiner catch-up broadcast and stats should NOT be
+            // wiped.
+            const isNewCeremony =
+              !!prev.transactionId ||
+              prev.sessionState === 'failed' ||
+              prev.sessionState === 'expired';
+            if (isNewCeremony) {
+              next.signaturesCollected = 0;
+              next.thresholdMet = false;
+              next.transactionId = null;
+              next.mirrorConfirmed = false;
+              next.failureReason = null;
+              next.signatureRejections = [];
+              next.pollingTxId = null;
+              // Freeze metadata gets refreshed below from the new
+              // payload; clearing first avoids briefly showing the
+              // old strategy/byte-count if the new payload is missing
+              // those fields (CLI-injected paths often omit
+              // metadata.customFields).
+              next.freezeStrategy = null;
+              next.freezeNodeCount = null;
+              next.frozenTxBytes = null;
+            }
+
             next.sessionState = 'received';
             // Capture the txId now so the mirror-poll hook has it before
             // execution begins. Server-side `extractTransactionDetails`

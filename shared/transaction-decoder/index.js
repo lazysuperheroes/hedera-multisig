@@ -374,19 +374,30 @@ class TransactionDecoder {
     details.gas = tx._gas?.toNumber();
     details.amount = tx._payableAmount?.toString() || '0';
 
-    // Decode function call if ABI provided
+    // Decode function call if ABI provided. `abiVerified` is true only
+    // when both the selector matches AND the re-encoded calldata is
+    // byte-identical to the original (round-trip integrity). Anything
+    // less than that is shown to the signer as "not verified".
     if (contractInterface && tx._functionParameters) {
       try {
         const decoded = this.decodeSolidityFunction(tx._functionParameters, contractInterface);
         details.functionName = decoded.name;
         details.functionParams = decoded.params;
-        details.selectorVerified = decoded.selectorVerified;
+        details.abiVerified = decoded.abiVerified;
+        details.selectorVerified = decoded.selectorVerified; // legacy alias
       } catch (error) {
         console.error('Failed to decode contract function:', error.message);
         details.functionName = 'Unknown';
+        details.abiVerified = false;
         details.selectorVerified = false;
-        // Re-throw if selector mismatch (security-critical)
-        if (error.message.includes('FUNCTION SELECTOR MISMATCH')) {
+        // Re-throw security-critical mismatches so the participant sees
+        // them as a hard refusal rather than a silent "Unknown function".
+        const msg = error.message || '';
+        if (
+          msg.includes('FUNCTION SELECTOR MISMATCH') ||
+          msg.includes('ABI ROUND-TRIP MISMATCH') ||
+          msg.includes('ABI ROUND-TRIP FAILED')
+        ) {
           throw error;
         }
       }
@@ -628,46 +639,95 @@ class TransactionDecoder {
   }
 
   /**
-   * Decode Solidity function call using ABI with selector verification
+   * Decode a Solidity function call using ABI with **full round-trip
+   * verification**.
    *
-   * @param {Uint8Array} functionData - Function parameters bytes
-   * @param {ethers.Interface} contractInterface - Contract ABI
-   * @returns {{name: string, params: Object, selectorVerified: boolean}}
-   * @throws {Error} If function selector doesn't match ABI
+   * Two things we check, and the difference matters for the
+   * "ABI verified" claim shown to signers:
+   *
+   *   1. **Selector match** — `iface.parseTransaction({data})` succeeds,
+   *      meaning the first 4 bytes of calldata correspond to *some*
+   *      fragment in the supplied ABI. (This alone is not enough — see
+   *      below.)
+   *
+   *   2. **Encoded round-trip equality** — we re-encode the decoded
+   *      `(name, args)` via `iface.encodeFunctionData(name, args)` and
+   *      assert byte-for-byte equality with the original calldata. This
+   *      is the actual verification: it proves
+   *
+   *        - every byte after the selector is accounted for (no trailing
+   *          junk that ethers might silently ignore for fixed-size types),
+   *        - the argument *types* declared in the ABI match the actual
+   *          on-the-wire encoding (e.g. an ABI claiming `uint128` for
+   *          what's really `uint256` would diverge here),
+   *        - the decoded args, when handed to a reviewer, are an exact
+   *          and exhaustive description of the call.
+   *
+   * Without (2), a malicious or wrong ABI could decode partial /
+   * misinterpreted calldata into plausible-looking args while the actual
+   * tx semantics differ. With (2), the participant either sees verified
+   * args or sees `abiVerified: false` and a clear error.
+   *
+   * @param {Uint8Array|Buffer} functionData
+   * @param {ethers.Interface} contractInterface
+   * @returns {{name: string, params: Object, selectorVerified: boolean, abiVerified: boolean}}
+   * @throws {Error} If selector doesn't match the ABI, or if the
+   *   re-encoded calldata diverges from the original (security-critical).
    */
   static decodeSolidityFunction(functionData, contractInterface) {
-    // Convert to hex string
-    const dataHex = '0x' + bufferToHex(functionData);
-
-    // Extract actual function selector (first 4 bytes)
+    const dataHex = ('0x' + bufferToHex(functionData)).toLowerCase();
     const actualSelector = dataHex.slice(0, 10);
 
-    // Decode function call
     const decoded = contractInterface.parseTransaction({ data: dataHex });
-
     if (!decoded) {
       throw new Error('Could not decode function call');
     }
 
-    // SECURITY: Verify function selector matches ABI
-    const expectedSelector = decoded.selector;
-
-    if (actualSelector.toLowerCase() !== expectedSelector.toLowerCase()) {
+    // (1) Defense-in-depth selector check. Under normal ethers behavior
+    //     parseTransaction has already matched on this; this assert
+    //     would only fail if the Interface implementation drifts.
+    const expectedSelector = decoded.selector.toLowerCase();
+    if (actualSelector !== expectedSelector) {
       throw new Error(
         `FUNCTION SELECTOR MISMATCH!\n` +
         `ABI claims function: ${decoded.name}(${decoded.fragment.inputs.map(i => i.type).join(',')})\n` +
         `Expected selector: ${expectedSelector}\n` +
         `Actual selector: ${actualSelector}\n\n` +
         `The ABI does not match the actual contract function being called.\n` +
-        `DO NOT SIGN THIS TRANSACTION - The function name may be fraudulent.`
+        `DO NOT SIGN THIS TRANSACTION — The function name may be fraudulent.`
       );
     }
 
-    // Extract parameter values
+    // (2) Round-trip equality. This is the substantive check: re-encode
+    //     using the same Interface and compare byte-for-byte.
+    let reencoded;
+    try {
+      reencoded = contractInterface.encodeFunctionData(decoded.name, decoded.args).toLowerCase();
+    } catch (err) {
+      throw new Error(
+        `ABI ROUND-TRIP FAILED while re-encoding ${decoded.name}: ${err.message}\n` +
+        `The supplied ABI cannot reproduce the calldata it just decoded — treat as untrusted.\n` +
+        `DO NOT SIGN THIS TRANSACTION.`
+      );
+    }
+    if (reencoded !== dataHex) {
+      const sigStr = `${decoded.name}(${decoded.fragment.inputs.map(i => i.type).join(',')})`;
+      throw new Error(
+        `ABI ROUND-TRIP MISMATCH!\n` +
+        `ABI fragment: ${sigStr}\n` +
+        `Original calldata:  ${dataHex}\n` +
+        `Re-encoded calldata: ${reencoded}\n\n` +
+        `The supplied ABI matches the function selector but produces different calldata\n` +
+        `when re-encoding the decoded args. This usually means the ABI claims wrong\n` +
+        `argument types, or the calldata has trailing bytes the ABI doesn't account for.\n` +
+        `DO NOT SIGN THIS TRANSACTION — argument values shown to you may be misleading.`
+      );
+    }
+
+    // Extract parameter values for display.
     const params = {};
     decoded.fragment.inputs.forEach((input, index) => {
       let value = decoded.args[index];
-      // Format BigInt values
       if (typeof value === 'bigint') {
         value = value.toString();
       }
@@ -676,7 +736,13 @@ class TransactionDecoder {
 
     return {
       name: decoded.name,
-      params: params,
+      params,
+      // `abiVerified` is the canonical field — true only when both the
+      // selector and the round-trip pass. `selectorVerified` is kept for
+      // back-compat with consumers that read the older field name; it
+      // now means the same thing (round-trip is a strict superset of
+      // selector verification).
+      abiVerified: true,
       selectorVerified: true,
     };
   }

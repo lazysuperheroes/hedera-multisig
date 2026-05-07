@@ -296,6 +296,58 @@ class SessionStore {
   }
 
   /**
+   * Clear all per-transaction state from a session — signatures, the
+   * collected-count stat, and any participant statuses that are
+   * tx-specific ('signed' / 'rejected'). Leaves session-level state
+   * (PIN, eligible keys, threshold, reconnection tokens) untouched.
+   *
+   * Called when the coordinator injects a new transaction on top of a
+   * previously-completed (or expired/rejected) one in the same session.
+   * Without this, `session.signatures` carries the prior ceremony's
+   * entries and the next signing attempt fails with "this public key
+   * has already signed".
+   *
+   * @param {string} sessionId
+   * @returns {Promise<Array<{participantId: string, status: string}>>}
+   *   List of participants whose status was reset, so the caller can
+   *   broadcast `PARTICIPANT_STATUS_UPDATE` to keep dApp / CLI views
+   *   in sync. Empty array if nothing changed (or session missing).
+   */
+  async clearTransactionState(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return [];
+
+    if (session.signatures && typeof session.signatures.clear === 'function') {
+      session.signatures.clear();
+    }
+    if (session.stats) {
+      session.stats.signaturesCollected = 0;
+    }
+
+    // Per-participant: walk the participant Map and reset any status
+    // that carried meaning for the previous tx. 'signed' → back to
+    // 'ready' (key is still loaded; they just haven't re-signed yet).
+    // 'rejected' → also back to 'ready' so they can choose to sign
+    // the new tx. 'connected' / 'disconnected' / 'ready' are
+    // session-level and stay.
+    const changed = [];
+    if (session.participants && typeof session.participants.forEach === 'function') {
+      for (const [participantId, participant] of session.participants) {
+        if (participant.status === 'signed' || participant.status === 'rejected') {
+          // Drop the public key recorded when they signed — they may
+          // re-sign with a different key for the next ceremony, and
+          // the next addSignature will re-bind it.
+          participant.publicKey = null;
+          const newStatus = participant.keysLoaded ? 'ready' : 'connected';
+          participant.status = newStatus;
+          changed.push({ participantId, status: newStatus });
+        }
+      }
+    }
+    return changed;
+  }
+
+  /**
    * Remove participant from session
    *
    * @param {string} sessionId - Session identifier

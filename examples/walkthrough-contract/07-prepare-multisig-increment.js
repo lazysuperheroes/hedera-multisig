@@ -105,13 +105,24 @@ async function main() {
   console.log(chalk.bold.white('Frozen transaction (base64):'));
   console.log(chalk.cyan(base64));
 
+  // Compact one-line ABI for the dApp's "Contract ABI" textarea on
+  // the paste-mode injection panel. Pasting this alongside the base64
+  // unlocks verified function-name display ("increment()" green
+  // badge) in the participant review screens. Counter's ABI is small
+  // (a few function fragments) so a single line is fine; for larger
+  // contracts the artifact JSON at OUT_FILE.abi has the same data
+  // pretty-printed.
+  console.log(chalk.bold.white('\nContract ABI (paste into dApp ABI textarea):'));
+  console.log(chalk.cyan(JSON.stringify(artifact.abi)));
+
   console.log(chalk.bold.white('\nCeremony steps (run in parallel terminals):'));
   console.log(chalk.gray('  1. (already running?) Coordinator server:'));
   console.log(`     ${chalk.cyan('npx hedera-multisig server -t 2 -k "' + state.thresholdConfig.publicKeys.join(',') + '" --port 3001 --no-tunnel')}`);
-  console.log(chalk.gray('  2. Inject this transaction via dApp /create OR programmatically.'));
+  console.log(chalk.gray('  2. Inject this transaction via dApp /create — paste both the base64 above AND the ABI above.'));
   console.log(chalk.gray('  3. Two of [alice, bob, carol] join + sign — see README.'));
   console.log(chalk.gray(`  4. Verify: ${chalk.cyan('node verify-on-mirror.js ' + txId.toString())}`));
-  console.log(chalk.gray(`\n  Artifact saved: ${OUT_FILE}\n`));
+  console.log(chalk.gray(`             ${chalk.cyan('node query-counter.js --expect 2 --wait')}`));
+  console.log(chalk.gray(`\n  Artifact saved: ${OUT_FILE} (also has abi/frozenBase64 fields if you prefer file-based pickup)\n`));
 
   client.close();
 }

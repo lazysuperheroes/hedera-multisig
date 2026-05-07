@@ -1118,6 +1118,28 @@ class MultiSigWebSocketServer {
           timerController.clear(session.expirationTimerId);
         }
 
+        // Clear stale per-transaction state from any previous ceremony
+        // in this session (signatures Map, signaturesCollected stat,
+        // participant statuses still marked 'signed' / 'rejected').
+        // Without this, a coordinator who clicks "Build another
+        // transaction" after a successful ceremony hits two bugs:
+        //   1. Signing the new tx fails — the server's `submitSignature`
+        //      sees the previous public-key entry in `signatures` and
+        //      rejects with "this public key has already signed".
+        //   2. The dApp's session monitor flashes stale "alice/bob ✓
+        //      signed" pills against the new tx — confusing during the
+        //      120s validity window when seconds matter.
+        //
+        // `clearTransactionState` returns the participants whose status
+        // it changed; we broadcast `PARTICIPANT_STATUS_UPDATE` for each
+        // so connected dApp / CLI views update their pills without
+        // having to invent a "guess server reset participants" code
+        // path on the client.
+        let changedStatuses = [];
+        if (typeof this.sessionManager.store.clearTransactionState === 'function') {
+          changedStatuses = await this.sessionManager.store.clearTransactionState(sessionId) || [];
+        }
+
         session.frozenTransaction = normalizedTx;
         session.txDetails = txDetails;
         // Persist the JSON-serializable ABI so late-joining participants
@@ -1152,6 +1174,25 @@ class MultiSigWebSocketServer {
             await this._handleTransactionExpired(sessionId);
             return;
           }
+        }
+      }
+
+      // Sync any participant statuses we just reset (signed/rejected →
+      // ready/connected) BEFORE broadcasting the new TRANSACTION_RECEIVED.
+      // Doing it in this order means a dApp client that listens to
+      // PARTICIPANT_STATUS_UPDATE has already cleared the stale pills
+      // by the time the new tx arrives — no flash, no race.
+      if (changedStatuses.length > 0) {
+        const refreshedStats = await this.sessionManager.store.getStats(sessionId);
+        for (const { participantId: pid, status } of changedStatuses) {
+          await this.broadcastToSession(sessionId, {
+            type: 'PARTICIPANT_STATUS_UPDATE',
+            payload: {
+              participantId: pid,
+              status,
+              stats: refreshedStats,
+            },
+          });
         }
       }
 

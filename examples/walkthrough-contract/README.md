@@ -70,8 +70,12 @@ node 01-create-demo-eoa.js
 ```
 
 Creates a fresh Hedera account whose key is `alice`'s single Ed25519
-key. The operator funds it with 8 ℏ. This is the EOA stage — the demo
-account is controlled by one key, exactly like a personal wallet.
+key. The operator funds it with 20 ℏ — sized so the demo account can
+cover the contract deploy in step 2 (800k gas can run 5–10 ℏ on
+busy-pricing testnet days), the 2 ℏ funding to the contract in step 3,
+and per-tx fees on the multi-sig ceremonies in steps 7 and 8 with
+margin left over. This is the EOA stage — the demo account is
+controlled by one key, exactly like a personal wallet.
 
 State written: `demo-account-state.json` with `demoAccountId`.
 
@@ -114,6 +118,24 @@ node 04-call-increment-as-eoa.js
 Plain `ContractExecuteTransaction` signed by alice's key. Counter ticks
 from 0 → 1. This is the "before" baseline — write down the transaction
 ID so you can compare against step 7's multi-sig ceremony.
+
+### Step 4a — Verify the count (free read via mirror node)
+
+```bash
+node query-counter.js
+# → Counter: 1
+```
+
+`query-counter.js` reads `Counter.getCount()` for free via the mirror
+node's `POST /api/v1/contracts/call` endpoint (HIP-584) — no operator
+HBAR is spent on the read. The same script is used again in step 7 to
+verify the multi-sig increment landed.
+
+> **Mirror lag.** The mirror node trails consensus by ~3–8 seconds.
+> Run the script ≥5s after a state-changing tx and you're fine. If
+> you script it immediately after a tx, add `--wait` (polls with
+> backoff for ~30s) and optionally `--expect <n>` (keep polling until
+> `count >= n`).
 
 ---
 
@@ -248,35 +270,20 @@ transaction to the network and prints the executed transaction ID.
 
 ```bash
 node verify-on-mirror.js TRANSACTION_ID_FROM_7d
+
+# Confirm the counter advanced to 2 (1 from step 4 + 1 from this ceremony):
+node query-counter.js --expect 2 --wait
+# → attempt 1/12: count = 1 ⏳
+# → attempt 2/12: count = 2 ✅
+# → Counter: 2
 ```
 
-Mirror confirms `SUCCESS`, returns the consensus timestamp, fee, and
-transfers. Counter is now at 2 (1 from step 4 single-sig + 1 from this
-multi-sig).
-
-You can re-query the count programmatically:
-
-```bash
-node -e "
-const { Client, ContractId, ContractCallQuery } = require('@hashgraph/sdk');
-const { Interface } = require('ethers');
-require('dotenv').config({ path: '../../.env' });
-const state = require('./demo-account-state.json');
-const artifact = require('./Counter.json');
-(async () => {
-  const c = Client.forTestnet();
-  c.setOperator(process.env.OPERATOR_ID, process.env.OPERATOR_KEY);
-  const iface = new Interface(artifact.abi);
-  const r = await new ContractCallQuery()
-    .setContractId(ContractId.fromString(state.contractId))
-    .setGas(50000)
-    .setFunctionParameters(Buffer.from(iface.encodeFunctionData('getCount').slice(2), 'hex'))
-    .execute(c);
-  const [count] = iface.decodeFunctionResult('getCount', '0x' + Buffer.from(r.bytes).toString('hex'));
-  console.log('Counter:', count.toString());
-})();
-"
-```
+`verify-on-mirror.js` confirms the transaction itself externalized
+(`SUCCESS`, consensus timestamp, fee, transfers). `query-counter.js`
+re-reads the contract state via the mirror node's free
+`POST /api/v1/contracts/call` endpoint — no HBAR spent on the read.
+`--expect 2 --wait` polls through the ~3–8s mirror lag until the new
+state propagates.
 
 ---
 

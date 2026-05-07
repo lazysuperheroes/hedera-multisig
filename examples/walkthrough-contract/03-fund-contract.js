@@ -13,10 +13,18 @@ const fs = require('fs');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '..', '.env') });
 
 const {
-  Client, AccountId, PrivateKey, ContractId, Hbar,
+  Client, AccountId, PrivateKey, Hbar,
   TransferTransaction, ContractInfoQuery,
 } = require('@hashgraph/sdk');
 const chalk = require('chalk');
+
+// Note on the address types below: the SDK's `addHbarTransfer` calls
+// `AccountId.fromString` on whatever you pass, so a `ContractId` *object*
+// fails (the internal coercion expects a string). Hedera contracts have
+// an underlying account at the same `0.0.X` ID, so we parse the contract
+// ID through `AccountId.fromString` and the transfer lands on the same
+// on-chain entity. (`addHbarTransfer(state.contractId, ...)` works as a
+// string too — but `AccountId.fromString` is the explicit form.)
 
 const STATE_FILE = path.resolve(__dirname, 'demo-account-state.json');
 const FUND_AMOUNT_HBAR = 2;
@@ -39,11 +47,11 @@ async function main() {
   console.log(chalk.gray(`Amount: ${FUND_AMOUNT_HBAR} ℏ`));
 
   // TransferTransaction works for HBAR-to-contract too — the contract is a
-  // Hedera account under the hood, so addHbarTransfer accepts a contract ID
-  // (resolved via .toString() to "0.0.X" form).
+  // Hedera account under the hood. Both endpoints below pass through
+  // AccountId.fromString so the SDK's internal coercion is happy.
   const tx = await new TransferTransaction()
-    .addHbarTransfer(state.demoAccountId, new Hbar(-FUND_AMOUNT_HBAR))
-    .addHbarTransfer(ContractId.fromString(state.contractId), new Hbar(FUND_AMOUNT_HBAR))
+    .addHbarTransfer(AccountId.fromString(state.demoAccountId), new Hbar(-FUND_AMOUNT_HBAR))
+    .addHbarTransfer(AccountId.fromString(state.contractId), new Hbar(FUND_AMOUNT_HBAR))
     .setTransactionMemo('walkthrough-contract: fund Counter')
     .execute(client);
   await tx.getReceipt(client);

@@ -138,10 +138,63 @@ class TransactionReviewer {
       }
     }
 
-    // Fallback: for non-transfer transaction types we may still have a
-    // single account-of-interest (e.g. token-association, schedule sign).
+    // Smart-contract details — rendered for ContractExecute and
+    // ContractCreate. The shared decoder puts these fields flat on
+    // `txDetails` (not nested under `contractCall`); this block was
+    // previously gated on a non-existent `contractCall` field, so it
+    // never rendered. Fixed: drive off `txDetails.contractId`.
+    //
+    // Function name + decoded params + the "ABI Verified ✓" badge
+    // only appear when the coordinator passed an ABI through to the
+    // session. Without an ABI we still show the contract ID, gas,
+    // and payable amount — same as the dApp's review screen.
+    const isContract = !!txDetails.contractId;
+    if (isContract) {
+      output += `\nSmart Contract Call:\n`;
+      output += `  Contract:     ${txDetails.contractId}\n`;
+      if (typeof txDetails.gas === 'number' && txDetails.gas > 0) {
+        output += `  Gas:          ${txDetails.gas.toLocaleString()}\n`;
+      }
+      if (txDetails.amount && txDetails.amount !== '0') {
+        output += `  Payable:      ${formatHbarTinybars(txDetails.amount)}\n`;
+      }
+
+      if (txDetails.functionName && txDetails.functionName !== 'Unknown') {
+        // `abiVerified` is true only when the supplied ABI both matches
+        // the selector AND round-trips byte-for-byte against the original
+        // calldata. Fall back to the legacy `selectorVerified` flag for
+        // older payloads that haven't been re-decoded under the new path.
+        const verified = txDetails.abiVerified ?? txDetails.selectorVerified;
+        const verifiedBadge = verified
+          ? ' ✓ ABI verified (selector + round-trip)'
+          : ' (ABI not verified)';
+        output += `  Function:     ${txDetails.functionName}()${verifiedBadge}\n`;
+
+        if (txDetails.functionParams && Object.keys(txDetails.functionParams).length > 0) {
+          output += `  Arguments:\n`;
+          for (const [key, value] of Object.entries(txDetails.functionParams)) {
+            output += `    ${key}: ${value}\n`;
+          }
+        }
+      } else if (contractInterface) {
+        // ABI was supplied but decoding produced nothing — this means
+        // the function selector didn't match any fragment in the ABI.
+        // Surface it; security-critical (the coordinator-claimed
+        // function might be different from what's actually being called).
+        output += `  Function:     ⚠️  selector did not match supplied ABI\n`;
+      } else {
+        output += `  Function:     (no ABI supplied — selector unverified)\n`;
+      }
+    }
+
+    // Fallback: for non-transfer, non-contract transaction types we
+    // may still have a single account-of-interest (e.g. token-
+    // association, schedule sign). Skip when we've already rendered
+    // contract details — the contract ID would otherwise duplicate
+    // here as "Accounts Involved → 0.0.X".
     if (
-      !Array.isArray(txDetails.transfers) || txDetails.transfers.length === 0
+      (!Array.isArray(txDetails.transfers) || txDetails.transfers.length === 0)
+      && !isContract
     ) {
       const accounts = this.extractAccounts(txDetails);
       if (accounts.length > 0) {
@@ -152,23 +205,11 @@ class TransactionReviewer {
       }
     }
 
-    // Display smart contract data if present
-    if (txDetails.contractCall && contractInterface) {
-      output += `\n📝 Smart Contract Call:\n`;
-      output += `Contract ID: ${txDetails.contractCall.contractId}\n`;
-      output += `Function:    ${txDetails.contractCall.functionName || 'Unknown'}\n`;
-
-      if (txDetails.contractCall.decodedParams) {
-        output += `\nParameters:\n`;
-        Object.entries(txDetails.contractCall.decodedParams).forEach(([key, value]) => {
-          output += `  ${key}: ${value}\n`;
-        });
-      }
-    }
-
-    // Raw transaction details
-    if (txDetails.memo) {
-      output += `\nMemo: ${txDetails.memo}\n`;
+    // Memo — shared decoder writes `transactionMemo` (not `memo`).
+    // Older code used the wrong field, so memos never showed.
+    const memo = txDetails.transactionMemo || txDetails.memo;
+    if (memo) {
+      output += `\nMemo: ${memo}\n`;
     }
 
     output += '\n' + '─'.repeat(64) + '\n\n';

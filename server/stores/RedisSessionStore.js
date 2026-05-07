@@ -317,6 +317,39 @@ class RedisSessionStore {
   }
 
   /**
+   * Clear all per-transaction state from a session — signatures, the
+   * collected-count stat, and any participant statuses that are
+   * tx-specific. Mirrors `SessionStore.clearTransactionState`; called
+   * when a new tx is injected on top of a previously-completed one.
+   *
+   * @param {string} sessionId
+   */
+  async clearTransactionState(sessionId) {
+    const session = await this._loadSession(sessionId);
+    if (!session) return [];
+
+    // Redis-backed sessions hold signatures as a flat Object; reset to
+    // an empty object instead of the in-memory store's Map.clear().
+    session.signatures = {};
+    if (session.stats) {
+      session.stats.signaturesCollected = 0;
+    }
+    const changed = [];
+    if (session.participants && typeof session.participants === 'object') {
+      for (const [participantId, participant] of Object.entries(session.participants)) {
+        if (participant && (participant.status === 'signed' || participant.status === 'rejected')) {
+          participant.publicKey = null;
+          const newStatus = participant.keysLoaded ? 'ready' : 'connected';
+          participant.status = newStatus;
+          changed.push({ participantId, status: newStatus });
+        }
+      }
+    }
+    await this._saveSession(session);
+    return changed;
+  }
+
+  /**
    * Remove participant from session
    *
    * @param {string} sessionId - Session identifier

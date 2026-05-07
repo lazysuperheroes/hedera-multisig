@@ -19,7 +19,14 @@ const { Client, AccountId, PrivateKey, AccountBalanceQuery } = require('@hashgra
 const chalk = require('chalk');
 
 const KEYS_FILE = path.resolve(__dirname, 'walkthrough-keys.json');
-const MIN_BALANCE_HBAR = 10; // need this for: demo account funding, contract deploy gas, contract balance, fees
+// Operator pays:
+//   - ~20 ℏ funding the demo account (01-create-demo-eoa.js — covers
+//     downstream contract deploy gas + 2 ℏ contract funding + ceremony fees)
+//   - ~0.5 ℏ for the AccountCreate itself
+//   - ~0.5 ℏ for the AccountUpdate when converting EOA → multi-sig (05)
+//   - small headroom for testnet gas-price spikes
+// 25 ℏ minimum keeps the worst observed run safely above zero.
+const MIN_BALANCE_HBAR = 25;
 
 async function main() {
   console.log(chalk.bold.cyan('\n━━━ Walkthrough precheck (contract) ━━━\n'));
@@ -48,7 +55,14 @@ async function main() {
   const balance = await new AccountBalanceQuery().setAccountId(process.env.OPERATOR_ID).execute(client);
   const hbar = balance.hbars.toBigNumber().toNumber();
   console.log(chalk.green('✓'), `Operator: ${process.env.OPERATOR_ID} (${hbar.toFixed(2)} ℏ)`);
-  if (hbar < MIN_BALANCE_HBAR) fail(`Operator needs ≥${MIN_BALANCE_HBAR} ℏ for the contract walkthrough. Refill at https://portal.hedera.com/`);
+  if (hbar < MIN_BALANCE_HBAR) {
+    fail(
+      `Operator needs ≥${MIN_BALANCE_HBAR} ℏ for the contract walkthrough; found ${hbar.toFixed(2)} ℏ.\n` +
+      `   The demo account is funded with 20 ℏ in step 01 to cover the contract\n` +
+      `   deploy in step 02 (gas pricing on testnet can spike 5–10 ℏ for 800k gas).\n` +
+      `   Refill the operator at https://portal.hedera.com/ — testnet ℏ is free.`
+    );
+  }
 
   // Compiled artifact
   const artifact = path.resolve(__dirname, 'Counter.json');
