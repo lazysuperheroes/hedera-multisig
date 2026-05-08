@@ -151,11 +151,16 @@ export function ParticipantList({
                   {/* Status Icon */}
                   <span className="text-lg">{statusBadge.icon}</span>
 
-                  {/* Participant Info */}
+                  {/* Participant Info — prefer the user-supplied
+                      display label (set on /join's "Your name" field
+                      or via the CLI's --label) over the generic
+                      "Participant" placeholder. The label is a
+                      *display* hint only; the eligibility check
+                      against the public key is what proves identity. */}
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-foreground text-sm">
-                        {isCurrentUser ? 'You' : `Participant`}
+                        {isCurrentUser ? 'You' : (participant.label || 'Participant')}
                       </span>
                       {isCurrentUser && (
                         <span className="px-1.5 py-0.5 bg-info-soft text-info-soft-fg text-xs rounded">

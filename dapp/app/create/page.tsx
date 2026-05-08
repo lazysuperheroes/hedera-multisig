@@ -145,9 +145,15 @@ export default function CreatePage() {
 
   const handleTransactionReset = useCallback(() => {
     // Server confirmed TRANSACTION_RESET. Clear the form fields the previous
-    // transaction left behind and route back to the build step. The
-    // SessionMonitor's own state already reset itself on the same broadcast.
+    // transaction left behind, drop the stale balance display (the prior
+    // account isn't selected anymore — and even if the user re-types the
+    // same account, the balance has changed since fees were charged), and
+    // route back to the build step. The SessionMonitor's own state already
+    // reset itself on the same broadcast.
     setTxFields({});
+    setFromBalance(null);
+    setBalanceError(null);
+    setIsLoadingBalance(false);
     injection.reset?.();
     setStep('build-tx');
     toast.info(

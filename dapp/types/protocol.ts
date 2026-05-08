@@ -214,6 +214,9 @@ export interface ParticipantConnectedMessage {
   type: 'PARTICIPANT_CONNECTED';
   payload: {
     participantId: string;
+    /** Friendly display name supplied at AUTH (CLI --label or web join form). */
+    label?: string | null;
+    isAgent?: boolean;
     stats: {
       participantsExpected: number;
       participantsConnected: number;

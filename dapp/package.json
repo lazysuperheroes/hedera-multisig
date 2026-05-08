@@ -1,6 +1,6 @@
 {
   "name": "@lazysuperheroes/hedera-multisig-dapp",
-  "version": "2.1.18",
+  "version": "2.1.19",
   "private": true,
   "description": "WalletConnect browser dApp for Hedera MultiSig - enables hardware wallet and browser-based signing",
   "scripts": {

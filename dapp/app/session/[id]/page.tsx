@@ -43,6 +43,13 @@ interface SessionInfo {
   sessionId: string;
   pin?: string;
   reconnectionToken?: string;
+  /**
+   * Optional friendly name the user supplied at /join (e.g. "alice").
+   * Forwarded to the WebSocket client so the server stores it on the
+   * participant and other clients can show "alice" in the row list
+   * instead of a generic "Participant".
+   */
+  label?: string;
 }
 
 interface PageProps {
@@ -87,6 +94,11 @@ export default function SessionPage({ params }: PageProps) {
 
   // Hooks
   const wallet = useWallet(); // Global wallet state (shared with NavBar)
+  // Default fallback label; the user-supplied display name (if any)
+  // is collected on /join, persisted via sessionInfo.label, and passed
+  // per-call into signingSession.connect() — that overrides the
+  // constructor-time default at AUTH time even though the client was
+  // built before sessionInfo populated.
   const signingSession = useSigningSession({ verbose: true, label: 'Web (WalletConnect)' });
   const toast = useToast();
   const sessionRecovery = useSessionRecovery();
@@ -281,7 +293,18 @@ export default function SessionPage({ params }: PageProps) {
     } else if (sessionStatus === 'ready' && currentStep === 'session-connect') {
       // Fast path: already ready, skip 'ready' step
       setCurrentStep('waiting');
-    } else if (sessionStatus === 'reviewing' && currentStep === 'waiting') {
+    } else if (
+      sessionStatus === 'reviewing' &&
+      (currentStep === 'waiting' || currentStep === 'completed' || currentStep === 'signed')
+    ) {
+      // Multi-tx-per-session: a coordinator can inject a SECOND
+      // transaction after the first one completed. The participant
+      // might still be parked on the post-signing screen ('signed' or
+      // 'completed') — accept the new TRANSACTION_RECEIVED as a
+      // legitimate transition and clear the stale post-signing card so
+      // the new review screen shows up clean.
+      setSignedTransactionId(null);
+      setSignedTransactionDetails(null);
       setCurrentStep('reviewing');
       toast.info('Transaction Received', 'Please review the transaction details');
     } else if (sessionStatus === 'signed' && currentStep === 'signing') {
@@ -349,7 +372,8 @@ export default function SessionPage({ params }: PageProps) {
         sessionInfo.sessionId,
         sessionInfo.pin || '',
         publicKey,
-        sessionInfo.reconnectionToken
+        sessionInfo.reconnectionToken,
+        sessionInfo.label,
       );
 
       toast.success('Session Joined', 'You are now ready to sign transactions');
@@ -975,9 +999,21 @@ export default function SessionPage({ params }: PageProps) {
             </p>
 
             <div className="space-y-3">
+              {/* Hero: stay connected to this session and wait for the
+                  coordinator's next inject. The WebSocket stays open;
+                  we just reset the local tx-specific state back to
+                  'waiting'. Same handler as PostSigningStatus's
+                  "Ready for Next Transaction" so the two surfaces
+                  agree. */}
+              <button
+                onClick={handleClearPostSigning}
+                className="w-full px-6 py-3 bg-success text-white font-semibold rounded-lg hover:bg-success"
+              >
+                Wait for Next Transaction
+              </button>
               <button
                 onClick={() => router.push('/')}
-                className="w-full px-6 py-3 bg-success text-white font-semibold rounded-lg hover:bg-success"
+                className="w-full px-6 py-3 bg-surface-recessed text-foreground-muted rounded-lg hover:bg-border-strong dark:hover:bg-foreground-subtle"
               >
                 Return to Home
               </button>

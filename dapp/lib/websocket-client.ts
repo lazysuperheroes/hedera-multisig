@@ -100,7 +100,8 @@ export class BrowserSigningClient {
     sessionId: string,
     pin: string,
     publicKey?: string,
-    reconnectionToken?: string
+    reconnectionToken?: string,
+    label?: string,
   ): Promise<{ success: boolean; participantId: string; sessionInfo: SessionInfo }> {
     return new Promise((resolve, reject) => {
       try {
@@ -128,11 +129,16 @@ export class BrowserSigningClient {
           this.isReconnecting = false;
 
           // Authenticate (with optional public key for early eligibility validation)
-          // Use reconnection token if available (from previous AUTH_SUCCESS), otherwise use PIN
+          // Use reconnection token if available (from previous AUTH_SUCCESS), otherwise use PIN.
+          // Per-call `label` overrides the constructor-time default —
+          // lets the session page pass a user-supplied display name
+          // collected at /join after the BrowserSigningClient was
+          // already constructed with the generic fallback.
+          const effectiveLabel = (label && label.trim()) || this.options.label || undefined;
           const authPayload: Record<string, unknown> = {
             sessionId,
             role: 'participant',
-            label: this.options.label || undefined,
+            label: effectiveLabel,
             publicKey: publicKey || undefined,
           };
 

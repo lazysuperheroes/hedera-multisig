@@ -728,6 +728,25 @@ class MultiSigWebSocketServer {
         }));
         return;
       }
+      // Stale-token fallback: if the reconnection token didn't match
+      // (server restarted, session reset between ceremonies, browser
+      // cached an obsolete token from a prior coordinator) BUT the
+      // client also supplied a valid PIN, treat this as a fresh join
+      // rather than a hard rejection. Without this, users who go back
+      // to /join with the same connection string after a previous
+      // ceremony see "invalid credentials" even though their PIN is
+      // still good — because the dApp's hook prefers the cached
+      // reconnectionToken at AUTH time.
+      if (!authenticated && pin && !isCoordinator && !isAgent) {
+        authenticated = await this.sessionManager.authenticate(sessionId, pin);
+        // Don't set reconnectedParticipantId — the existing
+        // participant entry is now orphaned; treat the connection as
+        // a fresh participant so a new reconnection token gets minted.
+        if (authenticated) {
+          reconnectedParticipantId = null;
+          this.log.info('Stale reconnection token; falling back to PIN auth', { sessionId, clientIp });
+        }
+      }
     } else if (isCoordinator) {
       // Coordinator must provide coordinatorToken alongside PIN
       authenticated = await this.sessionManager.authenticateCoordinator(sessionId, pin, coordinatorToken);

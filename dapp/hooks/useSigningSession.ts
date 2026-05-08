@@ -356,6 +356,10 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
           updatedParticipants[existingIndex] = {
             ...updatedParticipants[existingIndex],
             status: 'connected',
+            // Refresh label too — the server's broadcast carries it
+            // and a participant's display name might have just been
+            // set on a fresh AUTH (e.g. they reconnected with --label).
+            label: data.label || updatedParticipants[existingIndex].label,
           };
         } else {
           // Add new participant
@@ -365,6 +369,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
               id: data.participantId,
               publicKey: null,
               status: 'connected',
+              label: data.label || undefined,
               joinedAt: Date.now(),
             },
           ];
@@ -495,7 +500,8 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
       sessionId: string,
       pin: string,
       publicKey?: string,
-      reconnectionToken?: string
+      reconnectionToken?: string,
+      label?: string,
     ) => {
       // Recreate client if it was cleaned up
       if (!clientRef.current) {
@@ -514,7 +520,8 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
           sessionId,
           pin,
           publicKey,
-          reconnectionToken
+          reconnectionToken,
+          label,
         );
         return result;
       } catch (error) {

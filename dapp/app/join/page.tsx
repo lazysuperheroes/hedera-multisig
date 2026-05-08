@@ -19,6 +19,7 @@ function JoinPageContent() {
     serverUrl: '',
     sessionId: '',
     pin: '',
+    label: '',
   });
   const [connectionString, setConnectionString] = useState('');
   const [showManualForm, setShowManualForm] = useState(false);
@@ -34,7 +35,7 @@ function JoinPageContent() {
 
     if (server && session) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setFormData({ serverUrl: server, sessionId: session, pin: pin || '' });
+      setFormData((prev) => ({ ...prev, serverUrl: server, sessionId: session, pin: pin || '' }));
       setShowManualForm(true);
     }
   }, [searchParams]);
@@ -77,11 +78,12 @@ function JoinPageContent() {
 
     const parsed = parseConnectionString(value);
     if (parsed) {
-      setFormData({
+      setFormData((prev) => ({
+        ...prev,
         serverUrl: parsed.serverUrl,
         sessionId: parsed.sessionId,
         pin: parsed.pin || '',
-      });
+      }));
       setShowManualForm(true);
     } else {
       setParseError("This doesn't look like a valid connection string. It should start with hmsc:");
@@ -95,11 +97,12 @@ function JoinPageContent() {
         const parsed = parseConnectionString(text.trim());
         if (parsed) {
           setConnectionString(text.trim());
-          setFormData({
+          setFormData((prev) => ({
+            ...prev,
             serverUrl: parsed.serverUrl,
             sessionId: parsed.sessionId,
             pin: parsed.pin || '',
-          });
+          }));
           setShowManualForm(true);
           setParseError(null);
         } else {
@@ -116,11 +119,12 @@ function JoinPageContent() {
     const parsed = parseConnectionString(data.trim());
     if (parsed) {
       setConnectionString(data.trim());
-      setFormData({
+      setFormData((prev) => ({
+        ...prev,
         serverUrl: parsed.serverUrl,
         sessionId: parsed.sessionId,
         pin: parsed.pin || '',
-      });
+      }));
       setShowManualForm(true);
       setParseError(null);
     } else {
@@ -319,6 +323,23 @@ function JoinPageContent() {
                   </p>
                 )}
               </div>
+
+              {/* Optional display label so other participants and the
+                  coordinator see who's signing instead of a generic
+                  "Participant" row. CLI signers have always supplied
+                  this via --label; web signers couldn't until now. */}
+              <Field
+                id="label" name="label"
+                label="Your name (optional)"
+                placeholder="e.g. alice"
+                value={formData.label}
+                onChange={handleChange}
+              />
+              <p className="-mt-4 text-xs text-foreground-subtle">
+                Shown next to your row in the participant list. The coordinator
+                still verifies your signature against the eligible-keys list —
+                this is just a friendly label.
+              </p>
 
               <button
                 type="submit"
