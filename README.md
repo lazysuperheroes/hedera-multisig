@@ -54,7 +54,7 @@ Five workflows total: **Interactive** (real-time, <110s), **Offline**
 - **Server-side cryptographic signature verification** — the coordinator can't accept invalid signatures even if compromised
 - **Three security tiers** for keys: interactive prompt, encrypted files, env vars
 - **TLS/WSS** WebSocket encryption + per-IP and per-session rate limiting
-- **Redis session persistence** for production / horizontally-scaled deployments
+- **Optional Redis session persistence** for the rare case you're horizontally scaling the coordinator (read [the note](#a-note-on---redis) before reaching for this — most deployments don't want it)
 - **TypeScript declarations** included; **Commander.js CLI** with shell completions; structured logging; comprehensive audit log
 
 > **Security note:** v2.1.0 closed three CRITICALs found in the v2.0
@@ -298,7 +298,7 @@ hedera-multisig server \
   --keys "key1,key2,key3" \
   --tls --cert cert.pem --key key.pem
 
-# With Redis persistence
+# With Redis persistence (you probably don't need this — see below)
 hedera-multisig server \
   --redis \
   --redis-host localhost \
@@ -310,6 +310,33 @@ hedera-multisig server \
   --log-file ./logs/server.log \
   --export-logs
 ```
+
+#### A note on `--redis`
+
+The Redis session store is in `optionalDependencies` and the server
+falls back to in-memory automatically if Redis is unreachable. You
+**probably don't need it**. Reasons:
+
+- Sessions are short-lived. Realtime ceremonies finish in minutes;
+  scheduled ceremonies stretch to days but the *coordinator
+  process* is rarely the long-lived component.
+- Coordinator restarts during a ceremony are uncommon, and when they
+  happen, participants can rejoin via PIN cleanly (`2.1.7` added the
+  stale-token fallback).
+- Centralizing session state in Redis introduces a third-party
+  trust surface (Redis sees eligible keys, signatures during the
+  window, transaction bodies) — at odds with this project's "no
+  central trusted intermediary" framing.
+
+You'd reach for `--redis` only if:
+
+1. You want the coordinator to survive restarts mid-ceremony **as
+   a hard requirement** (not just "nice to have"), or
+2. You're horizontally scaling the coordinator behind a load
+   balancer (multiple Node processes sharing session state).
+
+For everything else — your laptop, a single VPS, or a
+docker-on-fly.io deploy — the in-memory store is the right choice.
 
 ### Shell Completions
 

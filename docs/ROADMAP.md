@@ -192,6 +192,50 @@ All initial priorities completed across 20 sessions. See release history below.
 
 ## Future Considerations
 
+### Reconsider the Redis session store
+
+**Status**: Deferred | **Rationale**: Maintenance burden vs concrete demand
+
+`RedisSessionStore` (server/stores/) was built for two scenarios:
+
+1. Coordinator restart mid-ceremony without losing session state.
+2. Horizontal scaling — multiple coordinator processes sharing
+   session state behind a load balancer.
+
+Neither is a load-bearing requirement for the project's three target
+use cases (treasury, agent-to-agent, scheduled txs):
+
+- Sessions are short. Coordinator restart mid-ceremony is uncommon.
+- The PIN-fallback in 2.1.7 means participants can rejoin cleanly
+  even when the server lost their reconnection-token mapping.
+- Single-coordinator deployments (your laptop, a VPS, fly.io) are
+  the realistic shape for the foreseeable future.
+
+The store also conflicts philosophically with the "no central trusted
+intermediary" framing: Redis sees session metadata (eligible keys,
+signatures during the window, transaction bodies), introducing a
+third-party trust surface that operators may not want.
+
+**Watch list** — revisit when any of these are true:
+
+- Real users ask for it (not "we should support enterprise
+  deployments" — actual integrators with real horizontal-scaling
+  needs).
+- Coordinator-restart-during-ceremony becomes a common failure
+  mode (e.g., users running on PaaS platforms that restart
+  containers frequently).
+
+**If we decide to remove it** the deletion is contained: drop
+`server/stores/RedisSessionStore.js`, `test/redis-session-store.test.js`,
+the `--redis` / `--redis-*` CLI flags, the `ioredis` `optionalDependency`,
+and the README "A note on --redis" section. The in-memory `SessionStore`
+already implements the full async interface that the manager expects;
+no other code changes are needed.
+
+For now: keep the code, document it as "you almost certainly don't
+need this" (in README + this entry), and don't invest more in it
+without a real ask.
+
 ### Revisit the single-node freeze default
 
 **Status**: Deferred | **Blocked By**: Wallet behavior change
