@@ -205,6 +205,19 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
           metadata: data.metadata || null,
           contractInterface: data.contractInterface || null,
         },
+        // Reset stale per-transaction status from any previous
+        // ceremony in this session. The server's clearTransactionState
+        // already does this server-side (signatures Map cleared,
+        // signed/rejected → ready), but the dApp's
+        // state.participants[i].status doesn't auto-reset, so a row
+        // that was "Signed" from the previous tx kept that green badge
+        // against the new tx until the next PARTICIPANT_STATUS_UPDATE
+        // landed. Mirror the server's reset rule: signed → ready.
+        // Disconnected stays disconnected (they're filtered from the
+        // visible list by ParticipantList anyway).
+        participants: prev.participants.map((p) =>
+          p.status === 'signed' ? { ...p, status: 'ready' as const } : p,
+        ),
       }));
     });
 

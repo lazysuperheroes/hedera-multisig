@@ -421,33 +421,101 @@ export default function SessionPage({ params }: PageProps) {
         });
       }
 
-      // Extract ALL signatures from the signed transaction
-      // Each entry in _signedTransactions.list corresponds to a different node account ID
-      // and has a unique signature for that node-specific transaction body
-      const signedTxList = signedTx._signedTransactions.list;
-      const allSignatures: string[] = [];
+      // Extract ALL signatures from the signed transaction, then
+      // align them positionally to the ORIGINAL frozen tx bodies the
+      // server has stored.
+      //
+      // The naïve approach — iterate `signedTx._signedTransactions.list`
+      // and trust its order — works when the wallet preserves the
+      // wire-order of the bodies it received. HashPack via WalletConnect
+      // can reorder (and in some versions duplicate) the bodies when it
+      // re-serializes after signing, which leaves signature[i] not
+      // matching bodyBytes[i] from the server's perspective and the
+      // server rejects with "Signature[1] does not match bodyBytes[1]".
+      //
+      // Robust fix: byte-equality match each wallet-returned body
+      // against the original frozen tx's bodies, then place each
+      // signature at the index the server expects. Whatever order the
+      // wallet hands back, the server sees signatures lined up against
+      // its bodyBytes[0..N].
+      const originalTx = Transaction.fromBytes(txBytes);
+      const originalSignedList: Array<{ bodyBytes?: Uint8Array }> =
+        (originalTx as unknown as { _signedTransactions: { list: Array<{ bodyBytes?: Uint8Array }> } })
+          ._signedTransactions.list;
 
+      const signedTxList: Array<{
+        bodyBytes?: Uint8Array;
+        sigMap?: { sigPair?: Array<{ ed25519?: Uint8Array; ECDSASecp256k1?: Uint8Array }> };
+      }> = (signedTx as unknown as {
+        _signedTransactions: {
+          list: Array<{
+            bodyBytes?: Uint8Array;
+            sigMap?: { sigPair?: Array<{ ed25519?: Uint8Array; ECDSASecp256k1?: Uint8Array }> };
+          }>;
+        };
+      })._signedTransactions.list;
+
+      // Hex-encode each original body so we can map walletBody → originalIndex.
+      const toHex = (bytes: Uint8Array | undefined): string => {
+        if (!bytes) return '';
+        return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+      };
+      const originalIndexByBody = new Map<string, number>();
+      originalSignedList.forEach((entry, idx) => {
+        const key = toHex(entry.bodyBytes);
+        if (key) originalIndexByBody.set(key, idx);
+      });
+
+      const allSignatures: string[] = new Array(originalSignedList.length).fill('');
+      let placed = 0;
       for (let i = 0; i < signedTxList.length; i++) {
-        const signatureMap = signedTxList[i].sigMap;
-        if (!signatureMap || !signatureMap.sigPair || signatureMap.sigPair.length === 0) {
-          throw new Error(`No signatures found in signed transaction entry ${i}`);
+        const entry = signedTxList[i];
+        const sigPair = entry.sigMap?.sigPair?.[0];
+        const signature = sigPair?.ed25519 || sigPair?.ECDSASecp256k1;
+        if (!signature || signature.length === 0) {
+          // Some bodies may legitimately come back unsigned by the
+          // wallet — skip rather than throw. We only need at least
+          // one valid signature for the legacy single-sig path; for
+          // the multi-sig path we'll fail below if not all slots
+          // get filled.
+          continue;
         }
-
-        const sigPair = signatureMap.sigPair[0];
-        const signature = sigPair.ed25519 || sigPair.ECDSASecp256k1;
-        if (!signature) {
-          throw new Error(`Invalid signature format in entry ${i}`);
+        const originalIdx = originalIndexByBody.get(toHex(entry.bodyBytes));
+        if (originalIdx === undefined) {
+          // The wallet returned a body that doesn't correspond to any
+          // of the original bodies. That means the wallet re-built
+          // the transaction (different node selection / timestamps /
+          // freeze) — its signatures cannot be applied to our frozen
+          // bytes at all.
+          throw new Error(
+            `Wallet-returned body[${i}] does not match any original body — ` +
+            `the wallet appears to have re-frozen the transaction. The ` +
+            `coordinator must re-inject for the wallet to sign the same bytes.`,
+          );
         }
-
-        allSignatures.push(Buffer.from(signature).toString('base64'));
+        allSignatures[originalIdx] = Buffer.from(signature).toString('base64');
+        placed += 1;
       }
 
-      if (allSignatures.length === 0) {
-        throw new Error('No signatures extracted from signed transaction');
+      if (placed === 0) {
+        throw new Error('Wallet returned no usable signatures');
       }
 
-      // For single-node transactions, send single signature; for multi-node, send array
-      const signatureData = allSignatures.length === 1 ? allSignatures[0] : allSignatures;
+      // Multi-node freeze: every body must have a signature. If the
+      // wallet only signed a subset, fall back to the legacy single-
+      // sig path which the server tolerates against bodyBytes[0].
+      let signatureData: string | string[];
+      if (placed === originalSignedList.length) {
+        signatureData = allSignatures;
+      } else {
+        // Find the first non-empty signature — that's our single-sig
+        // submission. Server will verify it against bodyBytes[0].
+        const firstNonEmpty = allSignatures.find((s) => s !== '');
+        if (!firstNonEmpty) {
+          throw new Error('No signatures placed at any body index');
+        }
+        signatureData = firstNonEmpty;
+      }
       const publicKey = wallet.publicKey!;
 
       toast.success('Signature Created', 'Submitting to coordinator...');
