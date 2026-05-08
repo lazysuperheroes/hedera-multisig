@@ -491,6 +491,26 @@ class MultiSigWebSocketServer {
             await this._handleTransactionInject(sessionId, message);
             break;
 
+          case 'SCHEDULE_ANNOUNCE':
+            // HIP-423 scheduled tx: the coordinator already submitted
+            // the ScheduleCreateTransaction to the network and got a
+            // scheduleId back. They're announcing it to the session so
+            // participants know what to sign. The server doesn't broker
+            // the schedule itself; it just distributes the announcement.
+            if (!isCoordinator) {
+              this.log.warn('Non-coordinator attempted SCHEDULE_ANNOUNCE', { sessionId, participantId });
+              ws.send(JSON.stringify({
+                type: 'ERROR',
+                payload: {
+                  message: 'Only the coordinator can announce a schedule',
+                  code: ERROR_CODES.NOT_COORDINATOR
+                }
+              }));
+              break;
+            }
+            await this._handleScheduleAnnounce(sessionId, message);
+            break;
+
           case 'TRANSACTION_REJECTED':
             await this._handleTransactionRejected(sessionId, participantId, message);
             break;
@@ -889,6 +909,19 @@ class MultiSigWebSocketServer {
             // picking fields and accidentally dropped this — the dApp
             // hook tries to seed `state.participants` from it.
             participants: sessionInfo.participants,
+            // HIP-423 scheduled-mode context. Realtime sessions land
+            // with mode='realtime' + the schedule fields all null. A
+            // late joiner to a scheduled session needs these to render
+            // the long-window UI immediately, without waiting for a
+            // SCHEDULE_CREATED broadcast that already fired.
+            mode: sessionInfo.mode || 'realtime',
+            scheduleId: sessionInfo.scheduleId || null,
+            scheduleExpirationTime: sessionInfo.scheduleExpirationTime || null,
+            scheduleMemo: sessionInfo.scheduleMemo || null,
+            schedulePayerAccountId: sessionInfo.schedulePayerAccountId || null,
+            scheduleAdminKey: sessionInfo.scheduleAdminKey || null,
+            innerTxDetails: sessionInfo.innerTxDetails || null,
+            innerTxBase64: sessionInfo.innerTxBase64 || null,
             expiresAt: sessionInfo.expiresAt
           }
         }
@@ -1463,6 +1496,98 @@ class MultiSigWebSocketServer {
           : 'Coordinator reset the transaction. Session is ready for a new injection.'
       }
     });
+  }
+
+  /**
+   * Handle a coordinator announcing a HIP-423 schedule they just
+   * created on the network.
+   *
+   * The coordinator's wallet (or CLI operator) submitted the
+   * ScheduleCreateTransaction to Hedera, paid the fee, got back a
+   * scheduleId. They send us this announcement so we can:
+   *   1. Stamp the session as scheduled-mode (`mode: 'scheduled'`),
+   *      which the manager already supports for timeout extensions.
+   *   2. Persist the scheduleId on the session for late joiners.
+   *   3. Broadcast SCHEDULE_CREATED to every participant — they look
+   *      up the schedule on mirror node, decode the inner tx, and
+   *      submit their own ScheduleSignTransaction at their leisure.
+   *
+   * Distinct from TRANSACTION_INJECT: there's no signature collection
+   * over the WebSocket. Mirror node tracks "schedule has N signatures,
+   * executed yes/no". The WS session is just a coordination channel
+   * for the announcement + status pings.
+   *
+   * @private
+   */
+  async _handleScheduleAnnounce(sessionId, message) {
+    try {
+      const {
+        scheduleId,
+        innerTxDetails,    // pre-decoded inner-tx fields for the review screen
+        innerTxBase64,     // raw scheduled-transaction body bytes (for clients that want to re-decode)
+        expirationTime,    // seconds-since-epoch when the schedule expires
+        scheduleMemo,
+        payerAccountId,
+        adminKey,
+      } = message.payload || {};
+
+      if (!scheduleId || typeof scheduleId !== 'string') {
+        throw new Error('SCHEDULE_ANNOUNCE requires a `scheduleId` string');
+      }
+
+      const session = await this.sessionManager.store.getSession(sessionId);
+      if (!session) {
+        throw new Error(`Session ${sessionId} not found — cannot announce schedule`);
+      }
+
+      // Promote to scheduled mode + stash scheduleId on session.
+      // SigningSessionManager already special-cases mode='scheduled'
+      // for timeout extension; the rest is store-level state we
+      // reuse on broadcast and reconnect.
+      session.mode = 'scheduled';
+      session.scheduleId = scheduleId;
+      session.scheduleAnnouncedAt = Date.now();
+      session.scheduleExpirationTime = expirationTime || null;
+      session.scheduleMemo = scheduleMemo || null;
+      session.schedulePayerAccountId = payerAccountId || null;
+      session.scheduleAdminKey = adminKey || null;
+      session.innerTxDetails = innerTxDetails || null;
+      session.innerTxBase64 = innerTxBase64 || null;
+
+      this.log.info('Schedule announced', {
+        sessionId,
+        scheduleId,
+        expirationTime: expirationTime || null,
+      });
+      if (this.options.verbose) {
+        const expiresIn = expirationTime
+          ? `${Math.round((expirationTime * 1000 - Date.now()) / 3_600_000)}h`
+          : 'unspecified';
+        console.log(chalk.cyan(
+          `\n📅 Schedule announced: ${scheduleId} (expires in ~${expiresIn})\n` +
+          `   Participants will sign via ScheduleSignTransaction at their convenience.\n`
+        ));
+      }
+
+      await this.broadcastToSession(sessionId, {
+        type: 'SCHEDULE_CREATED',
+        payload: {
+          scheduleId,
+          expirationTime: expirationTime || null,
+          scheduleMemo: scheduleMemo || null,
+          payerAccountId: payerAccountId || null,
+          adminKey: adminKey || null,
+          innerTxDetails: innerTxDetails || null,
+          innerTxBase64: innerTxBase64 || null,
+          announcedAt: session.scheduleAnnouncedAt,
+        },
+      });
+    } catch (error) {
+      this.sendToCoordinator(sessionId, {
+        type: 'INJECTION_FAILED',
+        payload: { message: error.message, code: error.code || ERROR_CODES.TRANSACTION_INJECTION_FAILED },
+      });
+    }
   }
 
   /**

@@ -235,6 +235,18 @@ class SigningSessionManager {
       participants: this._formatParticipants(session),
       signatures: this._formatSignatures(session),
       stats: session.stats,
+      // Surface the session mode + any HIP-423 schedule context so a
+      // late joiner can render the scheduled-mode UI immediately
+      // instead of having to wait for a SCHEDULE_CREATED broadcast
+      // that already fired before they connected.
+      mode: session.mode || 'realtime',
+      scheduleId: session.scheduleId || null,
+      scheduleExpirationTime: session.scheduleExpirationTime || null,
+      scheduleMemo: session.scheduleMemo || null,
+      schedulePayerAccountId: session.schedulePayerAccountId || null,
+      scheduleAdminKey: session.scheduleAdminKey || null,
+      innerTxDetails: session.innerTxDetails || null,
+      innerTxBase64: session.innerTxBase64 || null,
       createdAt: session.createdAt,
       expiresAt: session.expiresAt
     };

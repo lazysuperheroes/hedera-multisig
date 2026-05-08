@@ -19,6 +19,14 @@ const CLIENT_MESSAGES = {
   TRANSACTION_REJECTED: 'TRANSACTION_REJECTED',
   EXECUTE_TRANSACTION: 'EXECUTE_TRANSACTION',
   RESET_TRANSACTION: 'RESET_TRANSACTION', // Coordinator: abandon in-flight tx, return session to 'waiting'
+  // HIP-423 scheduled-tx coordination. The coordinator submits the
+  // ScheduleCreateTransaction directly to the network (paying fee
+  // from the wallet that's connected to /create), receives a
+  // scheduleId, then announces it to the session via this message.
+  // The server doesn't broker the schedule itself — it just
+  // distributes the scheduleId so participants know what to sign.
+  // Mirror node is source of truth for schedule status.
+  SCHEDULE_ANNOUNCE: 'SCHEDULE_ANNOUNCE',
   PING: 'PING',
 };
 
@@ -38,6 +46,11 @@ const SERVER_MESSAGES = {
   TRANSACTION_EXPIRED: 'TRANSACTION_EXPIRED',
   TRANSACTION_RESET: 'TRANSACTION_RESET', // Broadcast: coordinator abandoned the in-flight tx; session back to 'waiting'
   TRANSACTION_REJECTED: 'TRANSACTION_REJECTED',
+  // Server-side broadcast of a coordinator's SCHEDULE_ANNOUNCE.
+  // Carries scheduleId + decoded inner-tx fields so participants can
+  // review what they're being asked to sign without re-fetching from
+  // the network. Async/long-window — no 120s pressure.
+  SCHEDULE_CREATED: 'SCHEDULE_CREATED',
   PARTICIPANT_CONNECTED: 'PARTICIPANT_CONNECTED',
   PARTICIPANT_READY: 'PARTICIPANT_READY',
   PARTICIPANT_DISCONNECTED: 'PARTICIPANT_DISCONNECTED',
