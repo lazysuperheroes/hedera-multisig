@@ -567,10 +567,23 @@ export default function SessionPage({ params }: PageProps) {
       );
 
       if (placed === 0) {
+        // Most common cause: HashPack appears to re-freeze
+        // ContractExecuteTransaction internally before signing —
+        // applying its own gas/fee/timestamp adjustments — so its
+        // signatures are valid against ITS frozen bytes but not
+        // against the coordinator's stored bytes. HBAR transfers
+        // don't hit this because the wallet signs them verbatim.
+        // The actionable fix is single-node freeze: with only one
+        // body in the multi-node array, the wallet's "improvement"
+        // either matches exactly or stays compatible with the
+        // server's existing single-node-downgrade fallback.
         throw new Error(
-          `Wallet returned ${signedTxList.length} signatures but none verified against the original transaction bodies. ` +
-          `This usually means the wallet re-froze the transaction with different bytes (different node selection or timestamps). ` +
-          `The coordinator may need to re-inject.`,
+          `Wallet returned ${signedTxList.length} signatures but none verified against the original transaction bodies.\n\n` +
+          `This typically happens with contract calls when the wallet (e.g. HashPack) re-freezes the ` +
+          `transaction internally with its own gas/fee/timestamp adjustments before signing.\n\n` +
+          `Ask the coordinator to re-inject with single-node freeze (set "Subset size" to 1, or use ` +
+          `"Specific" with one node id). For ContractExecuteTransaction the dApp's /create page now ` +
+          `defaults to subsetSize=1, so refreshing the coordinator and re-injecting should resolve this.`,
         );
       }
 
