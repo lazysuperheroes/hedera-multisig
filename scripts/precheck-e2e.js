@@ -191,8 +191,8 @@ function checkNgrok() {
   } else {
     warn(
       'NGROK_AUTH_TOKEN',
-      'not set. Required only for remote-participant tests with `--tunnel ngrok`. ' +
-      'Skip if using `--no-tunnel` or `--tunnel localtunnel`. ' +
+      'not set. Required only for remote-participant tests with `--tunnel-provider ngrok` (or the default --tunnel-provider auto when ngrok happens to win). ' +
+      'Skip if using `--no-tunnel` or `--tunnel-provider localtunnel`. ' +
       'Sign up: https://dashboard.ngrok.com/signup → token at https://dashboard.ngrok.com/get-started/your-authtoken'
     );
   }

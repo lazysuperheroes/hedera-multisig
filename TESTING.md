@@ -75,7 +75,7 @@ create the threshold account themselves — no separate "test accounts" step.
 - Operator balance ≥ 30 ℏ (covers all three walkthroughs: ~6 ℏ each for hbar + dapp + ~10 ℏ for contract; 5 ℏ minimum for HBAR walkthrough alone)
 - `dapp/.env.local` exists with `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`
 - `dapp/node_modules` installed (warns if missing — only needed for browser tests)
-- `NGROK_AUTH_TOKEN` set (warns; only needed for `--tunnel ngrok`)
+- `NGROK_AUTH_TOKEN` set (warns; only needed for `--tunnel-provider ngrok`)
 - `.testenv.json` present (informational; only relevant for Phase 2.6)
 
 Exit code is 0 if all required checks pass (warnings are advisory). Re-run
@@ -237,7 +237,7 @@ optionally reuses Scenario 11's keys + threshold account
 (`cp ../walkthrough-hbar/walkthrough-keys.* . && cp ../walkthrough-hbar/walkthrough-state.json .`).
 
 What it tests:
-- HTTPS dApp ⇒ WSS coordinator constraint (the `--tunnel ngrok` path)
+- HTTPS dApp ⇒ WSS coordinator constraint (the `--tunnel-provider ngrok` path)
 - `--allowed-origins https://testnet-multisig.lazysuperheroes.com` browser-origin allowlist
 - HashPack key import + WalletConnect signing (real wallet, real browser)
 - **Hybrid signing**: alice in HashPack (web), bob via CLI participant — same ceremony, same coordinator, same multi-node freeze
@@ -256,7 +256,7 @@ node 02-create-threshold-account.js
 npx hedera-multisig server \
   -t 2 \
   -k "$(node -p "require('./walkthrough-state.json').publicKeys.join(',')")" \
-  --port 3001 --tunnel ngrok \
+  --port 3001 --tunnel-provider ngrok \
   --allowed-origins https://testnet-multisig.lazysuperheroes.com
 
 # Terminal 2 — coordinator UI on the public dApp
@@ -312,7 +312,7 @@ NGROK_AUTH_TOKEN=<your-token> npx hedera-multisig server \
   -t 2 \
   -k "<key1>,<key2>,<key3>" \
   --port 3001 \
-  --tunnel ngrok
+  --tunnel-provider ngrok
 
 # Output should include:
 #   Public URL: wss://abc123.ngrok-free.app
@@ -331,7 +331,7 @@ Expected:
 - ✅ Remote participant connects without DNS / firewall issues
 - ✅ Transaction completes; check `06-verify-on-mirror.js`
 
-If `--tunnel ngrok` fails: fall back to `--tunnel localtunnel` (no auth needed; less reliable). See [Networking & tunnels](#networking--tunnels-ngrok).
+If `--tunnel-provider ngrok` fails: fall back to `--tunnel-provider localtunnel` (no auth needed; less reliable). See [Networking & tunnels](#networking--tunnels-ngrok).
 
 ### 2.2 — Mixed CLI + dApp + HashPack
 
@@ -530,30 +530,35 @@ The coordinator server has three tunnel modes:
 
 | Mode | Flag | Auth required | Use when |
 |------|------|---------------|----------|
-| ngrok | `--tunnel ngrok` | Yes — auth token | Remote participants on different networks; production-ish demo |
-| localtunnel | `--tunnel localtunnel` | No | Quick public URL without signup; less reliable, no custom domains |
+| ngrok | `--tunnel-provider ngrok` | Yes — auth token | Remote participants on different networks; production-ish demo |
+| localtunnel | `--tunnel-provider localtunnel` | No | Quick public URL without signup; less reliable, no custom domains |
 | none | `--no-tunnel` | No | All participants on the same LAN or running locally |
 
 ### Getting an ngrok auth token (free)
 
 1. Sign up: **https://dashboard.ngrok.com/signup** — email + password, no credit card.
 2. Copy your token: **https://dashboard.ngrok.com/get-started/your-authtoken**
-3. Install it via **one** of these:
+3. Set `NGROK_AUTH_TOKEN`:
 
    ```bash
-   # Option A — env var (recommended for testing; the server reads this)
+   # Recommended: put it in the project root .env (the CLI walks up from
+   # cwd to find it). One line:
+   #   NGROK_AUTH_TOKEN=2abc...
+
+   # Or export for the current shell:
    export NGROK_AUTH_TOKEN=2abc...   # Linux/macOS
    $env:NGROK_AUTH_TOKEN="2abc..."   # PowerShell
    set NGROK_AUTH_TOKEN=2abc...      # Windows cmd
-
-   # Option B — persist in ngrok's config (one-time, machine-wide)
-   ngrok config add-authtoken 2abc...
    ```
+
+   That's it — no separate `ngrok` CLI install, no
+   `ngrok config add-authtoken` step. The coordinator uses the official
+   `@ngrok/ngrok` SDK and passes the token directly.
 
 4. Run the server:
 
    ```bash
-   npx hedera-multisig server -t 2 -k "..." --tunnel ngrok
+   npx hedera-multisig server -t 2 -k "..." --tunnel-provider ngrok
    ```
 
    Output should include `Public URL: wss://<random>.ngrok-free.app`. The
@@ -562,15 +567,23 @@ The coordinator server has three tunnel modes:
 
 ### Common ngrok issues
 
-- **`ERR_NGROK_4018`: tunnel session limit reached** — the free tier allows
-  one active tunnel per account. Kill any other ngrok sessions, or upgrade.
-- **`failed to start tunnel: authentication failed`** — wrong token. Re-copy
-  from the dashboard; tokens are ~50 chars.
-- **Browser shows "ngrok warning page"** — the free tier interstitial. Click
-  through; participants only see this on first connect from a given
-  browser.
-- **No public URL printed at all** — server fell back to localtunnel.
-  Check the log for the auth-token error and re-export.
+- **`ngrok failed (ERR_NGROK_107): … authtoken … is invalid`** — token
+  was rejected by ngrok's server (rotated, revoked, or team account
+  removed access). Get a fresh one from the dashboard and update
+  `NGROK_AUTH_TOKEN`.
+- **`ngrok failed (ERR_NGROK_105): … does not look like a proper ngrok
+  authtoken`** — value is malformed (truncated, extra whitespace, wrapped
+  in quotes). Re-copy.
+- **`ngrok failed (ERR_NGROK_4018): tunnel session limit reached`** — the
+  free tier allows one active tunnel per account. Close other agents at
+  https://dashboard.ngrok.com/agents and retry.
+- **Browser shows "ngrok warning page"** — the free tier interstitial.
+  Click through; participants only see this on first connect from a
+  given browser.
+- **No public URL printed at all** — auto-mode fell back to localtunnel.
+  The server log shows the underlying error from ngrok; address it and
+  re-run with `--tunnel-provider ngrok` (which is fatal-on-failure, so
+  the underlying message can't be missed).
 
 For production deploys, see [`docs/COORDINATOR_GUIDE.md`](./docs/COORDINATOR_GUIDE.md)
 "Trust model" before exposing a coordinator on the public internet.
@@ -626,7 +639,7 @@ from the portal — they must come from the same account.
 
 Check the connection string matches what the coordinator printed:
 - `--no-tunnel` → `ws://localhost:3001` (or whichever `--port`)
-- `--tunnel ngrok` → `wss://<random>.ngrok-free.app` (changes per session)
+- `--tunnel-provider ngrok` → `wss://<random>.ngrok-free.app` (changes per session)
 
 If using a tunnel, also check the participant's network can reach the
 public URL (corporate firewalls sometimes block ngrok subdomains).

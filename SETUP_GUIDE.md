@@ -913,7 +913,10 @@ node cli/participant.js --url wss://... --session abc123 --pin 123456 --key cli-
 **Solution:** Transaction took > 120 seconds from injection to execution
 
 **Issue:** "Tunnel connection failed"
-**Solution:** Set NGROK_AUTH_TOKEN or use --no-tunnel for local-only
+**Solution:** Set `NGROK_AUTH_TOKEN` (free at
+https://dashboard.ngrok.com/get-started/your-authtoken) in your shell
+or repo-root `.env`, or use `--no-tunnel` for local-only. Detailed
+setup + error-code reference: [`TESTING.md` → Networking & tunnels (ngrok)](./TESTING.md#networking--tunnels-ngrok).
 
 ### Getting Help
 

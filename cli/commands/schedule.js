@@ -67,7 +67,9 @@ Examples:
       const jsonOutput = new JsonOutput(options.json || globalOpts.json);
 
       try {
-        require('dotenv').config();
+        // Walk up from cwd so running this command from a walkthrough
+        // subdirectory still finds the repo-root .env.
+        require('../utils/cliUtils').loadDotenvFromAncestors();
         const operatorId = process.env.OPERATOR_ID;
         const operatorKey = process.env.OPERATOR_KEY;
         const network = process.env.HEDERA_NETWORK || 'testnet';
@@ -150,7 +152,9 @@ Examples:
       const jsonOutput = new JsonOutput(options.json || globalOpts.json);
 
       try {
-        require('dotenv').config();
+        // Walk up from cwd so running this command from a walkthrough
+        // subdirectory still finds the repo-root .env.
+        require('../utils/cliUtils').loadDotenvFromAncestors();
         const operatorId = process.env.OPERATOR_ID;
         const operatorKey = process.env.OPERATOR_KEY;
         const network = process.env.HEDERA_NETWORK || 'testnet';
@@ -231,7 +235,9 @@ Examples:
       const jsonOutput = new JsonOutput(options.json || globalOpts.json);
 
       try {
-        require('dotenv').config();
+        // Walk up from cwd so running this command from a walkthrough
+        // subdirectory still finds the repo-root .env.
+        require('../utils/cliUtils').loadDotenvFromAncestors();
         const operatorId = process.env.OPERATOR_ID;
         const operatorKey = process.env.OPERATOR_KEY;
         const network = process.env.HEDERA_NETWORK || 'testnet';

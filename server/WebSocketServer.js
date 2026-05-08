@@ -238,8 +238,24 @@ class MultiSigWebSocketServer {
           // Start heartbeat for connection health monitoring
           this._startHeartbeat();
 
-          // Start tunnel if enabled
+          // Start tunnel if enabled.
+          //
+          // Soft-fallback semantics: when the user explicitly chose a
+          // provider (`--tunnel-provider ngrok` / `localtunnel`), a
+          // tunnel failure is fatal — the user clearly wanted a
+          // public URL, and silently downgrading to local-only would
+          // hand them a connection string that says `ws://localhost`
+          // which only works when the participant is on the same
+          // machine. Better to fail loudly here so the operator can
+          // fix the underlying issue (usually missing
+          // NGROK_AUTH_TOKEN).
+          //
+          // For the default `auto` provider, keep the soft-fallback —
+          // someone running quick local CLI tests without a hosted
+          // dApp shouldn't be forced to set up ngrok.
           if (this.options.tunnel && this.options.tunnel.enabled) {
+            const provider = this.options.tunnel.provider || 'auto';
+            const isExplicitProvider = provider !== 'auto';
             try {
               const publicUrl = await this._startTunnel(address.port);
               result.publicUrl = publicUrl;
@@ -252,9 +268,29 @@ class MultiSigWebSocketServer {
                 console.log(chalk.cyan('─'.repeat(50)) + '\n');
               }
             } catch (error) {
+              if (isExplicitProvider) {
+                // Stop the WSS we just bound; the CLI will see this
+                // rejection and exit with the underlying message.
+                try { await new Promise((resolve) => this.server.close(resolve)); } catch { /* ignore */ }
+                try { this.wss.close(); } catch { /* ignore */ }
+                const err = new Error(
+                  `Tunnel failed (--tunnel-provider ${provider}): ${error.message}\n` +
+                  `   Three ways forward:\n` +
+                  `     1. Run the tunnel yourself in another terminal:\n` +
+                  `          ngrok http 3001          # or whatever port you used\n` +
+                  `        then pass its printed wss URL via --tunnel-url:\n` +
+                  `          --tunnel-url wss://abc123.ngrok-free.app\n` +
+                  `     2. Try the alternate provider: --tunnel-provider localtunnel\n` +
+                  `     3. Skip tunnels entirely: --no-tunnel (only works when the\n` +
+                  `        signers are on the same machine as the coordinator).`
+                );
+                err.code = 'TUNNEL_REQUIRED';
+                reject(err);
+                return;
+              }
               if (this.options.verbose) {
                 console.log(chalk.yellow('⚠️  Tunnel failed:'), error.message);
-                console.log(chalk.yellow('   Continuing with local-only access\n'));
+                console.log(chalk.yellow('   Continuing with local-only access (--tunnel-provider auto soft-fallback)\n'));
               }
             }
           }
@@ -1620,39 +1656,114 @@ class MultiSigWebSocketServer {
   }
 
   /**
-   * Start ngrok tunnel
+   * Start an ngrok tunnel using the official @ngrok/ngrok SDK.
+   *
+   * Background: this used to depend on the unmaintained `ngrok` npm
+   * wrapper (5.0.0-beta.2, last published 2022). That wrapper drove
+   * a bundled v3 binary via its REST API, which has since drifted —
+   * every POST to /api/tunnels with a fresh UUID name returned
+   * "tunnel <uuid> already exists", surfaced as the generic
+   * "invalid tunnel configuration". On top of that, the wrapper
+   * required users to run `ngrok config add-authtoken <token>` once
+   * separately from setting NGROK_AUTH_TOKEN, because the bundled
+   * binary's config file was distinct from the wrapper's options.
+   *
+   * The official @ngrok/ngrok SDK (napi-rs binding to libngrok-rs):
+   *   - takes the authtoken as a function argument (no separate config step),
+   *   - returns a Listener with .url() and .close(),
+   *   - exposes structured error info (err.code, err.errorCode like
+   *     ERR_NGROK_105/107/108/4018), so we can surface specific guidance.
+   *
    * @private
    */
   async _startNgrokTunnel(port) {
-    const ngrok = require('ngrok');
+    const ngrok = require('@ngrok/ngrok');
 
     const authtoken = this.options.tunnel.authToken || process.env.NGROK_AUTH_TOKEN;
     const subdomain = this.options.tunnel.subdomain;
 
-    const ngrokOptions = {
-      addr: port,
-      proto: 'http'
-    };
-
-    if (authtoken) {
-      ngrokOptions.authtoken = authtoken;
+    if (!authtoken) {
+      throw new Error(
+        'NGROK_AUTH_TOKEN environment variable is not set. ngrok requires ' +
+        'an auth token (free at https://dashboard.ngrok.com/get-started/your-authtoken). ' +
+        'Either export NGROK_AUTH_TOKEN=<your-token> in your shell or put it in ' +
+        '.env at the repo root, or pass --tunnel-provider localtunnel to skip ' +
+        'ngrok, or pass --no-tunnel for local-only access.'
+      );
     }
 
+    const ngrokOptions = {
+      addr: port,
+      authtoken,
+    };
     if (subdomain) {
       ngrokOptions.subdomain = subdomain;
     }
 
+    let listener;
     try {
-      const url = await ngrok.connect(ngrokOptions);
-      this.tunnel = ngrok;
-      this.tunnelType = 'ngrok';
-
-      // Convert http to ws
-      const wsUrl = url.replace('https://', 'wss://').replace('http://', 'ws://');
-      return wsUrl;
+      listener = await ngrok.forward(ngrokOptions);
     } catch (error) {
-      throw new Error(`ngrok failed: ${error.message}`);
+      throw this._explainNgrokError(error);
     }
+
+    const url = listener.url();
+    if (!url) {
+      // Defensive: forward() resolving without a URL would be an SDK bug,
+      // but better to fail with something readable than NPE later.
+      try { await listener.close(); } catch { /* ignore */ }
+      throw new Error('ngrok forward() returned a listener with no URL');
+    }
+
+    this.tunnel = listener;
+    this.tunnelType = 'ngrok';
+    return url.replace('https://', 'wss://').replace('http://', 'ws://');
+  }
+
+  /**
+   * Translate an @ngrok/ngrok error into actionable guidance.
+   *
+   * The SDK throws a JS Error decorated with `code` (a coarse category,
+   * e.g. `'GenericFailure'`) and `errorCode` (the canonical ngrok
+   * code, e.g. `'ERR_NGROK_107'`). We pattern-match on `errorCode`
+   * to add a "what to do next" sentence; everything else falls through
+   * with the SDK's own message, which is usually already informative
+   * (it cites the dashboard URL, names the offending value, etc.).
+   *
+   * @private
+   */
+  _explainNgrokError(error) {
+    const errorCode = error.errorCode || '';
+    const baseMessage = error.message || String(error);
+
+    // Known codes — each one's hint addresses the most common cause.
+    const hints = {
+      ERR_NGROK_105:
+        'The authtoken you supplied is malformed. Double-check NGROK_AUTH_TOKEN ' +
+        'in your environment / .env — copy it fresh from ' +
+        'https://dashboard.ngrok.com/get-started/your-authtoken.',
+      ERR_NGROK_107:
+        'ngrok rejected your authtoken. Common causes: the token was rotated, ' +
+        'the team account it belonged to revoked your access, or the credential ' +
+        'was explicitly revoked. Get a fresh token at ' +
+        'https://dashboard.ngrok.com/get-started/your-authtoken and update ' +
+        'NGROK_AUTH_TOKEN.',
+      ERR_NGROK_108:
+        'Your ngrok account is rate-limited or out of quota. Check ' +
+        'https://dashboard.ngrok.com for active sessions, or wait and retry.',
+      ERR_NGROK_4018:
+        'Your ngrok account already has the maximum number of simultaneous ' +
+        'tunnels open (one on the free tier). Kill any other ngrok sessions ' +
+        '(check https://dashboard.ngrok.com/agents) and retry.',
+    };
+
+    const hint = hints[errorCode];
+    const prefix = errorCode ? `ngrok failed (${errorCode})` : 'ngrok failed';
+    const tail = hint ? `\n\n${hint}` : '';
+    const wrapped = new Error(`${prefix}: ${baseMessage}${tail}`);
+    wrapped.code = error.code;
+    wrapped.errorCode = errorCode;
+    return wrapped;
   }
 
   /**
@@ -1757,9 +1868,13 @@ class MultiSigWebSocketServer {
 
     try {
       if (this.tunnelType === 'ngrok') {
-        const ngrok = require('ngrok');
-        await ngrok.disconnect();
-        await ngrok.kill();
+        // this.tunnel is the @ngrok/ngrok Listener instance.
+        // `.close()` shuts down this specific tunnel; the SDK's
+        // background session is reused process-wide, so we don't
+        // try to kill it (no equivalent of the old wrapper's .kill()).
+        if (this.tunnel && typeof this.tunnel.close === 'function') {
+          await this.tunnel.close();
+        }
       } else if (this.tunnelType === 'localtunnel') {
         this.tunnel.close();
       }

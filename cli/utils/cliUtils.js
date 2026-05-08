@@ -7,7 +7,50 @@
 
 const chalk = require('chalk');
 const path = require('path');
+const fs = require('fs');
 const logger = require('../../shared/logger');
+
+/**
+ * Find and load the nearest `.env` file by walking up from the current
+ * working directory.
+ *
+ * The CLI was previously calling `require('dotenv').config()` with no
+ * path, which uses dotenv's default of `${cwd}/.env`. That broke when
+ * users ran the CLI from a subdirectory (e.g. `examples/walkthrough-dapp/`)
+ * because the project's `.env` lives at the repo root, not in the
+ * subdirectory. Walking up from cwd finds it regardless.
+ *
+ * Search order:
+ *   1. `${cwd}/.env`              ← dotenv's default
+ *   2. `${cwd}/../.env`           ← parent
+ *   3. `${cwd}/../../.env`        ← grandparent (covers examples/walkthrough-X/)
+ *   4. … up to filesystem root
+ *
+ * Caller can override with `path: <explicit>` to bypass the walk.
+ *
+ * @param {Object} [options]
+ * @param {string} [options.path] - Explicit `.env` path; skips the walk.
+ * @returns {string|null} Absolute path of the file loaded, or null if none.
+ */
+function loadDotenvFromAncestors(options = {}) {
+  const dotenv = require('dotenv');
+  if (options.path) {
+    dotenv.config({ path: options.path });
+    return options.path;
+  }
+  let dir = process.cwd();
+  while (true) {
+    const candidate = path.join(dir, '.env');
+    if (fs.existsSync(candidate)) {
+      dotenv.config({ path: candidate });
+      return candidate;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // reached filesystem root
+    dir = parent;
+  }
+  return null;
+}
 
 // Respect NO_COLOR environment variable (https://no-color.org/)
 // and disable colors when stdout is not a TTY (piped output)
@@ -352,6 +395,7 @@ module.exports = {
   getPackageName,
   initializeLogging,
   setupLogExport,
+  loadDotenvFromAncestors,
   VERSION,
   PACKAGE_NAME
 };

@@ -79,7 +79,7 @@ function main() {
   console.log(chalk.yellow('\n⚠  Testnet keys. Delete after the walkthrough — they are gitignored but'));
   console.log(chalk.yellow('   should never be committed or reused on mainnet.'));
 
-  console.log(chalk.bold.cyan('\nNext: node 02-create-threshold-account.js\n'));
+  console.log(chalk.bold.cyan('\nNext: node 02-create-signer-accounts.js\n'));
 }
 
 main();

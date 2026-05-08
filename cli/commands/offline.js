@@ -100,8 +100,9 @@ Environment Variables:
       const jsonOutput = new JsonOutput(options.json || command.parent?.parent?.opts().json);
 
       try {
-        // Load environment
-        require('dotenv').config();
+        // Load environment — walk up from cwd so running this command
+        // from a walkthrough subdirectory still finds the repo-root .env.
+        require('../utils/cliUtils').loadDotenvFromAncestors();
 
         const operatorId = process.env.OPERATOR_ID;
         const operatorKey = process.env.OPERATOR_KEY;
@@ -633,8 +634,9 @@ Environment Variables:
       const jsonOutput = new JsonOutput(options.json || command.parent?.parent?.opts().json);
 
       try {
-        // Load environment
-        require('dotenv').config();
+        // Load environment — walk up from cwd so running this command
+        // from a walkthrough subdirectory still finds the repo-root .env.
+        require('../utils/cliUtils').loadDotenvFromAncestors();
 
         const operatorId = process.env.OPERATOR_ID;
         const operatorKey = process.env.OPERATOR_KEY;

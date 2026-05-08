@@ -18,8 +18,11 @@
 // This file will be removed in a future version.
 console.warn('\x1b[33m⚠️  Deprecation: Use `npx hedera-multisig server` instead of `node cli/server.js`\x1b[0m\n');
 
-// Load environment variables from .env file
-require('dotenv').config();
+// Load environment variables from .env file. Walk up from cwd so
+// running this entrypoint from a subdirectory still finds the
+// repo-root .env (instead of failing silently with NGROK_AUTH_TOKEN /
+// OPERATOR_KEY unset).
+require('./utils/cliUtils').loadDotenvFromAncestors();
 
 const { Client } = require('@hashgraph/sdk');
 const { SigningSessionManager, WebSocketServer } = require('../server');

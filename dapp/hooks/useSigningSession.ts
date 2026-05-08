@@ -368,9 +368,22 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
     };
   }, [options.verbose, options.label]);
 
-  // Connect to session
+  // Connect to session.
+  //
+  // Pass `reconnectionToken` instead of (or alongside) `pin` when
+  // re-attaching to a session that the server has previously
+  // AUTH_SUCCESS'd this client into — the saved-session restore path
+  // on /session/[id]/page.tsx hits this. Without the token the
+  // BrowserSigningClient would AUTH with an empty PIN and the server
+  // would reject for missing credentials.
   const connect = useCallback(
-    async (serverUrl: string, sessionId: string, pin: string, publicKey?: string) => {
+    async (
+      serverUrl: string,
+      sessionId: string,
+      pin: string,
+      publicKey?: string,
+      reconnectionToken?: string
+    ) => {
       // Recreate client if it was cleaned up
       if (!clientRef.current) {
         console.log('Recreating BrowserSigningClient after cleanup...');
@@ -383,7 +396,13 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
       setState((prev) => ({ ...prev, status: 'disconnected', error: null }));
 
       try {
-        const result = await clientRef.current.connect(serverUrl, sessionId, pin, publicKey);
+        const result = await clientRef.current.connect(
+          serverUrl,
+          sessionId,
+          pin,
+          publicKey,
+          reconnectionToken
+        );
         return result;
       } catch (error) {
         setState((prev) => ({

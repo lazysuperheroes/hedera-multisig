@@ -58,7 +58,7 @@ Environment Variables:
       const jsonOutput = new JsonOutput(options.json || globalOpts.json);
 
       try {
-        require('dotenv').config();
+        require('../utils/cliUtils').loadDotenvFromAncestors();
 
         const operatorId = process.env.OPERATOR_ID;
         const operatorKey = process.env.OPERATOR_KEY;
@@ -133,7 +133,7 @@ Environment Variables:
       const jsonOutput = new JsonOutput(options.json || globalOpts.json);
 
       try {
-        require('dotenv').config();
+        require('../utils/cliUtils').loadDotenvFromAncestors();
 
         const operatorId = process.env.OPERATOR_ID;
         const operatorKey = process.env.OPERATOR_KEY;

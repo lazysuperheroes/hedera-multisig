@@ -46,9 +46,18 @@ class SessionStore {
       eligiblePublicKeys: sessionData.eligiblePublicKeys || [],
       expectedParticipants: sessionData.expectedParticipants || sessionData.eligiblePublicKeys?.length || 0,
 
-      // Session metadata
+      // Session metadata.
+      //
+      // `expiresAt` carries the unbounded sentinel: `null` means "no
+      // automatic expiry" (set when the CLI is run with `--timeout 0`).
+      // The cleanup loop and `getSession` both skip null-expiry
+      // sessions; only an explicit `cancelSession` or process exit
+      // will end them. The historical default — 30 minutes — was too
+      // short for treasury-team coordination and was the reason the
+      // banner displayed an arbitrary timeout that the user kept
+      // observing wasn't enforced.
       createdAt: now,
-      expiresAt: now + (sessionData.timeout || this.defaultTimeout),
+      expiresAt: this._computeExpiresAt(sessionData.timeout, now),
       status: sessionData.frozenTransaction ? 'transaction-received' : 'waiting', // waiting, transaction-received, signing, executing, completed, expired, cancelled
 
       // Participant tracking
@@ -94,8 +103,9 @@ class SessionStore {
       return null;
     }
 
-    // Check if expired
-    if (session.expiresAt < Date.now()) {
+    // Check if expired. `expiresAt === null` means the session was
+    // created unbounded (`--timeout 0`) and never auto-expires.
+    if (session.expiresAt !== null && session.expiresAt < Date.now()) {
       session.status = 'expired';
       return session;
     }
@@ -551,6 +561,23 @@ class SessionStore {
   }
 
   /**
+   * Resolve `expiresAt` for a new session.
+   *
+   *   - `timeout === null` → unbounded (returns `null`); cleanup and
+   *     the read-side expiry check both skip null-expiry sessions.
+   *   - `timeout` set (number, ms) → `now + timeout`.
+   *   - `timeout` undefined → fall back to the store's `defaultTimeout`,
+   *     which itself may be `null` for unbounded.
+   *
+   * @private
+   */
+  _computeExpiresAt(timeout, now) {
+    const effective = timeout !== undefined ? timeout : this.defaultTimeout;
+    if (effective === null || effective === 0) return null;
+    return now + effective;
+  }
+
+  /**
    * Timing-safe string comparison (delegates to shared/crypto-utils)
    * @param {string} a - First string
    * @param {string} b - Second string
@@ -587,29 +614,62 @@ class SessionStore {
   }
 
   /**
-   * Clean up expired sessions
+   * Clean up expired sessions.
+   *
+   * Skips sessions with `expiresAt === null` — those are explicitly
+   * unbounded (`--timeout 0`) and live until the process exits.
+   *
+   * For sessions that DO expire, this is also where the messaging
+   * promise gets fulfilled: when the cleanup notices a newly-expired
+   * session, we broadcast SESSION_EXPIRED to **every** participant
+   * (not just the coordinator) and close their sockets. Without this,
+   * the "Session Timeout: 30 minutes" banner was a half-truth — the
+   * session-store object expired but participant CLIs stayed open
+   * indefinitely on TCP heartbeats, and operators saw "users still
+   * connected" overnight when the banner had implied otherwise.
+   *
    * @private
    */
   _cleanupExpiredSessions() {
     const now = Date.now();
 
     for (const [sessionId, session] of this.sessions) {
+      // Unbounded sessions skip the entire expiry/teardown path.
+      if (session.expiresAt === null) continue;
+
       if (session.expiresAt < now && session.status !== 'completed') {
+        const justExpired = session.status !== 'expired';
         session.status = 'expired';
 
-        // Notify coordinator if connected
-        if (session.coordinatorClient) {
-          try {
-            session.coordinatorClient.send(JSON.stringify({
-              type: 'SESSION_EXPIRED',
-              payload: { sessionId }
-            }));
-          } catch (error) {
-            // Ignore send errors
+        // First-time expiry: notify coordinator AND every participant,
+        // then close their sockets so the visible state matches the
+        // banner's claim. Subsequent cleanup ticks (between expiry and
+        // the +5-minute deletion below) skip this block — `justExpired`
+        // is false the second time around.
+        if (justExpired) {
+          const expiredMsg = JSON.stringify({
+            type: 'SESSION_EXPIRED',
+            payload: { sessionId },
+          });
+
+          if (session.coordinatorClient) {
+            try { session.coordinatorClient.send(expiredMsg); } catch { /* ignore */ }
+            try { session.coordinatorClient.close(); } catch { /* ignore */ }
+          }
+
+          if (session.participants && typeof session.participants.forEach === 'function') {
+            for (const participant of session.participants.values()) {
+              const ws = participant && participant.websocket;
+              if (!ws) continue;
+              try { ws.send(expiredMsg); } catch { /* ignore — socket may already be dead */ }
+              try { ws.close(); } catch { /* ignore */ }
+            }
           }
         }
 
-        // Delete after 5 minutes
+        // Delete after 5 minutes (gives reconnecting clients a window
+        // to learn the session is gone before its participantId table
+        // disappears entirely).
         if (session.expiresAt + 300000 < now) {
           this.sessions.delete(sessionId);
         }

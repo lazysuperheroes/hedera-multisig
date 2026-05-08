@@ -19,9 +19,11 @@ module.exports = function(program) {
     .option('-p, --participants <n>', 'Expected number of participants', parseInt)
     .option('--port <port>', 'Server port', (v) => parseInt(v, 10), 3000)
     .option('--host <host>', 'Server host', 'localhost')
-    .option('--timeout <minutes>', 'Session timeout in minutes (default: 30 for realtime sessions)', (v) => parseInt(v, 10), 30)
+    .option('--timeout <minutes>', 'Session timeout in minutes (default: 30 for realtime sessions). Pass 0 for an unbounded session that lives until the server is stopped — recommended when human coordination across signers may take hours.', (v) => parseInt(v, 10), 30)
     .option('--session-timeout <input>', 'Ceremony-session timeout for scheduled-mode sessions. ISO-8601 ("2026-06-30T12:00:00Z") or duration ("30d", "2h"). Default 24h. Match this to your --expiration-time on `schedule create` so the dApp coordinator session doesn\'t expire mid-window. Max ~62 days (HIP-423).')
     .option('--no-tunnel', 'Disable automatic tunnel (local-only)')
+    .option('--tunnel-provider <name>', 'Tunnel provider when --no-tunnel is NOT set: "auto" (default; tries ngrok first if NGROK_AUTH_TOKEN is set, falls back to localtunnel), "ngrok" (force ngrok; requires NGROK_AUTH_TOKEN), or "localtunnel" (force localtunnel).', 'auto')
+    .option('--tunnel-url <wss-url>', 'Use an existing externally-managed tunnel instead of starting one. Skips the embedded ngrok/localtunnel wrappers entirely — you run `ngrok http 3001` (or whatever) yourself, then pass the printed wss:// URL here. Useful when the embedded wrapper hits "invalid tunnel configuration" or you want a stable subdomain.')
     .option('--pin <token>', 'Custom session token (auto-generated if not provided)')
     .option('-n, --network <network>', 'Hedera network (testnet|mainnet)', getDefaultNetwork())
     .option('--tls-cert <path>', 'Path to TLS certificate file (enables WSS)')
@@ -43,12 +45,17 @@ Examples:
   $ hedera-multisig server -t 2 -k "key1,key2" --redis --redis-host redis.example.com
     `)
     .action(async (options, command) => {
-      // Load dependencies
-      require('dotenv').config();
+      // Load dependencies. `loadDotenvFromAncestors` walks up from cwd
+      // looking for a `.env`, so running this CLI from a walkthrough
+      // subdirectory (e.g. examples/walkthrough-dapp/) finds the
+      // repo-root `.env` instead of falling through with operator
+      // creds + NGROK_AUTH_TOKEN unset. Returns the path it loaded
+      // (or null) — useful for verbose-mode diagnostics.
+      const { ExitCodes, JsonOutput, initializeLogging, exitWithError, loadDotenvFromAncestors } = require('../utils/cliUtils');
+      const dotenvPath = loadDotenvFromAncestors();
       const { SigningSessionManager, WebSocketServer } = require('../../server');
       const { createSessionStore } = require('../../server/stores');
       const { generateConnectionString } = require('../../shared/connection-string');
-      const { ExitCodes, JsonOutput, initializeLogging, exitWithError } = require('../utils/cliUtils');
 
       // Get global options from parent command
       const globalOpts = command.optsWithGlobals();
@@ -76,11 +83,40 @@ Examples:
       }
 
       const participants = options.participants || eligibleKeys.length;
-      const timeoutMs = options.timeout * 60000;
+      // `--timeout 0` is the documented opt-in for an unbounded session.
+      // We pass `null` to the store/manager as the sentinel — the cleanup
+      // loop and `getSession` both skip null-expiry sessions, and the
+      // banner below renders an honest "no automatic expiry" line.
+      const timeoutMs = options.timeout === 0 ? null : options.timeout * 60000;
+      const isUnbounded = timeoutMs === null;
+
+      // Validate --tunnel-provider up front so a typo fails before we
+      // bind ports + register signers, not after.
+      const validProviders = ['auto', 'ngrok', 'localtunnel'];
+      if (options.tunnel && !validProviders.includes(options.tunnelProvider)) {
+        console.error(
+          `\n❌ Invalid --tunnel-provider "${options.tunnelProvider}". ` +
+          `Valid values: ${validProviders.join(', ')}.\n`
+        );
+        process.exit(1);
+      }
 
       try {
         console.log(chalk.bold.cyan('\n🚀 Starting Hedera MultiSig Server\n'));
         console.log(chalk.cyan('═'.repeat(60)));
+
+        // Show which .env was loaded so a misconfigured cwd doesn't
+        // become a 5-minute mystery the next time NGROK_AUTH_TOKEN is
+        // missing-but-set.
+        if (dotenvPath) {
+          console.log(chalk.gray(`Loaded .env: ${dotenvPath}`));
+        } else {
+          console.log(chalk.yellow(
+            '⚠  No .env file found by walking up from cwd. ' +
+            'Set OPERATOR_ID / OPERATOR_KEY / NGROK_AUTH_TOKEN in your shell ' +
+            'or create a .env in this directory or any parent.'
+          ));
+        }
 
         // Create Hedera client
         let client;
@@ -105,7 +141,20 @@ Examples:
 
         console.log(chalk.white('Threshold: ') + chalk.yellow(`${options.threshold} of ${eligibleKeys.length}`));
         console.log(chalk.white('Expected Participants: ') + chalk.yellow(participants));
-        console.log(chalk.white('Session Timeout: ') + chalk.yellow(`${options.timeout} minutes (realtime)`));
+        // Honest banner: the timeout is a soft cap, not a hard kill.
+        // After expiry the server refuses new auth/inject/sign requests
+        // and disconnects participants with SESSION_EXPIRED — but TCP
+        // sockets that are mid-flight aren't cut. `--timeout 0` opts
+        // out entirely (recommended when signer coordination may take
+        // hours).
+        if (isUnbounded) {
+          console.log(chalk.white('Session Timeout: ') + chalk.yellow('none (--timeout 0; lives until you stop the server)'));
+        } else {
+          console.log(chalk.white('Session Timeout: ') + chalk.yellow(`${options.timeout} minutes`));
+          console.log(chalk.gray('   After expiry the server refuses new auth/sign requests and'));
+          console.log(chalk.gray('   sends SESSION_EXPIRED to connected participants. Use'));
+          console.log(chalk.gray('   --timeout 0 if signers may take hours to coordinate.'));
+        }
         if (scheduledDefaultTimeoutMs) {
           const days = (scheduledDefaultTimeoutMs / 86400000).toFixed(1);
           console.log(chalk.white('Scheduled Session Timeout: ') + chalk.yellow(`${days} days (overrides 24h default)`));
@@ -157,14 +206,34 @@ Examples:
           ? options.allowedOrigins.split(',').map((o) => o.trim()).filter(Boolean)
           : null;
 
+        // External tunnel mode: when the user has provided a public
+        // URL via --tunnel-url, skip the embedded ngrok/localtunnel
+        // wrappers entirely. The URL is treated as the public WSS URL
+        // for the connection-string and HMSC. Useful when the
+        // embedded ngrok wrapper hits "invalid tunnel configuration"
+        // (binary version mismatch, conflicting ~/.ngrok2/ngrok.yml,
+        // etc.) — the user can just run `ngrok http 3001` themselves
+        // in another terminal and pass the printed URL here.
+        const externalTunnelUrl = options.tunnelUrl ? String(options.tunnelUrl).trim() : null;
+        if (externalTunnelUrl && !/^wss?:\/\//i.test(externalTunnelUrl)) {
+          console.error(
+            `\n❌ --tunnel-url must start with ws:// or wss:// — got "${externalTunnelUrl}".\n` +
+            `   ngrok prints an https://… URL; replace the scheme: https → wss.\n`
+          );
+          process.exit(1);
+        }
+
         // Create WebSocket server
         const wsServer = new WebSocketServer(sessionManager, {
           port: options.port,
           host: options.host,
           verbose: true,
-          tunnel: options.tunnel ? {
+          // Disable the embedded tunnel start when the user supplied
+          // their own — the WSS server still binds to localhost; only
+          // the share-URL changes.
+          tunnel: options.tunnel && !externalTunnelUrl ? {
             enabled: true,
-            provider: 'auto'
+            provider: options.tunnelProvider || 'auto',
           } : null,
           tls: tlsConfig,
           allowedOrigins,
@@ -173,6 +242,19 @@ Examples:
 
         // Start server
         const serverInfo = await wsServer.start();
+        // Splice the externally-managed tunnel URL onto serverInfo so
+        // the rest of the flow (connection-string, banner, HMSC)
+        // treats it as the public URL.
+        if (externalTunnelUrl) {
+          serverInfo.publicUrl = externalTunnelUrl;
+          if (true) {
+            console.log(chalk.bold.green('✅ Using external tunnel'));
+            console.log(chalk.cyan('─'.repeat(50)));
+            console.log(chalk.white('Public URL: ') + chalk.yellow(externalTunnelUrl));
+            console.log(chalk.gray('Skipped embedded ngrok/localtunnel wrappers (--tunnel-url).'));
+            console.log(chalk.cyan('─'.repeat(50)) + '\n');
+          }
+        }
 
         // Create session
         const session = await sessionManager.createSession(null, {

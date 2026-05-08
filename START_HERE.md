@@ -93,7 +93,7 @@ npm run multisig-client -- --server ws://localhost:3001 --session SESSION_ID --p
 
 This is on the roadmap. For now, use the Networked Workflow for coordinated signing windows:
 ```bash
-npm run multisig-server -- --port 3001 --threshold 2 --keys "KEY1,KEY2,KEY3" --tunnel ngrok
+npm run multisig-server -- --port 3001 --threshold 2 --keys "KEY1,KEY2,KEY3" --tunnel-provider ngrok
 ```
 - Participants can join early and wait
 - Transaction injected when everyone's ready
@@ -134,7 +134,7 @@ Use the **dApp with WalletConnect**:
 - Testnet: https://testnet-multisig.lazysuperheroes.com
 - Mainnet: https://multisig.lazysuperheroes.com
 
-1. Start a server with `--tunnel ngrok`
+1. Start a server with `--tunnel-provider ngrok`
 2. Share the connection string
 3. Participants open dApp, paste connection, connect wallet
 4. Sign with HashPack (browser or mobile) or Ledger
@@ -219,7 +219,7 @@ Your team is spread across US, Europe, and Asia. You need to sign a large transf
 > **Note**: Due to Hedera's ~120-second transaction validity, all signers must be available within a short window. Schedule a signing ceremony.
 
 1. **Schedule**: Find a 15-minute window that works (e.g., 8am PT / 4pm GMT / midnight SGT)
-2. **Coordinator**: Run `npm run multisig-server -- --tunnel ngrok`
+2. **Coordinator**: Run `npm run multisig-server -- --tunnel-provider ngrok`
 3. **Share**: Send connection string to team via secure channel
 4. **Join early**: Participants connect and wait in session
 5. **Inject**: Coordinator injects transaction when all are ready
@@ -234,7 +234,7 @@ Your team is spread across US, Europe, and Asia. You need to sign a large transf
 
 One signer uses a Ledger for maximum security.
 
-1. **Start server**: `npm run multisig-server -- --tunnel ngrok`
+1. **Start server**: `npm run multisig-server -- --tunnel-provider ngrok`
 2. **Ledger user**: Opens dApp, connects HashPack (which connects to Ledger)
 3. **Sign**: Ledger prompts for physical confirmation
 4. **Other signers**: Can use CLI or dApp

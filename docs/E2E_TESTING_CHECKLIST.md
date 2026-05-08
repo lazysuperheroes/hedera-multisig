@@ -135,7 +135,7 @@ npx hedera-multisig transfer hbar --from 0.0.YOUR_ACCOUNT --to 0.0.OTHER_ACCOUNT
 ### Setup
 
 ```bash
-npx hedera-multisig server --port 3001 --threshold 2 --keys "KEY1,KEY2,KEY3" --tunnel ngrok
+npx hedera-multisig server --port 3001 --threshold 2 --keys "KEY1,KEY2,KEY3" --tunnel-provider ngrok
 ```
 
 ### Mixed Participants

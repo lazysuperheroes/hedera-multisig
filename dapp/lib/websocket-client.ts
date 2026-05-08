@@ -74,25 +74,41 @@ export class BrowserSigningClient {
   // ============================================================================
 
   /**
-   * Connect to signing session
+   * Connect to signing session.
+   *
+   * Authentication: pass either `pin` (fresh join) OR `reconnectionToken`
+   * (returning participant via `sessionRecovery`). When both are passed,
+   * the reconnection token wins — the AUTH payload prefers it over PIN
+   * because it's the post-PIN handshake the server issued at last AUTH.
+   *
+   * Without the reconnection-token path, a participant returning to a
+   * session via the saved-session restore branch would have only a
+   * reconnectionToken on hand (PIN was wiped after the first AUTH for
+   * security) — so calling `connect(url, id, '', pubkey)` would send
+   * `{pin: ''}` and the server would reject with "missing credentials".
+   * Threading the reconnection token here closes that gap.
    *
    * @param serverUrl - WebSocket server URL
    * @param sessionId - Session identifier
-   * @param pin - PIN code
+   * @param pin - PIN code (use empty string when authenticating via reconnectionToken)
    * @param publicKey - Optional public key for early eligibility validation
+   * @param reconnectionToken - Optional, post-AUTH_SUCCESS token; preferred over PIN when set
    * @returns Promise with connection result
    */
   async connect(
     serverUrl: string,
     sessionId: string,
     pin: string,
-    publicKey?: string
+    publicKey?: string,
+    reconnectionToken?: string
   ): Promise<{ success: boolean; participantId: string; sessionInfo: SessionInfo }> {
     return new Promise((resolve, reject) => {
       try {
-        // Store connection params for potential reconnection
-        // PIN is stored temporarily for initial auth only; replaced by reconnectionToken after AUTH_SUCCESS
-        this.connectionParams = { serverUrl, sessionId, pin, publicKey };
+        // Store connection params for potential reconnection.
+        // PIN is held only until the server replies AUTH_SUCCESS — the
+        // reconnectionToken in the response replaces it for any future
+        // reconnect cycle the auto-reconnect logic handles.
+        this.connectionParams = { serverUrl, sessionId, pin, publicKey, reconnectionToken };
         this.sessionId = sessionId;
         this.connectResolve = resolve;
         this.connectReject = reject;
@@ -188,9 +204,12 @@ export class BrowserSigningClient {
 
     this.reconnectTimeout = setTimeout(() => {
       if (this.connectionParams) {
-        const { serverUrl, sessionId, pin, publicKey } = this.connectionParams;
-        // Prefer reconnection token over PIN for reconnecting
-        this.connect(serverUrl, sessionId, pin || '', publicKey).catch((err) => {
+        const { serverUrl, sessionId, pin, publicKey, reconnectionToken } = this.connectionParams;
+        // After AUTH_SUCCESS the server's response replaces PIN with a
+        // reconnectionToken on connectionParams (see _onAuthSuccess);
+        // pass it through here so the reconnect AUTH uses the token
+        // rather than re-sending an empty PIN.
+        this.connect(serverUrl, sessionId, pin || '', publicKey, reconnectionToken).catch((err) => {
           this.log(`Reconnection failed: ${err.message}`, 'error');
         });
       }

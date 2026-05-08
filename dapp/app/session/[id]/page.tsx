@@ -95,92 +95,124 @@ export default function SessionPage({ params }: PageProps) {
   const connectionAttemptRef = useRef(0);
   const maxConnectionAttempts = 3;
 
-  // Load session info from localStorage (with recovery support)
+  // Load session info from localStorage (with recovery support).
+  //
+  // Idempotent: returns early once `sessionInfo` is set so the effect
+  // doesn't re-run when `sessionRecovery.savedSession` changes. The
+  // re-run path is what introduced a credential-loss bug:
+  //
+  //   1. /join stages {serverUrl, sessionId, pin} in sessionStorage,
+  //      navigates here.
+  //   2. First run: savedSession is null (the hook only surfaces
+  //      sessions that already carry a reconnectionToken). Fall-through
+  //      reads sessionStorage and sets sessionInfo with the fresh PIN.
+  //   3. We call sessionRecovery.saveSession() to migrate; the hook
+  //      strips PIN (security) and stores {serverUrl, sessionId,
+  //      timestamp}. setSavedSession updates in-memory savedSession.
+  //   4. Without this guard, the effect re-runs because savedSession
+  //      changed, takes the restore branch (sessionId matches), and
+  //      writes a sessionInfo *without* the PIN — leaving AUTH with
+  //      neither PIN nor reconnectionToken, which the server rejects
+  //      as "missing credentials".
+  //
+  // Guarding on sessionInfo is the right semantic: this effect's job
+  // is to load initial sessionInfo, and once that's done it has nothing
+  // more to do.
   useEffect(() => {
     // Wait for storage check to complete
     if (!sessionRecovery.hasCheckedStorage) {
       return;
     }
 
+    // Already loaded — don't re-run when savedSession changes.
+    if (sessionInfo) {
+      return;
+    }
+
     // Check if we have a saved session
     if (sessionRecovery.savedSession) {
-      // Verify session ID matches
+      // Verify session ID matches. If it doesn't, the user is here for
+      // a fresh ceremony — clear the stale recovery silently and fall
+      // through to the fresh-join branch below. (Prior behavior was to
+      // surface a "you were previously connected to a different
+      // session" error and force the user back to /join, which was
+      // noise: they're already on /session/<new-id> with a fresh PIN
+      // staged in sessionStorage. The earlier session is gone.)
       if (sessionRecovery.savedSession.sessionId !== sessionId) {
-        setErrorMessage(
-          `You were previously connected to a different session (${sessionRecovery.savedSession.sessionId.substring(0, 8)}...). ` +
-          `To join session ${sessionId.substring(0, 8)}..., please use the Join page with the correct details.`
-        );
-        // Don't clear the session - let user go back to join page
-        setCurrentStep('error');
-        return;
-      }
-
-      // Session found - restore it
-      setSessionInfo({
-        serverUrl: sessionRecovery.savedSession.serverUrl,
-        sessionId: sessionRecovery.savedSession.sessionId,
-        reconnectionToken: sessionRecovery.savedSession.reconnectionToken,
-      });
-
-      // Check if session is still fresh
-      if (sessionRecovery.isSessionFresh()) {
-        toast.info('Session Resumed', 'Resuming your previous session');
-        setCurrentStep('wallet-connect');
-      } else {
-        toast.warning('Session Expired', 'Your session has expired. Please rejoin.');
         sessionRecovery.clearSession();
-        setCurrentStep('error');
-      }
-    } else {
-      // Phase B2: Read PIN handoff from sessionStorage (per-tab; auto-cleared
-      // on tab close). Falls back to legacy localStorage key for users who had
-      // an older build active in this tab.
-      let stored: string | null = null;
-      try { stored = sessionStorage.getItem('hedera-multisig-pending-join'); } catch {}
-      if (!stored) {
-        try { stored = localStorage.getItem('hedera-multisig-session-info'); } catch {}
-      }
-      // Always purge the legacy key — if found here, migrate then delete.
-      try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
-
-      if (!stored) {
-        setErrorMessage('No session information found. Please join a session first.');
-        setCurrentStep('error');
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(stored);
-        if (parsed.sessionId !== sessionId) {
-          setErrorMessage(
-            `Session ID mismatch. You have saved session ${parsed.sessionId.substring(0, 8)}... ` +
-            `but are trying to access ${sessionId.substring(0, 8)}.... Please join the correct session.`
-          );
-          setCurrentStep('error');
-          return;
-        }
-
-        setSessionInfo(parsed);
-
-        // Migrate to new session recovery system (PIN-free; reconnection token
-        // arrives later via AUTH_SUCCESS).
-        sessionRecovery.saveSession({
-          serverUrl: parsed.serverUrl,
-          sessionId: parsed.sessionId,
-          pin: parsed.pin,
+        // fall through — the else-branch below handles fresh-join.
+      } else {
+        // Session found — restore it.
+        setSessionInfo({
+          serverUrl: sessionRecovery.savedSession.serverUrl,
+          sessionId: sessionRecovery.savedSession.sessionId,
+          reconnectionToken: sessionRecovery.savedSession.reconnectionToken,
         });
 
-        // PIN has been consumed — purge the per-tab handoff immediately.
-        // After this point the session uses reconnectionToken only.
-        try { sessionStorage.removeItem('hedera-multisig-pending-join'); } catch {}
-
-        setCurrentStep('wallet-connect');
-      } catch (error) {
-        setErrorMessage('Invalid session information.');
-        setCurrentStep('error');
+        // Check if session is still fresh
+        if (sessionRecovery.isSessionFresh()) {
+          toast.info('Session Resumed', 'Resuming your previous session');
+          setCurrentStep('wallet-connect');
+        } else {
+          toast.warning('Session Expired', 'Your session has expired. Please rejoin.');
+          sessionRecovery.clearSession();
+          setCurrentStep('error');
+        }
+        return;
       }
     }
-  }, [sessionId, sessionRecovery.hasCheckedStorage, sessionRecovery.savedSession]);
+
+    // Fall-through: no saved-session match — read the PIN handoff
+    // staged by /join in sessionStorage.
+    //
+    // Phase B2: per-tab handoff via sessionStorage (auto-cleared on
+    // tab close). Falls back to the legacy localStorage key for
+    // anyone with an older build active in this tab.
+    let stored: string | null = null;
+    try { stored = sessionStorage.getItem('hedera-multisig-pending-join'); } catch {}
+    if (!stored) {
+      try { stored = localStorage.getItem('hedera-multisig-session-info'); } catch {}
+    }
+    // Always purge the legacy key — if found here, migrate then delete.
+    try { localStorage.removeItem('hedera-multisig-session-info'); } catch {}
+
+    if (!stored) {
+      setErrorMessage('No session information found. Please join a session first.');
+      setCurrentStep('error');
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed.sessionId !== sessionId) {
+        setErrorMessage(
+          `Session ID mismatch. You have saved session ${parsed.sessionId.substring(0, 8)}... ` +
+          `but are trying to access ${sessionId.substring(0, 8)}.... Please join the correct session.`
+        );
+        setCurrentStep('error');
+        return;
+      }
+
+      setSessionInfo(parsed);
+
+      // Migrate to new session recovery system (PIN-free; reconnection token
+      // arrives later via AUTH_SUCCESS).
+      sessionRecovery.saveSession({
+        serverUrl: parsed.serverUrl,
+        sessionId: parsed.sessionId,
+        pin: parsed.pin,
+      });
+
+      // PIN has been consumed — purge the per-tab handoff immediately.
+      // After this point the session uses reconnectionToken only.
+      try { sessionStorage.removeItem('hedera-multisig-pending-join'); } catch {}
+
+      setCurrentStep('wallet-connect');
+    } catch (error) {
+      setErrorMessage('Invalid session information.');
+      setCurrentStep('error');
+    }
+  }, [sessionId, sessionRecovery.hasCheckedStorage, sessionRecovery.savedSession, sessionInfo]);
 
   // Auto-advance if wallet already connected via NavBar (Path A: Connect-first flow)
   useEffect(() => {
@@ -299,12 +331,17 @@ export default function SessionPage({ params }: PageProps) {
       setErrorMessage(null);
       toast.info('Connecting to Session', 'Authenticating with server...');
 
-      // Connect to WebSocket (with public key for early validation)
+      // Connect to WebSocket (with public key for early validation).
+      // When the saved-session restore branch populated sessionInfo,
+      // it left a reconnectionToken in place of the PIN — pass that
+      // through so AUTH carries the token. Without this the server
+      // would see an empty PIN and reject with "missing credentials".
       const result = await signingSession.connect(
         sessionInfo.serverUrl,
         sessionInfo.sessionId,
         sessionInfo.pin || '',
-        publicKey
+        publicKey,
+        sessionInfo.reconnectionToken
       );
 
       toast.success('Session Joined', 'You are now ready to sign transactions');

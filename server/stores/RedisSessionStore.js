@@ -117,9 +117,12 @@ class RedisSessionStore {
       eligiblePublicKeys: sessionData.eligiblePublicKeys || [],
       expectedParticipants: sessionData.expectedParticipants || sessionData.eligiblePublicKeys?.length || 0,
 
-      // Session metadata
+      // Session metadata. `expiresAt === null` is the unbounded
+      // sentinel (`--timeout 0`); see SessionStore._computeExpiresAt
+      // for the in-memory equivalent. Cleanup, TTL math, and the
+      // read-side expiry check all skip null-expiry sessions.
       createdAt: now,
-      expiresAt: now + (sessionData.timeout || this.defaultTimeout),
+      expiresAt: this._computeExpiresAt(sessionData.timeout, now),
       status: sessionData.frozenTransaction ? 'transaction-received' : 'waiting',
 
       // Auth credentials and mode (Phase A8 — must persist to keep Redis-backed
@@ -162,8 +165,9 @@ class RedisSessionStore {
       return null;
     }
 
-    // Check if expired
-    if (session.expiresAt < Date.now()) {
+    // Check if expired. `expiresAt === null` is the unbounded
+    // sentinel; skip the expiry check entirely.
+    if (session.expiresAt !== null && session.expiresAt < Date.now()) {
       session.status = 'expired';
       await this._saveSession(session);
     }
@@ -613,11 +617,19 @@ class RedisSessionStore {
    * @private
    */
   async _saveSession(session) {
-    const ttl = Math.max(0, Math.ceil((session.expiresAt - Date.now()) / 1000) + 300); // +5min buffer
-
     if (this.isRedisConnected()) {
       try {
-        await this.redis.setex(session.sessionId, ttl, JSON.stringify(session));
+        if (session.expiresAt === null) {
+          // Unbounded session — write without a TTL so Redis keeps it
+          // until the operator deletes the key or the server stops.
+          await this.redis.set(session.sessionId, JSON.stringify(session));
+        } else {
+          // +5min buffer keeps the entry alive briefly after `expiresAt`
+          // so reconnecting clients learn the session is gone before
+          // Redis evicts the participantId table.
+          const ttl = Math.max(0, Math.ceil((session.expiresAt - Date.now()) / 1000) + 300);
+          await this.redis.setex(session.sessionId, ttl, JSON.stringify(session));
+        }
       } catch (error) {
         this.log.warn('Redis save failed, using in-memory', { error: error.message });
         this.sessions.set(session.sessionId, session);
@@ -625,6 +637,13 @@ class RedisSessionStore {
     } else {
       this.sessions.set(session.sessionId, session);
     }
+  }
+
+  /** @private */
+  _computeExpiresAt(timeout, now) {
+    const effective = timeout !== undefined ? timeout : this.defaultTimeout;
+    if (effective === null || effective === 0) return null;
+    return now + effective;
   }
 
   /**
@@ -755,39 +774,60 @@ class RedisSessionStore {
   }
 
   /**
-   * Clean up expired sessions
+   * Clean up expired sessions.
+   *
+   * Mirrors `SessionStore._cleanupExpiredSessions`:
+   *   - skips `expiresAt === null` (unbounded sessions)
+   *   - first-time-expiry broadcasts SESSION_EXPIRED to coordinator
+   *     AND every participant, then closes their sockets so the
+   *     "30 minutes" banner is honest (no zombie connections after
+   *     the session is functionally dead)
+   *   - deletes the session-store entry 5 minutes after expiry
+   *
+   * Redis-side TTL is handled at write time by `_saveSession`.
+   *
    * @private
    */
   async _cleanupExpiredSessions() {
     const now = Date.now();
 
-    // In-memory cleanup
     for (const [sessionId, session] of this.sessions) {
+      if (session.expiresAt === null) continue; // unbounded
       if (session.expiresAt < now && session.status !== 'completed') {
+        const justExpired = session.status !== 'expired';
         session.status = 'expired';
 
-        // Notify coordinator if connected
-        const coordinatorWs = this.coordinatorWebsockets.get(sessionId);
-        if (coordinatorWs) {
-          try {
-            coordinatorWs.send(JSON.stringify({
-              type: 'SESSION_EXPIRED',
-              payload: { sessionId }
-            }));
-          } catch (error) {
-            // Ignore send errors
+        if (justExpired) {
+          const expiredMsg = JSON.stringify({
+            type: 'SESSION_EXPIRED',
+            payload: { sessionId },
+          });
+
+          const coordinatorWs = this.coordinatorWebsockets.get(sessionId);
+          if (coordinatorWs) {
+            try { coordinatorWs.send(expiredMsg); } catch { /* ignore */ }
+            try { coordinatorWs.close(); } catch { /* ignore */ }
+          }
+
+          // Notify + close every participant socket. The Redis store
+          // keeps participant sockets in `this.websockets` (not on
+          // session.participants — those are serialized).
+          if (session.participants && typeof session.participants === 'object') {
+            for (const participantId of Object.keys(session.participants)) {
+              const ws = this.websockets.get(participantId);
+              if (!ws) continue;
+              try { ws.send(expiredMsg); } catch { /* ignore */ }
+              try { ws.close(); } catch { /* ignore */ }
+            }
           }
         }
 
-        // Delete after 5 minutes
         if (session.expiresAt + 300000 < now) {
           this.sessions.delete(sessionId);
           this.coordinatorWebsockets.delete(sessionId);
         }
       }
     }
-
-    // Redis cleanup is handled by TTL
   }
 
   /**

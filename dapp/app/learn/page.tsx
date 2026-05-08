@@ -128,7 +128,7 @@ export default function LearnPage() {
                 actually feel like for participants?&rdquo;
               </p>
               <ul className="text-xs text-foreground-subtle space-y-1 mb-3">
-                <li>· HTTPS dApp ⇒ WSS coordinator (<code className="font-mono">--tunnel ngrok</code>)</li>
+                <li>· HTTPS dApp ⇒ WSS coordinator (<code className="font-mono">--tunnel-provider ngrok</code>)</li>
                 <li>· HashPack key import + WalletConnect signing</li>
                 <li>· Mixed-mode: web wallet + CLI participant</li>
                 <li>· Receipt view on completion (no credentials, no clutter)</li>
