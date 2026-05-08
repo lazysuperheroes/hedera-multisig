@@ -677,8 +677,20 @@ export default function SessionPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Step 1: Connect Wallet */}
-        {currentStep === 'wallet-connect' && (
+        {/* Step 1: Connect Wallet
+            Path A (wallet already connected globally via NavBar): we
+            render the ConnectingBanner immediately so the user sees
+            progress feedback the instant they land on the page,
+            instead of a "Connect Wallet" button that flickers for a
+            frame before the auto-advance effect fires. The banner is
+            the same one shown during session-connect, so the visual
+            experience is "land → see banner → see banner → connected"
+            with no jarring intermediate state. */}
+        {currentStep === 'wallet-connect' && wallet.isConnected && (
+          <ConnectingBanner accountId={wallet.accountId} />
+        )}
+
+        {currentStep === 'wallet-connect' && !wallet.isConnected && (
           <>
             {/* Phase C17: prime first-time users on what's about to happen */}
             <details className="mb-4 rounded-lg border border-info/40 bg-info-soft p-4">

@@ -860,6 +860,16 @@ class MultiSigWebSocketServer {
             eligiblePublicKeys: sessionInfo.eligiblePublicKeys,
             expectedParticipants: sessionInfo.stats.participantsExpected,
             stats: sessionInfo.stats,
+            // Snapshot of who's already connected at the moment this
+            // participant authenticates. Critical for late joiners:
+            // PARTICIPANT_CONNECTED broadcasts only fire for FUTURE
+            // arrivals, so without this snapshot a participant who
+            // joins after others would never see them in the row list,
+            // even though `stats.participantsConnected` would correctly
+            // count them. Previously we built sessionInfo by hand-
+            // picking fields and accidentally dropped this — the dApp
+            // hook tries to seed `state.participants` from it.
+            participants: sessionInfo.participants,
             expiresAt: sessionInfo.expiresAt
           }
         }
