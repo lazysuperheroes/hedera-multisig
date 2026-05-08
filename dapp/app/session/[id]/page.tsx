@@ -35,6 +35,7 @@ import { SessionCountdown } from '../../../components/SessionCountdown';
 import { ShareSessionDialog } from '../../../components/ShareSessionDialog';
 import { ParticipantList } from '../../../components/ParticipantList';
 import { StepProgress } from '../../../components/StepProgress';
+import { ConnectingBanner } from '../../../components/ConnectingBanner';
 import { DEFAULT_NETWORK } from '../../../lib/walletconnect-config';
 
 interface SessionInfo {
@@ -698,6 +699,14 @@ export default function SessionPage({ params }: PageProps) {
         {/* Step 2+: Session Connection (shows wallet status + session status) */}
         {(currentStep === 'session-connect' || currentStep === 'ready' || currentStep === 'waiting' || currentStep === 'reviewing' || currentStep === 'signing' || currentStep === 'signed' || currentStep === 'completed') && (
           <>
+            {/* Active feedback during the AUTH gap — WebSocket round-trip
+                through the ngrok tunnel + eligibility check is 1-3s and
+                otherwise looks like a frozen page. Banner unmounts as
+                soon as the server replies AUTH_SUCCESS. */}
+            {currentStep === 'session-connect' && !signingSession.state.connected && (
+              <ConnectingBanner accountId={wallet.accountId} />
+            )}
+
             <WalletStatus
               connected={wallet.isConnected}
               connecting={wallet.isConnecting}
