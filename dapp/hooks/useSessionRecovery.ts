@@ -33,44 +33,58 @@ export interface SessionState {
 const STORAGE_KEY = 'hedera_multisig_active_session';
 const MAX_SESSION_AGE = 30 * 60 * 1000; // 30 minutes
 
-export function useSessionRecovery() {
-  const [savedSession, setSavedSession] = useState<SessionState | null>(null);
-  const [hasCheckedStorage, setHasCheckedStorage] = useState(false);
+/**
+ * Read the saved-session out of localStorage on first render.
+ *
+ * Originally this hook used a `useEffect` to read localStorage and a
+ * `hasCheckedStorage` boolean to gate the page until the read landed —
+ * which guaranteed at least one render with an empty/loading state
+ * before the saved session could surface. Lazy `useState` initializers
+ * run on the first render synchronously, so the page can show the
+ * right thing on its very first paint instead of flickering through a
+ * skeleton. SSR-safe via `typeof window` guard (this whole hook is
+ * 'use client' but Next.js still bundles its initializer for the
+ * server build).
+ */
+function readSavedSessionFromStorage(): SessionState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (!saved) return null;
+    const session = JSON.parse(saved);
 
-  /**
-   * Load saved session from localStorage
-   */
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const session = JSON.parse(saved);
-
-        // Migrate legacy sessions that stored PIN: remove PIN, invalidate
-        if (session.pin && !session.reconnectionToken) {
-          localStorage.removeItem(STORAGE_KEY);
-          setHasCheckedStorage(true);
-          return;
-        }
-
-        // Check if session is still valid (not expired)
-        const age = Date.now() - session.timestamp;
-        if (age < MAX_SESSION_AGE && session.reconnectionToken) {
-          // Strip any accidentally stored PIN from legacy data
-          const { pin, ...cleanSession } = session;
-          setSavedSession(cleanSession as SessionState);
-        } else {
-          // Session expired, clear it
-          localStorage.removeItem(STORAGE_KEY);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load saved session:', error);
-      localStorage.removeItem(STORAGE_KEY);
-    } finally {
-      setHasCheckedStorage(true);
+    // Migrate legacy sessions that stored PIN: remove PIN, invalidate.
+    if (session.pin && !session.reconnectionToken) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return null;
     }
-  }, []);
+
+    // Check if session is still valid (not expired) and has the
+    // reconnectionToken that's now mandatory for restore.
+    const age = Date.now() - session.timestamp;
+    if (age < MAX_SESSION_AGE && session.reconnectionToken) {
+      const { pin, ...cleanSession } = session;
+      void pin; // legacy field; explicitly discarded
+      return cleanSession as SessionState;
+    }
+
+    // Session expired, clear it.
+    window.localStorage.removeItem(STORAGE_KEY);
+    return null;
+  } catch (error) {
+    console.error('Failed to load saved session:', error);
+    try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+    return null;
+  }
+}
+
+export function useSessionRecovery() {
+  // Synchronous read on first render — no useEffect, no skeleton flash.
+  // hasCheckedStorage starts true because the read is already done.
+  const [savedSession, setSavedSession] = useState<SessionState | null>(
+    readSavedSessionFromStorage,
+  );
+  const [hasCheckedStorage] = useState(true);
 
   /**
    * Save current session to localStorage

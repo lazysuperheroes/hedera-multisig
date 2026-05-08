@@ -533,8 +533,28 @@ export default function SessionPage({ params }: PageProps) {
     );
   }
 
-  // Render loading state — skeleton mimics the session header + step indicator
+  // Render loading state.
+  //
+  // Two variants:
+  //   (a) Wallet already connected (Path A) → show ConnectingBanner
+  //       directly, since the user clearly has a wallet paired and
+  //       expects to see "what's the system doing right now?". This
+  //       removes the skeleton flash that previously preceded the
+  //       wallet-connect step's banner — same surface across all
+  //       three loading-→-wallet-connect-→-session-connect renders.
+  //   (b) No wallet yet (Path B / cold load) → keep the skeleton so
+  //       the user has a recognizable "page is loading" cue before
+  //       the wallet-connect / connect-button UI shows up.
   if (currentStep === 'loading') {
+    if (wallet.isConnected) {
+      return (
+        <main className="min-h-screen p-8 bg-surface-recessed" aria-busy="true" aria-label="Connecting to session">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <ConnectingBanner accountId={wallet.accountId} />
+          </div>
+        </main>
+      );
+    }
     return (
       <main className="min-h-screen p-8 bg-surface-recessed" aria-busy="true" aria-label="Loading session">
         <div className="max-w-4xl mx-auto space-y-6">
