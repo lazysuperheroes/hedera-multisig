@@ -8,6 +8,7 @@
 'use client';
 
 import { CopyButton } from './CopyButton';
+import { toRawPublicKeyHex, publicKeysEqual } from '../lib/keyCanonical';
 import type { Participant } from '../hooks/useSigningSession';
 
 interface ParticipantListProps {
@@ -17,12 +18,19 @@ interface ParticipantListProps {
 }
 
 /**
- * Truncate a public key for display
+ * Truncate a key for display, after canonicalizing to raw hex.
+ *
+ * Without canonicalization rows would mix DER-form keys (CLI-produced,
+ * 88 chars, prefixed `302a300506032b6570032100…`) with raw-form keys
+ * (HashPack/WalletConnect-produced, 64 chars) — looking nothing alike
+ * to a user comparing against `walkthrough-keys.json` which stores
+ * raw. Always show raw.
  */
 function truncateKey(key: string): string {
-  if (!key) return '';
-  if (key.length <= 20) return key;
-  return `${key.slice(0, 10)}...${key.slice(-8)}`;
+  const raw = toRawPublicKeyHex(key);
+  if (!raw) return '';
+  if (raw.length <= 20) return raw;
+  return `${raw.slice(0, 10)}...${raw.slice(-8)}`;
 }
 
 /**
@@ -118,10 +126,13 @@ export function ParticipantList({
         {sortedParticipants.map((participant) => {
           const isCurrentUser = participant.id === currentParticipantId;
           const statusBadge = getStatusBadge(participant.status);
+          // Eligibility check must canonicalize across DER vs raw —
+          // CLI-registered eligible keys arrive in DER form; wallet-
+          // delivered participant keys arrive raw. A naïve string
+          // compare flagged every row as "not eligible" even when both
+          // sides held the same key, just in different envelopes.
           const isEligible = participant.publicKey
-            ? eligiblePublicKeys.some(
-                (k) => k.toLowerCase() === participant.publicKey?.toLowerCase()
-              )
+            ? eligiblePublicKeys.some((k) => publicKeysEqual(k, participant.publicKey))
             : null;
 
           return (

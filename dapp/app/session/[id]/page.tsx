@@ -236,19 +236,23 @@ export default function SessionPage({ params }: PageProps) {
     hasAutoConnectedRef.current = true;
     connectionAttemptRef.current += 1;
 
-    // Set step first to prevent re-triggering
+    // Fire the user-visible toasts BEFORE any state work or async
+    // boundary, so React can flush them in the next paint regardless
+    // of how fast the AUTH round-trip resolves. Previously these were
+    // wrapped in setTimeout(100/200ms) which let React batch the toast
+    // state updates with the post-AUTH "session connected" updates —
+    // the user would see all three appear together at the moment AUTH
+    // succeeded, defeating the purpose of progress feedback.
+    toast.info('Wallet Detected', `Using connected wallet: ${wallet.accountId}`);
+    toast.info('Connecting to Session', 'Authenticating with the coordinator...');
+
     setCurrentStep('session-connect');
 
-    // Show one-time notification
-    setTimeout(() => {
-      toast.info('Wallet Detected', `Using connected wallet: ${wallet.accountId}`);
-    }, 100);
-
-    // Auto-connect to session with the connected wallet's public key
-    const publicKey = wallet.publicKey; // Capture the non-null value
-    setTimeout(() => {
-      handleConnectSession(publicKey!); // Safe because we checked above
-    }, 200);
+    // Capture the non-null value, then kick the connect on the next
+    // microtask so React commits the state updates above before the
+    // WebSocket open potentially races with rendering.
+    const publicKey = wallet.publicKey;
+    Promise.resolve().then(() => handleConnectSession(publicKey!));
   }, [currentStep, wallet.isConnected, wallet.publicKey, sessionInfo?.sessionId]);
 
   // Auto-update step based on session state
@@ -330,7 +334,10 @@ export default function SessionPage({ params }: PageProps) {
 
     try {
       setErrorMessage(null);
-      toast.info('Connecting to Session', 'Authenticating with server...');
+      // Note: the "Connecting to Session" toast is fired by the
+      // auto-advance effect upstream (Path A) BEFORE this function
+      // runs, so React can flush it before the WebSocket roundtrip.
+      // Firing it here would be redundant — the upstream call wins.
 
       // Connect to WebSocket (with public key for early validation).
       // When the saved-session restore branch populated sessionInfo,
