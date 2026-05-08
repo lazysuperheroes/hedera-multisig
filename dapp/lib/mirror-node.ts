@@ -49,6 +49,64 @@ function getMirrorNodeUrl(network: 'testnet' | 'mainnet' = 'testnet'): string {
 }
 
 /**
+ * Lightweight `MirrorHealthClient` (the shape `orderByHealth` needs).
+ *
+ * Two endpoints are wrapped:
+ *   - `GET /api/v1/network/nodes` — paginated address book, used to
+ *     filter freeze candidates to nodes with stake>0 + service_endpoints.
+ *   - `GET /api/v1/transactions?node=…&timestamp=gte:…` — recent-activity
+ *     check, the closest thing Hedera exposes to a node liveness ping.
+ *
+ * Used at freeze time so when a wallet signer (HashPack) only signs
+ * body[0] and the executor downgrades to single-node submission, that
+ * body targets a node currently accepting transactions instead of
+ * always landing on `nodeAccountIds[0]` regardless of state.
+ */
+export function createMirrorHealthClient(network: 'testnet' | 'mainnet' = 'testnet') {
+  const base = getMirrorNodeUrl(network);
+  return {
+    async getNetworkNodes() {
+      const nodes: Array<{
+        node_account_id?: string;
+        nodeAccountId?: string;
+        stake?: number | string;
+        service_endpoints?: unknown[];
+        decline_reward?: boolean;
+      }> = [];
+      let path: string | null = '/network/nodes?limit=100';
+      while (path !== null) {
+        const url: string = `${base}${path}`;
+        const response: Response = await fetch(url);
+        if (!response.ok) throw new Error(`mirror /network/nodes ${response.status}`);
+        const json: { nodes?: unknown[]; links?: { next?: string | null } } = await response.json();
+        if (Array.isArray(json.nodes)) nodes.push(...(json.nodes as typeof nodes));
+        const next: string | null | undefined = json?.links?.next;
+        // Mirror returns relative paths like `/api/v1/network/nodes?...` —
+        // strip the `/api/v1` prefix because we already have it in `base`.
+        path = typeof next === 'string' && next.length > 0
+          ? next.replace(/^\/api\/v1/, '')
+          : null;
+      }
+      return nodes;
+    },
+    async getNodeRecentActivity(nodeAccountId: string, options: { windowSeconds?: number } = {}) {
+      const windowSeconds = options.windowSeconds || 60;
+      const sinceUnix = Math.floor(Date.now() / 1000) - windowSeconds;
+      const url = `${base}/transactions?node=${encodeURIComponent(nodeAccountId)}` +
+        `&limit=1&order=desc&timestamp=gte:${sinceUnix}`;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const json = await response.json();
+        return Array.isArray(json.transactions) && json.transactions.length > 0;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+/**
  * Fetch account data from mirror node with caching
  *
  * @param accountId - Account ID in 0.0.XXXX format

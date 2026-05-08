@@ -16,11 +16,115 @@ export const DEFAULT_SUBSET_SIZE = 6;
 
 export type NodeStrategy = 'subset' | 'all' | 'specific';
 
+/**
+ * Optional mirror-node helper used by `orderByHealth` to put the
+ * healthiest candidate at index 0 of a freeze. Implemented separately
+ * for the dApp because the Node-side MirrorNodeClient isn't bundleable
+ * here. Pass `null` to skip health ranking entirely.
+ */
+export interface MirrorHealthClient {
+  getNetworkNodes(): Promise<Array<{
+    node_account_id?: string;
+    nodeAccountId?: string;
+    stake?: number | string;
+    service_endpoints?: unknown[];
+    decline_reward?: boolean;
+  }>>;
+  getNodeRecentActivity(
+    nodeAccountId: string,
+    options?: { windowSeconds?: number },
+  ): Promise<boolean | null>;
+}
+
 export interface NodeSelectionOptions {
   strategy?: NodeStrategy;
   subsetSize?: number;
   nodeIds?: Array<string | AccountId>;
   rng?: () => number;
+  /**
+   * When provided, the returned array is post-processed by
+   * `orderByHealth` so the healthiest node sits at index 0. Critical
+   * when a wallet signer (HashPack) only signs body[0] and the
+   * executor downgrades to single-node submission — that body needs
+   * to target a node currently accepting transactions.
+   */
+  mirrorClient?: MirrorHealthClient;
+  useActivity?: boolean;
+  activityWindowSeconds?: number;
+  requireDeclineRewardFalse?: boolean;
+}
+
+/**
+ * Reorder a candidate node list so the entry most likely to accept a
+ * submission lands at index 0, preserving the rest as a randomized
+ * pool. Browser-side mirror of `shared/node-selection.js#orderByHealth`.
+ *
+ * Three layers:
+ *   1. Fisher-Yates shuffle (free, never worse than always-pick-[0]).
+ *   2. Address-book filter via `/api/v1/network/nodes` — healthy nodes
+ *      (stake > 0, non-empty service_endpoints) come first.
+ *   3. Recent-activity preference via `/api/v1/transactions?node=…` —
+ *      nodes that processed a transaction in the last N seconds get
+ *      bumped to the very front.
+ *
+ * Output is a permutation of input; null/transient mirror failures
+ * degrade to layer 1 silently.
+ */
+export async function orderByHealth(
+  candidates: Array<string | AccountId>,
+  options: {
+    mirrorClient?: MirrorHealthClient;
+    useActivity?: boolean;
+    activityWindowSeconds?: number;
+    requireDeclineRewardFalse?: boolean;
+  } = {},
+): Promise<string[]> {
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  const ids = candidates.map((c) => (typeof c === 'string' ? c : c.toString()));
+
+  const shuffled = [...ids];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  if (!options.mirrorClient) return shuffled;
+
+  let healthyFirst = shuffled;
+  try {
+    const nodes = await options.mirrorClient.getNetworkNodes();
+    const okIds = new Set(
+      nodes
+        .filter((n) => Number(n.stake) > 0)
+        .filter((n) => Array.isArray(n.service_endpoints) && n.service_endpoints.length > 0)
+        .filter((n) => !options.requireDeclineRewardFalse || n.decline_reward === false)
+        .map((n) => String(n.node_account_id || n.nodeAccountId || ''))
+        .filter((id) => id.length > 0),
+    );
+    const healthy = shuffled.filter((id) => okIds.has(id));
+    const rest = shuffled.filter((id) => !okIds.has(id));
+    healthyFirst = [...healthy, ...rest];
+  } catch {
+    // Mirror unreachable — degrade to shuffle-only.
+  }
+
+  if (options.useActivity === false) return healthyFirst;
+  const window = options.activityWindowSeconds || 60;
+  try {
+    const checks = await Promise.all(
+      healthyFirst.map((id) =>
+        options.mirrorClient!.getNodeRecentActivity(id, { windowSeconds: window }),
+      ),
+    );
+    const active: string[] = [];
+    const passive: string[] = [];
+    healthyFirst.forEach((id, i) => {
+      if (checks[i] === true) active.push(id);
+      else passive.push(id);
+    });
+    return [...active, ...passive];
+  } catch {
+    return healthyFirst;
+  }
 }
 
 /**
@@ -99,5 +203,21 @@ export async function selectNodeAccountIds(
     const j = Math.floor(rng() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return shuffled.slice(0, N);
+  const subset = shuffled.slice(0, N);
+
+  if (!options.mirrorClient) return subset;
+
+  // Promote the healthiest candidate to index 0 so the wallet-fallback
+  // body[0] target is alive. Preserves the full subset for multi-node
+  // submission resilience when CLI signers contribute full sig arrays.
+  const orderedStrings = await orderByHealth(subset, {
+    mirrorClient: options.mirrorClient,
+    useActivity: options.useActivity,
+    activityWindowSeconds: options.activityWindowSeconds,
+    requireDeclineRewardFalse: options.requireDeclineRewardFalse,
+  });
+  const byString = new Map(subset.map((a) => [a.toString(), a]));
+  return orderedStrings
+    .map((s) => byString.get(s))
+    .filter((a): a is AccountId => Boolean(a));
 }

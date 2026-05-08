@@ -214,6 +214,62 @@ class MirrorNodeClient {
   }
 
   /**
+   * Fetch the network address book (`GET /api/v1/network/nodes`).
+   *
+   * Returns each consensus node's static configuration: `node_account_id`,
+   * `stake`, `min_stake`, `max_stake`, `service_endpoints`, etc. Hedera
+   * does not expose a real-time liveness ping — this endpoint is a
+   * snapshot of "is this node configured to participate" rather than
+   * "is this node responsive right now". For liveness, layer
+   * `getNodeRecentActivity` on top.
+   *
+   * Paginated; we follow `links.next` until exhausted (typical mainnet
+   * is ~30 nodes, well under one page).
+   *
+   * @returns {Promise<Array<{node_account_id: string, stake: number, min_stake: number, max_stake: number, service_endpoints: Array<unknown>, decline_reward: boolean}>>}
+   */
+  async getNetworkNodes() {
+    const nodes = [];
+    let path = '/api/v1/network/nodes?limit=100';
+    while (path) {
+      const response = await this._fetch(path);
+      if (Array.isArray(response.nodes)) nodes.push(...response.nodes);
+      const next = response?.links?.next;
+      // Mirror returns a relative URL like "/api/v1/network/nodes?limit=100&node.id=gt:5".
+      path = typeof next === 'string' && next.length > 0 ? next : null;
+    }
+    return nodes;
+  }
+
+  /**
+   * Has this node processed any transaction in the last `windowSeconds`?
+   *
+   * Closest thing to a "is this node alive" signal Hedera exposes. A
+   * busy network has nodes participating in consensus continuously, so
+   * a node with zero recent transactions is suspect (paused, behind,
+   * partitioned). Returns `null` on transient mirror failures so the
+   * caller can decide whether to fall back gracefully (we treat null
+   * as "unknown, don't disqualify").
+   *
+   * @param {string} nodeAccountId - e.g. "0.0.3"
+   * @param {Object} [options]
+   * @param {number} [options.windowSeconds=60] - lookback in seconds
+   * @returns {Promise<boolean|null>} true if seen, false if window empty, null on failure
+   */
+  async getNodeRecentActivity(nodeAccountId, options = {}) {
+    const windowSeconds = options.windowSeconds || 60;
+    const sinceUnix = Math.floor(Date.now() / 1000) - windowSeconds;
+    const path = `/api/v1/transactions?node=${encodeURIComponent(nodeAccountId)}` +
+      `&limit=1&order=desc&timestamp=gte:${sinceUnix}`;
+    try {
+      const response = await this._fetch(path, { maxRetries: 1 });
+      return Array.isArray(response.transactions) && response.transactions.length > 0;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Look up an executed transaction on the mirror node (Phase B11).
    *
    * Hedera SDK transaction IDs have the form `0.0.X@123456789.000000000`. The

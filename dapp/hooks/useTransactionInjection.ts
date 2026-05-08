@@ -7,6 +7,7 @@ import {
   DEFAULT_SUBSET_SIZE,
   type NodeStrategy,
 } from '../lib/node-selection';
+import { createMirrorHealthClient } from '../lib/mirror-node';
 
 interface NodeSelection {
   strategy?: NodeStrategy;
@@ -198,10 +199,19 @@ export function useTransactionInjection(
       const strategy: NodeStrategy = nodeSelection?.strategy || 'subset';
       const subsetSize = nodeSelection?.subsetSize ?? DEFAULT_SUBSET_SIZE;
       const nodeIds = nodeSelection?.nodeIds;
+      // Pass a `mirrorClient` so node selection promotes the healthiest
+      // candidate to index 0. Critical for the wallet-signer fallback
+      // path: HashPack only signs body[0] of a multi-node freeze, the
+      // server downgrades to single-node submission against that body,
+      // and the body's nodeAccountId needs to be alive. When mirror is
+      // unreachable, `selectNodeAccountIds` silently degrades to its
+      // pre-existing shuffle behaviour (still better than always [0]).
+      const mirrorClient = createMirrorHealthClient(DEFAULT_NETWORK);
       const selectedNodes = await selectNodeAccountIds(client, {
         strategy,
         subsetSize,
         nodeIds,
+        mirrorClient,
       });
       // SDK typing for setNodeAccountIds expects AccountId[]; cast via
       // unknown[] avoids structural-equality mismatches when the dynamic
