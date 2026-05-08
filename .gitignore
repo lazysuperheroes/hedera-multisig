@@ -27,6 +27,9 @@ examples/walkthrough-dapp/walkthrough-signer-accounts.json
 examples/walkthrough-token/walkthrough-keys*
 examples/walkthrough-token/walkthrough-state.json
 examples/walkthrough-token/walkthrough-signer-accounts.json
+examples/walkthrough-agent/walkthrough-keys*
+examples/walkthrough-agent/walkthrough-state.json
+examples/walkthrough-agent/walkthrough-signer-accounts.json
 
 # Logs
 logs/

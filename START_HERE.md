@@ -12,6 +12,7 @@
 > - [`examples/walkthrough-dapp/`](./examples/walkthrough-dapp/) — same flow but signing through the **public testnet dApp** at `testnet-multisig.lazysuperheroes.com` with HashPack on one side and CLI on the other. Best for "what does signing actually feel like for participants" (~30 min, ~6 ℏ).
 > - [`examples/walkthrough-contract/`](./examples/walkthrough-contract/) — smart-contract path: deploy as EOA, convert to multi-sig, ceremony for `increment()` + `withdraw()` (~45 min, ~10 ℏ).
 > - [`examples/walkthrough-token/`](./examples/walkthrough-token/) — three ceremonies in one session: token-association, fungible transfer, NFT transfer. Smoke test for the dApp's non-HBAR transaction-builder paths (~35 min, ~8 ℏ).
+> - [`examples/walkthrough-agent/`](./examples/walkthrough-agent/) — automated co-signer with `AgentSigningClient` + `PolicyEngine`. Three demo scenarios prove policy approves / rejects with clear reasons. Showcase for the agent SDK (~25 min, ~7 ℏ).
 
 ---
 
