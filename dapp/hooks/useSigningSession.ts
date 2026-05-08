@@ -153,16 +153,33 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
         Array.isArray(data.sessionInfo.participants)
           ? data.sessionInfo.participants
               .filter((p) => p.participantId !== data.participantId)
-              .map((p) => ({
-                id: p.participantId,
-                publicKey: p.publicKey || null,
-                status:
-                  p.status === 'rejected'
-                    ? 'disconnected' // protocol distinguishes; UI lumps both as inactive
-                    : (p.status as Participant['status']),
-                label: p.label || undefined,
-                joinedAt: p.connectedAt || Date.now(),
-              }))
+              .map((p) => {
+                // Server preserves 'signed' / 'rejected' across ceremonies
+                // so the threshold count remains accurate when a tx
+                // completes and a new one is injected. But when there's
+                // NO active transaction (sessionInfo.status === 'waiting')
+                // those badges are nonsensical from the user's POV —
+                // nobody can have signed a transaction that doesn't
+                // exist. Downgrade stale 'signed' → 'ready' and
+                // 'rejected' → 'disconnected' (the latter matching the
+                // existing UI convention for inactive participants).
+                const sessionWaiting = data.sessionInfo.status === 'waiting';
+                let status: Participant['status'];
+                if (p.status === 'rejected') {
+                  status = 'disconnected';
+                } else if (sessionWaiting && p.status === 'signed') {
+                  status = 'ready';
+                } else {
+                  status = p.status as Participant['status'];
+                }
+                return {
+                  id: p.participantId,
+                  publicKey: p.publicKey || null,
+                  status,
+                  label: p.label || undefined,
+                  joinedAt: p.connectedAt || Date.now(),
+                };
+              })
           : [];
 
       setState((prev) => ({
