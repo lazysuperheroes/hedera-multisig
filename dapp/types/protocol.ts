@@ -87,6 +87,21 @@ export interface SessionInfo {
     signaturesCollected: number;
     signaturesRequired: number;
   };
+  /**
+   * Snapshot of currently-tracked participants at the moment AUTH_SUCCESS
+   * was sent. Critical for late joiners: PARTICIPANT_CONNECTED broadcasts
+   * only fire for FUTURE arrivals, so without this snapshot a participant
+   * who joins after others would never see them in the participant list,
+   * even though `stats.participantsConnected` would correctly count them.
+   */
+  participants?: Array<{
+    participantId: string;
+    status: 'connected' | 'ready' | 'signed' | 'rejected' | 'disconnected';
+    publicKey?: string | null;
+    label?: string | null;
+    connectedAt?: number;
+    isAgent?: boolean;
+  }>;
 }
 
 export interface TransactionDetails {

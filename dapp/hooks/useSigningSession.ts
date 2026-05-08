@@ -138,6 +138,33 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
     // Register event handlers
     clientRef.current.on('connected', (data) => {
       if (!isMountedRef.current) return;
+
+      // Seed `state.participants` from the AUTH_SUCCESS snapshot.
+      // PARTICIPANT_CONNECTED broadcasts only fire for FUTURE arrivals,
+      // so a participant who joins after others would otherwise never
+      // see them in the list — the top counter would say "2/3 connected"
+      // but the row list would show only the current user. The server
+      // includes a `participants` array in sessionInfo precisely so the
+      // late joiner can backfill. We exclude self (added separately by
+      // PARTICIPANT_CONNECTED if/when the server broadcasts it, or
+      // simply absent from the visible list which is the existing
+      // convention for the current user's row).
+      const seededParticipants: Participant[] =
+        Array.isArray(data.sessionInfo.participants)
+          ? data.sessionInfo.participants
+              .filter((p) => p.participantId !== data.participantId)
+              .map((p) => ({
+                id: p.participantId,
+                publicKey: p.publicKey || null,
+                status:
+                  p.status === 'rejected'
+                    ? 'disconnected' // protocol distinguishes; UI lumps both as inactive
+                    : (p.status as Participant['status']),
+                label: p.label || undefined,
+                joinedAt: p.connectedAt || Date.now(),
+              }))
+          : [];
+
       setState((prev) => ({
         ...prev,
         status: 'connected',
@@ -154,6 +181,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
           signaturesCollected: data.sessionInfo.stats?.signaturesCollected || 0,
           signaturesRequired: data.sessionInfo.threshold,
         },
+        participants: seededParticipants,
         error: null,
       }));
     });

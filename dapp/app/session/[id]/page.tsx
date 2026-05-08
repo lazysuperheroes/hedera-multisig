@@ -236,21 +236,21 @@ export default function SessionPage({ params }: PageProps) {
     hasAutoConnectedRef.current = true;
     connectionAttemptRef.current += 1;
 
-    // Fire the user-visible toasts BEFORE any state work or async
-    // boundary, so React can flush them in the next paint regardless
-    // of how fast the AUTH round-trip resolves. Previously these were
-    // wrapped in setTimeout(100/200ms) which let React batch the toast
-    // state updates with the post-AUTH "session connected" updates —
-    // the user would see all three appear together at the moment AUTH
-    // succeeded, defeating the purpose of progress feedback.
-    toast.info('Wallet Detected', `Using connected wallet: ${wallet.accountId}`);
-    toast.info('Connecting to Session', 'Authenticating with the coordinator...');
-
+    // No transient toasts here. Earlier iterations fired
+    // toast.info('Wallet Detected') + toast.info('Connecting to
+    // Session') ahead of the connect, but React routinely batched
+    // those state updates with the post-AUTH state updates that
+    // arrived ~200-400ms later — the user saw all three render
+    // together at the moment AUTH succeeded, which defeats the
+    // purpose of progress feedback. The ConnectingBanner below
+    // (rendered as soon as currentStep flips to 'session-connect')
+    // is the persistent surface; it carries the wallet account in
+    // its first message and rotates forward as the connect proceeds.
     setCurrentStep('session-connect');
 
     // Capture the non-null value, then kick the connect on the next
-    // microtask so React commits the state updates above before the
-    // WebSocket open potentially races with rendering.
+    // microtask so React commits the state-step update above before
+    // the WebSocket open races with rendering.
     const publicKey = wallet.publicKey;
     Promise.resolve().then(() => handleConnectSession(publicKey!));
   }, [currentStep, wallet.isConnected, wallet.publicKey, sessionInfo?.sessionId]);
