@@ -400,7 +400,7 @@ export default function SessionPage({ params }: PageProps) {
 
       // Extract signature from signed transaction bytes
       const signedTxBytes = signResult.result;
-      const { Transaction } = await import('@hashgraph/sdk');
+      const { Transaction, PublicKey } = await import('@hashgraph/sdk');
       const signedTx = Transaction.fromBytes(signedTxBytes);
 
       // Extract transaction ID for post-signing status
@@ -421,23 +421,21 @@ export default function SessionPage({ params }: PageProps) {
         });
       }
 
-      // Extract ALL signatures from the signed transaction, then
-      // align them positionally to the ORIGINAL frozen tx bodies the
-      // server has stored.
+      // Align wallet-returned signatures to the ORIGINAL frozen tx
+      // bodies the server has stored.
       //
-      // The naïve approach — iterate `signedTx._signedTransactions.list`
-      // and trust its order — works when the wallet preserves the
-      // wire-order of the bodies it received. HashPack via WalletConnect
-      // can reorder (and in some versions duplicate) the bodies when it
-      // re-serializes after signing, which leaves signature[i] not
-      // matching bodyBytes[i] from the server's perspective and the
-      // server rejects with "Signature[1] does not match bodyBytes[1]".
+      // The byte-equality match alone (2.1.15) wasn't enough: HashPack
+      // can preserve `bodyBytes` correctly across all SignedTransaction
+      // entries while populating sigMap with bogus or duplicated
+      // signatures past index 0. The body-equality match would happily
+      // place those bogus signatures at indices > 0 and the server
+      // would reject at the first invalid one.
       //
-      // Robust fix: byte-equality match each wallet-returned body
-      // against the original frozen tx's bodies, then place each
-      // signature at the index the server expects. Whatever order the
-      // wallet hands back, the server sees signatures lined up against
-      // its bodyBytes[0..N].
+      // 2.1.16: cryptographically VERIFY each wallet-returned signature
+      // locally with the wallet's public key. Only signatures that
+      // actually verify against their body get placed. If only sig[0]
+      // verifies, fall through to the legacy single-sig path — the
+      // server already tolerates that against bodyBytes[0].
       const originalTx = Transaction.fromBytes(txBytes);
       const originalSignedList: Array<{ bodyBytes?: Uint8Array }> =
         (originalTx as unknown as { _signedTransactions: { list: Array<{ bodyBytes?: Uint8Array }> } })
@@ -466,55 +464,106 @@ export default function SessionPage({ params }: PageProps) {
         if (key) originalIndexByBody.set(key, idx);
       });
 
+      // Wallet's public key (DER- or raw-encoded). The SDK accepts
+      // both via PublicKey.fromString.
+      let walletPubKey;
+      try {
+        walletPubKey = PublicKey.fromString(wallet.publicKey!);
+      } catch (parseErr) {
+        throw new Error(
+          `Could not parse wallet public key for signature verification: ${(parseErr as Error).message}`,
+        );
+      }
+
       const allSignatures: string[] = new Array(originalSignedList.length).fill('');
       let placed = 0;
+      const verificationLog: Array<{ walletIdx: number; originalIdx: number | null; verified: boolean }> = [];
+
       for (let i = 0; i < signedTxList.length; i++) {
         const entry = signedTxList[i];
         const sigPair = entry.sigMap?.sigPair?.[0];
         const signature = sigPair?.ed25519 || sigPair?.ECDSASecp256k1;
         if (!signature || signature.length === 0) {
-          // Some bodies may legitimately come back unsigned by the
-          // wallet — skip rather than throw. We only need at least
-          // one valid signature for the legacy single-sig path; for
-          // the multi-sig path we'll fail below if not all slots
-          // get filled.
+          verificationLog.push({ walletIdx: i, originalIdx: null, verified: false });
           continue;
         }
-        const originalIdx = originalIndexByBody.get(toHex(entry.bodyBytes));
-        if (originalIdx === undefined) {
-          // The wallet returned a body that doesn't correspond to any
-          // of the original bodies. That means the wallet re-built
-          // the transaction (different node selection / timestamps /
-          // freeze) — its signatures cannot be applied to our frozen
-          // bytes at all.
-          throw new Error(
-            `Wallet-returned body[${i}] does not match any original body — ` +
-            `the wallet appears to have re-frozen the transaction. The ` +
-            `coordinator must re-inject for the wallet to sign the same bytes.`,
-          );
+        const walletBodyBytes = entry.bodyBytes;
+        if (!walletBodyBytes) {
+          verificationLog.push({ walletIdx: i, originalIdx: null, verified: false });
+          continue;
         }
-        allSignatures[originalIdx] = Buffer.from(signature).toString('base64');
+
+        // First try the same-index match against the original frozen
+        // tx — typical case when the wallet preserves order. If that
+        // fails verification, scan all original bodies for a match.
+        const candidateOriginalIdx = originalIndexByBody.get(toHex(walletBodyBytes));
+        let verifiedOriginalIdx: number | null = null;
+
+        const tryVerify = (originalIdx: number): boolean => {
+          const origBody = originalSignedList[originalIdx]?.bodyBytes;
+          if (!origBody) return false;
+          try {
+            return walletPubKey.verify(origBody, signature);
+          } catch {
+            return false;
+          }
+        };
+
+        if (candidateOriginalIdx !== undefined && tryVerify(candidateOriginalIdx)) {
+          verifiedOriginalIdx = candidateOriginalIdx;
+        } else {
+          // Fallback scan: maybe the body bytes match but the signature
+          // was made over some other body, or the wallet substituted
+          // bodies during re-serialization. Either way, brute-force the
+          // signature against each original body.
+          for (let j = 0; j < originalSignedList.length; j++) {
+            if (allSignatures[j] !== '') continue; // already filled
+            if (tryVerify(j)) {
+              verifiedOriginalIdx = j;
+              break;
+            }
+          }
+        }
+
+        if (verifiedOriginalIdx === null) {
+          verificationLog.push({ walletIdx: i, originalIdx: null, verified: false });
+          continue;
+        }
+
+        allSignatures[verifiedOriginalIdx] = Buffer.from(signature).toString('base64');
         placed += 1;
+        verificationLog.push({ walletIdx: i, originalIdx: verifiedOriginalIdx, verified: true });
       }
+
+      // Diagnostic log for the user / our future selves — clearly shows
+      // how many of the wallet's claimed signatures were real.
+      console.log(
+        `[multisig] wallet returned ${signedTxList.length} sigMap entries, ${placed} verified against original bodies (out of ${originalSignedList.length})`,
+        verificationLog,
+      );
 
       if (placed === 0) {
-        throw new Error('Wallet returned no usable signatures');
+        throw new Error(
+          `Wallet returned ${signedTxList.length} signatures but none verified against the original transaction bodies. ` +
+          `This usually means the wallet re-froze the transaction with different bytes (different node selection or timestamps). ` +
+          `The coordinator may need to re-inject.`,
+        );
       }
 
-      // Multi-node freeze: every body must have a signature. If the
-      // wallet only signed a subset, fall back to the legacy single-
-      // sig path which the server tolerates against bodyBytes[0].
       let signatureData: string | string[];
       if (placed === originalSignedList.length) {
+        // Every body has a verified signature — submit the full array.
         signatureData = allSignatures;
       } else {
-        // Find the first non-empty signature — that's our single-sig
-        // submission. Server will verify it against bodyBytes[0].
-        const firstNonEmpty = allSignatures.find((s) => s !== '');
-        if (!firstNonEmpty) {
-          throw new Error('No signatures placed at any body index');
-        }
-        signatureData = firstNonEmpty;
+        // Wallet only signed a subset (typical for HashPack: just
+        // body[0]). Fall through to the legacy single-sig path, which
+        // the server tolerates against bodyBytes[0]. Pick the
+        // signature that's at index 0 if available; otherwise pick
+        // the first verified one.
+        signatureData = allSignatures[0] || (allSignatures.find((s) => s !== '') as string);
+        console.log(
+          `[multisig] only ${placed}/${originalSignedList.length} bodies signed — submitting as legacy single-sig`,
+        );
       }
       const publicKey = wallet.publicKey!;
 
