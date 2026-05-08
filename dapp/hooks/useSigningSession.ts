@@ -216,6 +216,34 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
       }));
     });
 
+    // Broadcast notification when ANY participant has signed (server
+    // sends SIGNATURE_RECEIVED to every connected client). Flip the
+    // matching row to "signed" so the participant list goes green
+    // alongside the signature counter incrementing. Without this the
+    // CLI signer's row stayed "Ready" forever in the dApp.
+    clientRef.current.on('signatureReceived', (data) => {
+      if (!isMountedRef.current) return;
+      setState((prev) => ({
+        ...prev,
+        stats: {
+          ...prev.stats,
+          participantsConnected:
+            data.stats?.participantsConnected ?? prev.stats.participantsConnected,
+          participantsReady:
+            data.stats?.participantsReady ?? prev.stats.participantsReady,
+          participantsExpected:
+            data.stats?.participantsExpected ?? prev.stats.participantsExpected,
+          signaturesCollected:
+            data.stats?.signaturesCollected ?? prev.stats.signaturesCollected,
+          signaturesRequired:
+            data.stats?.signaturesRequired ?? prev.stats.signaturesRequired,
+        },
+        participants: prev.participants.map((p) =>
+          p.id === data.participantId ? { ...p, status: 'signed' as const } : p,
+        ),
+      }));
+    });
+
     clientRef.current.on('rejected', () => {
       if (!isMountedRef.current) return;
       // Clear transaction state and reset to ready status

@@ -325,6 +325,7 @@ export function PostSigningStatus({
               <p className="text-info-soft-fg mb-2">
                 Checking if the transaction went through... (<span className="tabular-nums">{elapsedSeconds}s</span>)
               </p>
+              <CheckingTxIdRow transactionId={transactionId} />
               <div className="w-full bg-info-soft rounded-full h-2 mt-3">
                 <div
                   className="bg-accent h-2 rounded-full transition-all duration-1000"
@@ -339,6 +340,7 @@ export function PostSigningStatus({
               <p className="text-info-soft-fg mb-2">
                 The transaction hasn&apos;t appeared on the network yet. This can happen if other signers haven&apos;t signed yet, or if the network is busy. (<span className="tabular-nums">{elapsedSeconds}s</span>)
               </p>
+              <CheckingTxIdRow transactionId={transactionId} />
               <div className="w-full bg-info-soft rounded-full h-2 mt-3">
                 <div
                   className="bg-accent h-2 rounded-full transition-all duration-1000"
@@ -400,7 +402,7 @@ export function PostSigningStatus({
                 <div className="text-foreground">
                   {transactionDetails.transfers.map((t, i) => (
                     <div key={i} className="font-mono text-xs">
-                      {t.accountId}: {t.amount}
+                      {t.accountId}: {formatTransferAmount(t.amount)}
                     </div>
                   ))}
                 </div>
@@ -490,6 +492,33 @@ export function PostSigningStatus({
       </div>
     </div>
   );
+}
+
+/**
+ * Format a HBAR transfer amount for the Transaction Details panel.
+ *
+ * Input is whatever the decoder hands us — typically a tinybar integer
+ * as a string (e.g. "24000000" or "-24000000"), but tolerant of
+ * already-formatted strings ("0.24 ℏ") to avoid double-formatting if
+ * an upstream change sends them. Output: "+0.24 ℏ (24,000,000 tℏ)" or
+ * "-0.24 ℏ (-24,000,000 tℏ)" — matches the user's mental model from
+ * the verified Transfers panel above instead of leaving raw tinybars
+ * that read like a bug.
+ */
+function formatTransferAmount(amount: string): string {
+  if (amount == null || amount === '') return '—';
+  const trimmed = String(amount).trim();
+  // If the upstream already includes "ℏ" or non-numeric chars beyond
+  // a leading sign, pass it through — already user-formatted.
+  if (/[ℏH]/.test(trimmed)) return trimmed;
+  const tinybars = Number(trimmed);
+  if (!Number.isFinite(tinybars)) return trimmed;
+  if (tinybars === 0) return '0 ℏ';
+  const sign = tinybars < 0 ? '-' : '+';
+  const abs = Math.abs(tinybars);
+  const hbar = abs / 100_000_000;
+  const hbarStr = hbar.toFixed(8).replace(/\.?0+$/, '');
+  return `${sign}${hbarStr} ℏ (${sign}${abs.toLocaleString()} tℏ)`;
 }
 
 /**
@@ -611,3 +640,19 @@ function IntentVsActualDiff({
 }
 
 export default PostSigningStatus;
+
+/**
+ * Tiny inline tx-ID + copy-button row, rendered inside the
+ * "Signature Submitted! Checking..." card so users can copy the tx ID
+ * before HashScan loads, instead of having to expand "Transaction
+ * Details" or click through to the explorer first.
+ */
+function CheckingTxIdRow({ transactionId }: { transactionId: string }) {
+  return (
+    <div className="mt-2 flex items-center gap-2 text-xs">
+      <span className="text-info-soft-fg/80 shrink-0">Transaction ID:</span>
+      <code className="font-mono text-info-soft-fg break-all">{transactionId}</code>
+      <CopyButton text={transactionId} label="transaction ID" size="sm" />
+    </div>
+  );
+}

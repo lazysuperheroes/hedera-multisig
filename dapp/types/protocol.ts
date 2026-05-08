@@ -170,6 +170,29 @@ export interface SignatureRejectedMessage {
   };
 }
 
+/**
+ * Server broadcast to all participants when ANY participant's signature
+ * has been accepted. Distinct from SIGNATURE_ACCEPTED, which is the
+ * server's confirmation back to the signer themselves. Receiving
+ * clients use this to flip the relevant participant's row from "Ready"
+ * to "Signed".
+ */
+export interface SignatureReceivedMessage {
+  type: 'SIGNATURE_RECEIVED';
+  payload: {
+    participantId: string;
+    publicKeyPreview?: string;
+    stats: {
+      participantsExpected: number;
+      participantsConnected: number;
+      participantsReady: number;
+      signaturesCollected: number;
+      signaturesRequired: number;
+    };
+    thresholdMet: boolean;
+  };
+}
+
 export interface ThresholdMetMessage {
   type: 'THRESHOLD_MET';
   payload: {
@@ -264,6 +287,7 @@ export type ServerMessage =
   | TransactionReceivedMessage
   | SignatureAcceptedMessage
   | SignatureRejectedMessage
+  | SignatureReceivedMessage
   | ThresholdMetMessage
   | TransactionExecutedMessage
   | TransactionExpiredMessage
@@ -296,6 +320,7 @@ export interface SigningClientEvents {
   signed: (data: { publicKey: string }) => void;
   signatureAccepted: (data: SignatureAcceptedMessage['payload']) => void;
   signatureRejected: (data: SignatureRejectedMessage['payload']) => void;
+  signatureReceived: (data: SignatureReceivedMessage['payload']) => void;
   thresholdMet: (data: ThresholdMetMessage['payload']) => void;
   transactionExecuted: (data: TransactionExecutedMessage['payload']) => void;
   transactionExpired: (data: { sessionId: string; message: string }) => void;

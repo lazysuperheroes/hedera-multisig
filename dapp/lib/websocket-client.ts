@@ -268,16 +268,27 @@ export class BrowserSigningClient {
    * @param signature - Signature bytes (base64 encoded) - single string or array for multi-node transactions
    */
   submitSignature(publicKey: string, signature: string | string[]): void {
+    // Wire-canonical field is `signatures: string[]` for multi-node
+    // freezes (one base64 sig per SignedTransaction body). The legacy
+    // single-sig form `signature: string` is still accepted by the
+    // server. Field name MUST match shape: previously this always sent
+    // `signature` regardless of type, so an array landed under the
+    // wrong field and the server rejected with
+    //   "No signature(s) in payload — expected `signatures: string[]`
+    //    (canonical) or `signature: string` (legacy)"
+    // breaking every multi-node signing flow from the dApp.
+    const isArray = Array.isArray(signature);
+    const payload = isArray
+      ? { publicKey, signatures: signature }
+      : { publicKey, signature };
+
     this.send({
       type: 'SIGNATURE_SUBMIT',
-      payload: {
-        publicKey,
-        signature,
-      },
+      payload,
     });
 
     this.status = 'signed';
-    const sigCount = Array.isArray(signature) ? signature.length : 1;
+    const sigCount = isArray ? signature.length : 1;
     this.log(`Signature submitted (${sigCount} node signatures)`, 'success');
     this.emit('signed', { publicKey });
   }
@@ -406,6 +417,19 @@ export class BrowserSigningClient {
         case 'SIGNATURE_REJECTED':
           this.log(`Signature rejected: ${message.payload.message}`, 'error');
           this.emit('signatureRejected', message.payload);
+          break;
+
+        case 'SIGNATURE_RECEIVED':
+          // Broadcast to ALL participants when ANY participant's
+          // signature lands. Distinct from SIGNATURE_ACCEPTED (the
+          // server's reply to the signer themselves). Without this
+          // case the dApp ignored the message and the signer's row
+          // never flipped from "Ready" to "Signed" in other clients.
+          this.log(
+            `Participant ${message.payload.participantId} signed`,
+            'success',
+          );
+          this.emit('signatureReceived', message.payload);
           break;
 
         case 'THRESHOLD_MET':

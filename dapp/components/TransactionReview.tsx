@@ -492,24 +492,120 @@ export function TransactionReview({
           </div>
         )}
 
-        {/* Metadata from Coordinator (collapsed by default if no issues) */}
-        {metadata && (
-          <div className="p-4 border-b border-border bg-warning-soft/60">
-            <details className={validation && !validation.valid ? 'open' : ''}>
-              <summary className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-warning-soft-fg">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-                <span>Coordinator&apos;s description (not verified)</span>
-              </summary>
-              <div className="mt-3 p-3 bg-surface rounded-md border border-warning/40 text-xs">
-                <pre className="text-foreground-muted whitespace-pre-wrap overflow-x-auto">
-                  {JSON.stringify(metadata, null, 2)}
-                </pre>
+        {/* Metadata from Coordinator.
+            Three rendering modes:
+              (a) Has verified fields AND no unverified surplus → green
+                  "Verified additional context", reassuring like the
+                  ABI verification.
+              (b) Some verified, some unverifiable → split: green
+                  verified summary on top, yellow unverifiable JSON
+                  underneath with an explanation of WHY (so it doesn't
+                  read as alarming).
+              (c) Nothing verifiable at all → yellow as before, but
+                  with a clearer note about what would make it green.
+            Hard mismatches (different from "unverified") still trigger
+            the destructive Warnings Banner above this block. */}
+        {metadata && (() => {
+          const verifiedKeys = validation ? Object.keys(validation.verified || {}) : [];
+          const hasVerified = verifiedKeys.length > 0;
+          // Strip out fields we already showed as verified, so the
+          // unverifiable-JSON block doesn't repeat them.
+          const cf = (metadata.customFields && typeof metadata.customFields === 'object')
+            ? metadata.customFields as Record<string, unknown>
+            : null;
+          const unverifiableCustomFields: Record<string, unknown> | null = cf
+            ? Object.fromEntries(
+                Object.entries(cf).filter(([k]) => !verifiedKeys.includes(k)),
+              )
+            : null;
+          const otherMetadata: Record<string, unknown> = Object.fromEntries(
+            Object.entries(metadata).filter(([k]) => k !== 'customFields'),
+          );
+          const hasUnverifiableSurplus =
+            (unverifiableCustomFields && Object.keys(unverifiableCustomFields).length > 0) ||
+            Object.keys(otherMetadata).length > 0;
+
+          // Mode (a): everything verified, nothing left over.
+          if (hasVerified && !hasUnverifiableSurplus) {
+            return (
+              <div className="p-4 border-b border-border bg-success-soft/60">
+                <details>
+                  <summary className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-success-soft-fg">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <span>Verified additional context</span>
+                  </summary>
+                  <div className="mt-3 p-3 bg-surface rounded-md border border-success/40 text-xs space-y-1">
+                    {verifiedKeys.map((k) => (
+                      <div key={k} className="flex gap-2 text-foreground">
+                        <span className="text-foreground-subtle">{k}:</span>
+                        <span className="font-mono break-all">
+                          {JSON.stringify(validation!.verified[k].matched)}
+                        </span>
+                        <span className="text-success-soft-fg">✓ matches frozen tx</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               </div>
-            </details>
-          </div>
-        )}
+            );
+          }
+
+          // Mode (b) / (c): yellow block, but reworded.
+          return (
+            <div className="p-4 border-b border-border bg-warning-soft/60">
+              <details className={validation && !validation.valid ? 'open' : ''}>
+                <summary className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-warning-soft-fg">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <span>
+                    Coordinator&apos;s description{' '}
+                    {hasVerified ? '(some fields verified)' : '(informational)'}
+                  </span>
+                </summary>
+                <div className="mt-3 space-y-3">
+                  {hasVerified && (
+                    <div className="p-3 bg-surface rounded-md border border-success/40 text-xs space-y-1">
+                      <div className="text-success-soft-fg font-semibold mb-1">
+                        Verified against the frozen transaction:
+                      </div>
+                      {verifiedKeys.map((k) => (
+                        <div key={k} className="flex gap-2 text-foreground">
+                          <span className="text-foreground-subtle">{k}:</span>
+                          <span className="font-mono break-all">
+                            {JSON.stringify(validation!.verified[k].matched)}
+                          </span>
+                          <span className="text-success-soft-fg">✓</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="p-3 bg-surface rounded-md border border-warning/40 text-xs">
+                    <p className="text-foreground-muted mb-2">
+                      The fields below are coordinator-supplied context the dApp can&apos;t cross-check
+                      against the on-chain transaction (they describe intent, not transaction
+                      payload). Trust them only as much as you trust the coordinator.
+                    </p>
+                    <pre className="text-foreground-muted whitespace-pre-wrap overflow-x-auto">
+                      {JSON.stringify(
+                        {
+                          ...otherMetadata,
+                          ...(unverifiableCustomFields && Object.keys(unverifiableCustomFields).length > 0
+                            ? { customFields: unverifiableCustomFields }
+                            : {}),
+                        },
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </div>
+                </div>
+              </details>
+            </div>
+          );
+        })()}
 
         {/* Technical Details (collapsed) */}
         <div className="p-4 bg-surface-recessed">

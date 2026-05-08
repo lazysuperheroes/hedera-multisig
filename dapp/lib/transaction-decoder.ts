@@ -170,6 +170,14 @@ export interface MetadataValidation {
   valid: boolean;
   warnings: string[];
   mismatches: Record<string, { metadata: any; actual: any }>;
+  /**
+   * Fields the validator successfully cross-checked against the on-chain
+   * (frozen) transaction. Lets the UI flip "Coordinator's description
+   * (not verified)" to a green "Verified additional context" block when
+   * everything matches, and split-render verified vs unverifiable fields
+   * when only some of the metadata is checkable.
+   */
+  verified: Record<string, { metadata: any; matched: any }>;
 }
 
 export interface ExtractedAmount {
@@ -687,6 +695,47 @@ export class TransactionDecoder {
   ): MetadataValidation {
     const warnings: string[] = [];
     const mismatches: Record<string, { metadata: any; actual: any }> = {};
+    const verified: Record<string, { metadata: any; matched: any }> = {};
+
+    // Coordinator-friendly metadata under `customFields` is checkable
+    // when the field corresponds to something encoded in the frozen
+    // transaction. nodeAccountIds + nodeCount are the load-bearing
+    // case for the multi-node-freeze workflow: each SignedTransaction
+    // body has its own nodeAccountID, so we KNOW the set the
+    // coordinator actually froze against — no trust required.
+    const cf = (metadata && typeof metadata === 'object' && metadata.customFields)
+      ? metadata.customFields
+      : null;
+    if (cf && Array.isArray(cf.nodeAccountIds)) {
+      const claimed: string[] = cf.nodeAccountIds.map((n: unknown) => String(n));
+      const actual = (txDetails.nodeAccountIds || []).map((n) => String(n));
+      const claimedSet = new Set(claimed);
+      const actualSet = new Set(actual);
+      const same =
+        claimedSet.size === actualSet.size &&
+        [...claimedSet].every((id) => actualSet.has(id));
+      if (same && actual.length > 0) {
+        verified.nodeAccountIds = { metadata: claimed, matched: actual };
+      } else if (actual.length > 0) {
+        mismatches.nodeAccountIds = { metadata: claimed, actual };
+        warnings.push(
+          `❌ NODE ACCOUNTS MISMATCH: Metadata claims [${claimed.join(', ')}], ` +
+          `but transaction was frozen against [${actual.join(', ')}]`
+        );
+      }
+    }
+    if (cf && typeof cf.nodeCount === 'number') {
+      const actualCount = (txDetails.nodeAccountIds || []).length;
+      if (actualCount > 0 && cf.nodeCount === actualCount) {
+        verified.nodeCount = { metadata: cf.nodeCount, matched: actualCount };
+      } else if (actualCount > 0 && cf.nodeCount !== actualCount) {
+        mismatches.nodeCount = { metadata: cf.nodeCount, actual: actualCount };
+        warnings.push(
+          `❌ NODE COUNT MISMATCH: Metadata claims ${cf.nodeCount} nodes, ` +
+          `but transaction was frozen against ${actualCount}`
+        );
+      }
+    }
 
     // Check for urgency language (social engineering indicator)
     const urgencyPatterns = [
@@ -837,6 +886,7 @@ export class TransactionDecoder {
       valid: Object.keys(mismatches).length === 0,
       warnings: warnings,
       mismatches: mismatches,
+      verified: verified,
     };
   }
 
