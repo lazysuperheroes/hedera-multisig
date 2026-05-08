@@ -63,9 +63,47 @@ function sanitizePublicKey(publicKey) {
   return publicKey.substring(0, 6) + '...' + publicKey.substring(publicKey.length - 4);
 }
 
+// Known Hedera SubjectPublicKeyInfo (DER) prefixes. The CLI emits keys
+// in DER form (`302a300506032b6570032100…` for ed25519,
+// `302d300706052b8104000a032200…` for ECDSA secp256k1), but wallet
+// integrations like HashPack/WalletConnect expose the raw key bytes
+// over the wire. Without canonicalization the eligibility check on
+// AUTH would treat the same key as two different values and reject
+// the participant.
+const ED25519_DER_PREFIX = '302a300506032b6570032100';
+const ECDSA_SECP256K1_DER_PREFIX = '302d300706052b8104000a032200';
+
+/**
+ * Canonicalize a Hedera public key to lowercase raw hex.
+ *
+ *   - Strips a leading `0x` if present.
+ *   - Lowercases.
+ *   - If the result starts with a known Hedera DER prefix (ed25519 or
+ *     ECDSA secp256k1), strips that too.
+ *
+ * Use this whenever you need to compare two public-key strings for
+ * equality across producers — the CLI emits DER, browser wallets emit
+ * raw, and both must match.
+ *
+ * @param {string} key - Public key in any of the supported encodings.
+ * @returns {string} Lowercase raw-hex public key, or '' if input is empty.
+ */
+function toRawPublicKeyHex(key) {
+  if (!key || typeof key !== 'string') return '';
+  let hex = key.trim().toLowerCase();
+  if (hex.startsWith('0x')) hex = hex.slice(2);
+  if (hex.startsWith(ED25519_DER_PREFIX)) {
+    hex = hex.slice(ED25519_DER_PREFIX.length);
+  } else if (hex.startsWith(ECDSA_SECP256K1_DER_PREFIX)) {
+    hex = hex.slice(ECDSA_SECP256K1_DER_PREFIX.length);
+  }
+  return hex;
+}
+
 module.exports = {
   timingSafeCompare,
   generateSessionId,
   generateParticipantId,
   sanitizePublicKey,
+  toRawPublicKeyHex,
 };

@@ -11,6 +11,7 @@ const {
   generateSessionId,
   generateParticipantId,
   sanitizePublicKey,
+  toRawPublicKeyHex,
 } = require('../shared/crypto-utils');
 
 describe('shared/crypto-utils (Phase F7)', function() {
@@ -104,6 +105,52 @@ describe('shared/crypto-utils (Phase F7)', function() {
       const key = '123456789abc';
       const result = sanitizePublicKey(key);
       expect(result).to.equal('123456...9abc');
+    });
+  });
+
+  describe('toRawPublicKeyHex', function() {
+    const RAW = '6483e83472c00ff3f3c41be120b738d589c8512840863f96d07fc6e704674017';
+    const ED25519_DER = '302a300506032b657003210' + '0' + RAW;
+
+    it('returns "" for empty/non-string input', function() {
+      expect(toRawPublicKeyHex('')).to.equal('');
+      expect(toRawPublicKeyHex(null)).to.equal('');
+      expect(toRawPublicKeyHex(undefined)).to.equal('');
+      expect(toRawPublicKeyHex(123)).to.equal('');
+    });
+
+    it('returns raw hex unchanged (lowercased)', function() {
+      expect(toRawPublicKeyHex(RAW)).to.equal(RAW);
+      expect(toRawPublicKeyHex(RAW.toUpperCase())).to.equal(RAW);
+    });
+
+    it('strips 0x prefix', function() {
+      expect(toRawPublicKeyHex('0x' + RAW)).to.equal(RAW);
+      expect(toRawPublicKeyHex('0X' + RAW)).to.equal(RAW);
+    });
+
+    it('strips ed25519 DER prefix', function() {
+      expect(toRawPublicKeyHex(ED25519_DER)).to.equal(RAW);
+    });
+
+    it('strips ed25519 DER plus 0x prefix', function() {
+      expect(toRawPublicKeyHex('0x' + ED25519_DER)).to.equal(RAW);
+    });
+
+    it('strips ECDSA secp256k1 DER prefix (33-byte compressed key)', function() {
+      const compressed = '02' + 'a'.repeat(64); // 33 bytes = 66 hex chars
+      const ecdsaDer = '302d300706052b8104000a032200' + compressed;
+      expect(toRawPublicKeyHex(ecdsaDer)).to.equal(compressed);
+    });
+
+    it('canonicalizes the same key to the same raw form regardless of producer', function() {
+      // The CLI writes DER, HashPack/WalletConnect emits raw — both
+      // must canonicalize identically for AUTH eligibility to pass.
+      expect(toRawPublicKeyHex(ED25519_DER)).to.equal(toRawPublicKeyHex(RAW));
+    });
+
+    it('trims whitespace', function() {
+      expect(toRawPublicKeyHex('  ' + RAW + '\n')).to.equal(RAW);
     });
   });
 });
