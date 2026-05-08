@@ -24,6 +24,9 @@ examples/walkthrough-contract/multisig-*-tx.json
 examples/walkthrough-dapp/walkthrough-keys*
 examples/walkthrough-dapp/walkthrough-state.json
 examples/walkthrough-dapp/walkthrough-signer-accounts.json
+examples/walkthrough-token/walkthrough-keys*
+examples/walkthrough-token/walkthrough-state.json
+examples/walkthrough-token/walkthrough-signer-accounts.json
 
 # Logs
 logs/
