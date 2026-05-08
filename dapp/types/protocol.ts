@@ -284,6 +284,29 @@ export interface PongMessage {
   payload?: Record<string, never>;
 }
 
+/**
+ * Server broadcast when ANY participant rejects the in-flight tx.
+ * Distinct from the same-named client→server message participants
+ * send to *initiate* a rejection. The server resets the per-tx state
+ * (signatures map cleared, signed→ready, frozenTransaction nulled,
+ * session back to 'waiting') and broadcasts this so every connected
+ * client can mirror the reset locally.
+ */
+export interface TransactionRejectedBroadcastMessage {
+  type: 'TRANSACTION_REJECTED';
+  payload: {
+    participantId: string;
+    reason: string;
+    stats?: {
+      participantsExpected?: number;
+      participantsConnected?: number;
+      participantsReady?: number;
+      signaturesCollected?: number;
+      signaturesRequired?: number;
+    };
+  };
+}
+
 export type ServerMessage =
   | AuthSuccessMessage
   | AuthFailedMessage
@@ -294,6 +317,7 @@ export type ServerMessage =
   | ThresholdMetMessage
   | TransactionExecutedMessage
   | TransactionExpiredMessage
+  | TransactionRejectedBroadcastMessage
   | ParticipantConnectedMessage
   | ParticipantReadyPayloadMessage
   | ParticipantDisconnectedMessage

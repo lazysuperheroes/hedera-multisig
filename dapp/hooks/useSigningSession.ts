@@ -213,6 +213,51 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
 
     clientRef.current.on('transactionReceived', (data) => {
       if (!isMountedRef.current) return;
+
+      // Reconstruct the ethers Interface from the wire-canonical `abi`
+      // array (JSON-serializable list of fragment strings) the server
+      // sends. ethers.Interface objects don't survive JSON.stringify,
+      // so the server can't ship the rich form directly; it ships
+      // `abi` and clients rebuild. Falls back to a legacy
+      // `contractInterface` field if some caller still sets it.
+      // Without this rebuild, contract-call transactions show up in
+      // TransactionReview as "No ABI — Unverifiable" even when the
+      // CLI side gets the full "increment() ✓ ABI verified" view from
+      // the same broadcast — the data is on the wire, the dApp just
+      // wasn't looking at the right field.
+      const dataWithAbi = data as typeof data & { abi?: unknown };
+      let reconstructedInterface: unknown = data.contractInterface || null;
+      if (!reconstructedInterface && Array.isArray(dataWithAbi.abi) && dataWithAbi.abi.length > 0) {
+        try {
+          // Lazy-import ethers so the browser bundle only pulls it in
+          // when a contract-call tx actually arrives. ethers exposes
+          // both new-style (`Interface`) and legacy (`utils.Interface`)
+          // surfaces; the v6 import shape is `import { Interface }`.
+          // We use a dynamic import to keep the hook async-safe and
+          // avoid a top-level dependency. Fire-and-forget into
+          // setState — by the time review renders, contractInterface
+          // will be populated. (TransactionReview's effect re-runs on
+          // its prop change.)
+          import('ethers').then((ethersMod) => {
+            try {
+              const iface = new ethersMod.Interface(dataWithAbi.abi as string[]);
+              setState((prev) => ({
+                ...prev,
+                transaction: {
+                  ...prev.transaction,
+                  contractInterface: iface,
+                },
+              }));
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.warn('[multisig] ABI reconstruction failed:', (err as Error).message);
+            }
+          }).catch(() => { /* ethers unavailable; review falls back to "No ABI" */ });
+        } catch {
+          reconstructedInterface = null;
+        }
+      }
+
       setState((prev) => ({
         ...prev,
         status: 'reviewing',
@@ -220,7 +265,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
           frozenTransaction: data.frozenTransaction,
           txDetails: data.txDetails,
           metadata: data.metadata || null,
-          contractInterface: data.contractInterface || null,
+          contractInterface: reconstructedInterface,
         },
         // Reset stale per-transaction status from any previous
         // ceremony in this session. The server's clearTransactionState
@@ -276,7 +321,13 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
 
     clientRef.current.on('rejected', () => {
       if (!isMountedRef.current) return;
-      // Clear transaction state and reset to ready status
+      // A rejection (local or remote) aborts the whole ceremony. The
+      // server has already reset the per-tx state on its end and is
+      // broadcasting PARTICIPANT_STATUS_UPDATE for any 'signed' rows
+      // it just demoted, but apply the same reset locally so the UI
+      // is consistent in the same render pass — no flash of "1/2
+      // signatures collected" against a tx the session already
+      // canceled, no stale "Bob: Signed" badge.
       setState((prev) => ({
         ...prev,
         status: 'ready',
@@ -286,6 +337,13 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
           metadata: null,
           contractInterface: null,
         },
+        stats: {
+          ...prev.stats,
+          signaturesCollected: 0,
+        },
+        participants: prev.participants.map((p) =>
+          p.status === 'signed' ? { ...p, status: 'ready' as const } : p,
+        ),
       }));
     });
 

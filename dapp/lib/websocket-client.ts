@@ -415,6 +415,22 @@ export class BrowserSigningClient {
           this.onTransactionReceived(message.payload);
           break;
 
+        case 'TRANSACTION_REJECTED':
+          // Fired by the server when ANY participant rejects (the
+          // server resets the per-tx state and broadcasts to everyone).
+          // Distinct from the local 'rejected' event the client emits
+          // when *this* user rejects via rejectTransaction(). Both
+          // need the same dApp-side cleanup, so route both through
+          // the same hook handler.
+          this.log(
+            `Participant ${message.payload?.participantId || '?'} rejected: ${
+              message.payload?.reason || 'no reason given'
+            }`,
+            'warning',
+          );
+          this.emit('rejected', { reason: message.payload?.reason || 'rejected by another participant' });
+          break;
+
         case 'SIGNATURE_ACCEPTED':
           this.log('Signature accepted by server', 'success');
           this.emit('signatureAccepted', message.payload);
@@ -553,6 +569,15 @@ export class BrowserSigningClient {
     frozenTransaction: string | { base64: string; bytes?: Uint8Array };
     txDetails: TransactionDetails;
     metadata?: Record<string, unknown>;
+    /**
+     * Server's canonical wire shape: a JSON-serializable array of
+     * ethers fragment strings (one per ABI fragment). The original
+     * ethers.Interface object can't survive JSON.stringify, so the
+     * server ships the array form and the client reconstructs.
+     * Falls back to `contractInterface` for any caller still sending
+     * the legacy field.
+     */
+    abi?: unknown;
     contractInterface?: unknown;
   }): void {
     this.status = 'reviewing';

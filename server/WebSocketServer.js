@@ -1472,22 +1472,67 @@ class MultiSigWebSocketServer {
   async _handleTransactionRejected(sessionId, participantId, message) {
     const { reason } = message.payload;
 
-    // Update participant status
+    // Mark the rejector
     await this.sessionManager.updateParticipantStatus(sessionId, participantId, 'rejected');
 
-    // Broadcast rejection to session
+    // A single rejection aborts the whole ceremony — the bytes won't
+    // execute, so any signatures already collected from OTHER
+    // participants are now useless for this tx. Reset the per-tx
+    // state to match: drop the signatures Map, demote 'signed' /
+    // 'rejected' participants back to 'ready' / 'connected', clear
+    // the frozen tx, and put the session back to 'waiting' so the
+    // coordinator can re-inject without operating on stale state.
+    let changedStatuses = [];
+    const session = await this.sessionManager.store.getSession(sessionId);
+    if (session) {
+      if (typeof this.sessionManager.store.clearTransactionState === 'function') {
+        changedStatuses = await this.sessionManager.store.clearTransactionState(sessionId) || [];
+      }
+      if (session.expirationTimerId) {
+        try { timerController.clear(session.expirationTimerId); } catch { /* ignore */ }
+        session.expirationTimerId = null;
+      }
+      session.frozenTransaction = null;
+      session.txDetails = null;
+      session.serializableAbi = null;
+      session.transactionExpiresAt = null;
+      session.transactionReceivedAt = null;
+      session.status = 'waiting';
+    }
+
     const rejectedStats = await this.sessionManager.store.getStats(sessionId);
+
+    // Push fresh per-participant statuses BEFORE the rejection
+    // broadcast so the dApp's row pills clear in the same render
+    // pass as the rejection toast — no flash of "signed" against a
+    // tx that's already been canceled.
+    if (changedStatuses.length > 0) {
+      for (const { participantId: pid, status } of changedStatuses) {
+        await this.broadcastToSession(sessionId, {
+          type: 'PARTICIPANT_STATUS_UPDATE',
+          payload: {
+            participantId: pid,
+            status,
+            stats: rejectedStats,
+          },
+        });
+      }
+    }
+
     await this.broadcastToSession(sessionId, {
       type: 'TRANSACTION_REJECTED',
       payload: {
         participantId,
         reason,
-        stats: rejectedStats
+        stats: rejectedStats,
       }
     });
 
     if (this.options.verbose) {
-      console.log(chalk.yellow(`\n⚠️  Participant ${participantId} rejected transaction: ${reason}\n`));
+      console.log(chalk.yellow(
+        `\n⚠️  Participant ${participantId} rejected transaction: ${reason}\n` +
+        `   Session reset to 'waiting' — coordinator can re-inject.\n`
+      ));
     }
   }
 
