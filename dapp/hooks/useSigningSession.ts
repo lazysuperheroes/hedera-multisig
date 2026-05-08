@@ -40,6 +40,13 @@ export interface SigningSessionState {
   stats: {
     participantsConnected: number;
     participantsReady: number;
+    /**
+     * How many participants the session expects in total (set at
+     * session creation via `--participants` / `expectedParticipants`).
+     * Surfaces in the UI as the denominator on "X/Y connected" so the
+     * user has context for whether more signers are still expected.
+     */
+    participantsExpected: number;
     signaturesCollected: number;
     signaturesRequired: number;
   };
@@ -65,6 +72,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
     stats: {
       participantsConnected: 0,
       participantsReady: 0,
+      participantsExpected: 0,
       signaturesCollected: 0,
       signaturesRequired: 0,
     },
@@ -101,6 +109,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
           stats: {
             participantsConnected: sessionInfo.stats?.participantsConnected || 0,
             participantsReady: sessionInfo.stats?.participantsReady || 0,
+            participantsExpected: sessionInfo.stats?.participantsExpected || sessionInfo.expectedParticipants || 0,
             signaturesCollected: sessionInfo.stats?.signaturesCollected || 0,
             signaturesRequired: sessionInfo.threshold,
           },
@@ -138,6 +147,10 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
         stats: {
           participantsConnected: data.sessionInfo.stats?.participantsConnected || 0,
           participantsReady: data.sessionInfo.stats?.participantsReady || 0,
+          participantsExpected:
+            data.sessionInfo.stats?.participantsExpected ||
+            data.sessionInfo.expectedParticipants ||
+            0,
           signaturesCollected: data.sessionInfo.stats?.signaturesCollected || 0,
           signaturesRequired: data.sessionInfo.threshold,
         },
@@ -277,6 +290,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
             ...prev.stats,
             participantsConnected: data.stats.participantsConnected,
             participantsReady: data.stats.participantsReady,
+            participantsExpected: data.stats.participantsExpected ?? prev.stats.participantsExpected,
           },
           participants: updatedParticipants,
         };
@@ -310,6 +324,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
             ...prev.stats,
             participantsConnected: data.stats.participantsConnected,
             participantsReady: data.stats.participantsReady,
+            participantsExpected: data.stats.participantsExpected ?? prev.stats.participantsExpected,
           },
           participants: updatedParticipants,
         };
@@ -320,6 +335,18 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
       if (!isMountedRef.current) return;
       setState((prev) => ({
         ...prev,
+        // Sync stats from the server's disconnect payload — without
+        // this, the SignatureProgress count stayed stale when a
+        // participant left, contributing to the perceived mismatch
+        // between the top counter and the bottom row count.
+        stats: data.stats
+          ? {
+              ...prev.stats,
+              participantsConnected: data.stats.participantsConnected,
+              participantsReady: data.stats.participantsReady,
+              participantsExpected: data.stats.participantsExpected ?? prev.stats.participantsExpected,
+            }
+          : prev.stats,
         participants: prev.participants.map((p) =>
           p.id === data.participantId ? { ...p, status: 'disconnected' as const } : p
         ),

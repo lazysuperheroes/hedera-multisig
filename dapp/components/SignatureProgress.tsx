@@ -12,6 +12,13 @@ export interface SignatureProgressProps {
   signaturesRequired: number;
   participantsConnected: number;
   participantsReady: number;
+  /**
+   * How many signers the session expects in total. When > 0, the two
+   * participant counters render as "X / Y" so users have context (a
+   * 2/3 means "1 still expected"; a bare "2" doesn't). Optional for
+   * backward compat — falls back to the bare number.
+   */
+  participantsExpected?: number;
   thresholdMet?: boolean;
 }
 
@@ -20,8 +27,12 @@ export function SignatureProgress({
   signaturesRequired,
   participantsConnected,
   participantsReady,
+  participantsExpected,
   thresholdMet = false,
 }: SignatureProgressProps) {
+  const denom = typeof participantsExpected === 'number' && participantsExpected > 0
+    ? participantsExpected
+    : null;
   const progress = signaturesRequired > 0 ? (signaturesCollected / signaturesRequired) * 100 : 0;
   const isComplete = thresholdMet || signaturesCollected >= signaturesRequired;
 
@@ -97,11 +108,25 @@ export function SignatureProgress({
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-surface-recessed rounded p-3">
           <div className="text-xs text-foreground-subtle dark:text-foreground-subtle mb-1">Participants Connected</div>
-          <div className="text-2xl font-bold text-foreground">{participantsConnected}</div>
+          <div className="text-2xl font-bold text-foreground tabular-nums">
+            {participantsConnected}
+            {denom !== null && (
+              <span className="text-base font-medium text-foreground-muted">
+                {' / '}{denom}
+              </span>
+            )}
+          </div>
         </div>
         <div className="bg-surface-recessed rounded p-3">
           <div className="text-xs text-foreground-subtle dark:text-foreground-subtle mb-1">Participants Ready</div>
-          <div className="text-2xl font-bold text-foreground">{participantsReady}</div>
+          <div className="text-2xl font-bold text-foreground tabular-nums">
+            {participantsReady}
+            {denom !== null && (
+              <span className="text-base font-medium text-foreground-muted">
+                {' / '}{denom}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

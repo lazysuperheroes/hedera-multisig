@@ -470,12 +470,21 @@ class SessionStore {
   }
 
   /**
-   * Mark participant as ready (keys loaded)
+   * Mark participant as ready (keys loaded).
+   *
+   * `publicKey` is optional but strongly preferred: when supplied (the
+   * dApp sends it in the PARTICIPANT_READY payload), we persist it on
+   * the participant so subsequent broadcasts and the participant-list
+   * UI can show the eligibility-checked key alongside the "Ready"
+   * badge. Without it the UI ends up displaying "Waiting for public
+   * key..." underneath a "Ready" badge — internally consistent in code
+   * but contradictory to a human reading the screen.
    *
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
+   * @param {string} [publicKey] - Public key supplied at ready time
    */
-  async setParticipantReady(sessionId, participantId) {
+  async setParticipantReady(sessionId, participantId, publicKey) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -494,6 +503,9 @@ class SessionStore {
     participant.keysLoaded = true;
     participant.status = 'ready';
     participant.readyAt = Date.now();
+    if (publicKey) {
+      participant.publicKey = publicKey;
+    }
   }
 
   /**

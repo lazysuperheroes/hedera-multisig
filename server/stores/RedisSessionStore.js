@@ -492,7 +492,7 @@ class RedisSessionStore {
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
    */
-  async setParticipantReady(sessionId, participantId) {
+  async setParticipantReady(sessionId, participantId, publicKey) {
     const session = await this._loadSession(sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -511,6 +511,9 @@ class RedisSessionStore {
     participant.keysLoaded = true;
     participant.status = 'ready';
     participant.readyAt = Date.now();
+    if (publicKey) {
+      participant.publicKey = publicKey;
+    }
 
     await this._saveSession(session);
   }

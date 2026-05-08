@@ -1025,8 +1025,16 @@ class MultiSigWebSocketServer {
    */
   async _handleParticipantReady(sessionId, participantId, message) {
     try {
+      // Forward the public key from the dApp's PARTICIPANT_READY payload
+      // through to the store so it persists on the participant, AND
+      // include it in the broadcast so other clients (the coordinator's
+      // /create view, other participants on /session/[id]) can render
+      // the eligibility-checked key against the "Ready" badge instead
+      // of "Waiting for public key...".
+      const readyPublicKey = message && message.payload ? message.payload.publicKey : undefined;
+
       // Mark participant as ready
-      await this.sessionManager.setParticipantReady(sessionId, participantId);
+      await this.sessionManager.setParticipantReady(sessionId, participantId, readyPublicKey);
 
       // Broadcast to session
       const readyStats = await this.sessionManager.store.getStats(sessionId);
@@ -1034,6 +1042,7 @@ class MultiSigWebSocketServer {
         type: 'PARTICIPANT_READY',
         payload: {
           participantId,
+          publicKey: readyPublicKey || null,
           stats: readyStats,
           allReady: await this.sessionManager.store.areAllParticipantsReady(sessionId)
         }

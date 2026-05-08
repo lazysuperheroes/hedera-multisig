@@ -202,6 +202,18 @@ export interface ParticipantDisconnectedMessage {
   type: 'PARTICIPANT_DISCONNECTED';
   payload: {
     participantId: string;
+    /**
+     * Refreshed session-wide stats from the server. Optional for
+     * backward compat with older servers that didn't include them in
+     * the disconnect broadcast — when present the dApp uses them to
+     * keep the SignatureProgress counter in sync with the actual
+     * server state.
+     */
+    stats?: {
+      participantsExpected: number;
+      participantsConnected: number;
+      participantsReady: number;
+    };
   };
 }
 

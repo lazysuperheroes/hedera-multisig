@@ -105,12 +105,14 @@ export function ParticipantList({
 
   return (
     <div className="bg-surface border-2 border-border-strong rounded-lg p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-foreground">Participants</h3>
-        <span className="text-sm text-foreground-subtle">
-          {sortedParticipants.filter((p) => p.status !== 'disconnected').length} connected
-        </span>
-      </div>
+      {/* Title only — the per-row entries already show how many are
+          connected, and the top-of-page SignatureProgress carries the
+          authoritative session-wide "X / Y connected" counter. Showing
+          a "1 connected" badge here when SignatureProgress legitimately
+          says "2 / 3" (e.g. a participant who signed earlier is still
+          counted server-side) reads as a contradiction even though the
+          two counters are answering different questions. */}
+      <h3 className="text-lg font-semibold text-foreground mb-4">Participants</h3>
 
       <div className="space-y-3">
         {sortedParticipants.map((participant) => {

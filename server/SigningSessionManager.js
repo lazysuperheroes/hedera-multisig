@@ -822,13 +822,19 @@ class SigningSessionManager {
   }
 
   /**
-   * Mark participant as ready (keys loaded in memory)
+   * Mark participant as ready (keys loaded in memory).
+   *
+   * `publicKey` (optional) is persisted on the participant so the
+   * subsequent broadcast can carry it to other clients — without it
+   * the dApp's row shows "Ready" with "Waiting for public key..."
+   * underneath, which is contradictory to anyone reading the screen.
    *
    * @param {string} sessionId - Session identifier
    * @param {string} participantId - Participant identifier
+   * @param {string} [publicKey] - Public key supplied at ready time
    */
-  async setParticipantReady(sessionId, participantId) {
-    await this.store.setParticipantReady(sessionId, participantId);
+  async setParticipantReady(sessionId, participantId, publicKey) {
+    await this.store.setParticipantReady(sessionId, participantId, publicKey);
 
     // Emit event
     const handlers = this.eventHandlers.get(sessionId);

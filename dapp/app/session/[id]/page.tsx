@@ -744,6 +744,7 @@ export default function SessionPage({ params }: PageProps) {
                 signaturesRequired={signingSession.state.stats.signaturesRequired}
                 participantsConnected={signingSession.state.stats.participantsConnected}
                 participantsReady={signingSession.state.stats.participantsReady}
+                participantsExpected={signingSession.state.stats.participantsExpected}
                 thresholdMet={currentStep === 'completed'}
               />
             )}
