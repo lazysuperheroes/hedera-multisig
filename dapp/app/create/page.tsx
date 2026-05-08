@@ -20,6 +20,11 @@ import {
   FreezeStrategy,
   type NodeStrategyValue,
 } from '../../components/create/FreezeStrategy';
+import {
+  ScheduleOptions,
+  SCHEDULE_OPTIONS_DEFAULT,
+  type ScheduleOptionsValue,
+} from '../../components/create/ScheduleOptions';
 import { DEFAULT_SUBSET_SIZE } from '../../lib/node-selection';
 import { StepProgress } from '../../components/StepProgress';
 import { Footer } from '../../components/Footer';
@@ -82,6 +87,12 @@ export default function CreatePage() {
     subsetSize: DEFAULT_SUBSET_SIZE,
     nodeIds: '',
   });
+  // HIP-423 schedule options. Off by default — real-time signing is
+  // the project's primary path; scheduled is a secondary affordance
+  // for cross-timezone treasury work where signers can't coordinate
+  // live. The component itself is collapsed-by-default so the form
+  // doesn't add visual weight when scheduled isn't in play.
+  const [scheduleOptions, setScheduleOptions] = useState<ScheduleOptionsValue>(SCHEDULE_OPTIONS_DEFAULT);
   // Lifted live session state — SessionMonitor publishes it, ShareStep
   // consumes it to switch between signing / completed / failed layouts.
   const [liveSessionState, setLiveSessionState] = useState<SessionLiveState | null>(null);
@@ -219,6 +230,20 @@ export default function CreatePage() {
       const nodeIds = nodeStrategy.strategy === 'specific'
         ? nodeStrategy.nodeIds.split(',').map((s) => s.trim()).filter(Boolean)
         : undefined;
+      // When scheduled is on, the injection hook builds the inner tx
+      // unfrozen, wraps it in a ScheduleCreateTransaction, has the
+      // wallet sign+submit it directly to the network, then announces
+      // the resulting scheduleId to the WS session via SCHEDULE_ANNOUNCE.
+      // The result is the same outward shape — `setStep('share')` works
+      // for both real-time and scheduled flows.
+      const scheduled = scheduleOptions.enabled
+        ? {
+            expirationInput: scheduleOptions.expirationInput,
+            scheduleMemo: scheduleOptions.scheduleMemo || undefined,
+            payerAccountId: scheduleOptions.payerAccountId || undefined,
+            adminKey: scheduleOptions.adminKey || undefined,
+          }
+        : undefined;
       await injection.inject({
         txType,
         txFields,
@@ -229,14 +254,20 @@ export default function CreatePage() {
           subsetSize: nodeStrategy.subsetSize,
           nodeIds,
         },
+        scheduled,
       });
       setStep('share');
-      toast.success('Transaction Injected', 'Transaction has been broadcast to participants.');
+      toast.success(
+        scheduleOptions.enabled ? 'Schedule Created' : 'Transaction Injected',
+        scheduleOptions.enabled
+          ? 'Schedule submitted to the network. Participants will sign at their convenience.'
+          : 'Transaction has been broadcast to participants.',
+      );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error.';
-      toast.error('Injection Failed', message);
+      toast.error(scheduleOptions.enabled ? 'Schedule Failed' : 'Injection Failed', message);
     }
-  }, [txType, txFields, wallet.accountId, sessionId, injection, toast, nodeStrategy]);
+  }, [txType, txFields, wallet.accountId, sessionId, injection, toast, nodeStrategy, scheduleOptions]);
 
   const handleInjectPastedBase64 = useCallback(async () => {
     try {
@@ -516,6 +547,18 @@ export default function CreatePage() {
                       onChange={setNodeStrategy}
                     />
 
+                    {/* Secondary affordance — HIP-423 scheduled
+                        transactions. Collapsed by default; off by
+                        default. The real-time path is what most users
+                        want, and adding this here next to FreezeStrategy
+                        keeps it close to the other "advanced
+                        bookkeeping" affordances rather than competing
+                        with the primary inject button. */}
+                    <ScheduleOptions
+                      value={scheduleOptions}
+                      onChange={setScheduleOptions}
+                    />
+
                     {injection.injectError && (
                       <div role="alert" className="mt-4 border-l-2 border-destructive bg-destructive-soft pl-4 py-3 text-sm text-destructive-soft-fg">
                         {injection.injectError}
@@ -539,7 +582,9 @@ export default function CreatePage() {
                       {injection.isInjecting && (
                         <span className="inline-block w-4 h-4 rounded-full border-2 border-current border-r-transparent animate-spin" />
                       )}
-                      {injection.isInjecting ? 'Building & injecting…' : 'Build & inject transaction'}
+                      {injection.isInjecting
+                        ? (scheduleOptions.enabled ? 'Submitting schedule to network…' : 'Building & injecting…')
+                        : (scheduleOptions.enabled ? 'Build & schedule transaction' : 'Build & inject transaction')}
                     </button>
                   </div>
                 )}

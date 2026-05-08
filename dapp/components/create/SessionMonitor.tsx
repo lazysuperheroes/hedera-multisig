@@ -146,6 +146,14 @@ interface MonitorState {
    * payload. Lets the audit trail show "actual 2,418 B" alongside the
    * estimator's pre-injection prediction. */
   frozenTxBytes: number | null;
+  /** HIP-423 schedule context. Set when the coordinator creates a
+   * scheduled tx instead of a real-time freeze. The realtime fields
+   * above (transactionId, signaturesCollected, thresholdMet, etc.)
+   * are not used in scheduled mode — schedule status comes from the
+   * mirror node, not the WebSocket. */
+  scheduleId: string | null;
+  scheduleExpirationTime: number | null; // seconds since epoch
+  scheduleMemo: string | null;
 }
 
 const initialState: MonitorState = {
@@ -161,6 +169,9 @@ const initialState: MonitorState = {
   freezeStrategy: null,
   freezeNodeCount: null,
   frozenTxBytes: null,
+  scheduleId: null,
+  scheduleExpirationTime: null,
+  scheduleMemo: null,
 };
 
 /** Map server-reported status strings (`shared/protocol.js` SESSION_STATES)
@@ -496,6 +507,24 @@ export function SessionMonitor({
                 at: Date.now(),
               },
             ].slice(-3); // cap at 3 most-recent
+            return next;
+          }
+          case 'SCHEDULE_CREATED': {
+            // HIP-423 scheduled-tx broadcast. Coordinator already
+            // submitted ScheduleCreate to the network and got a
+            // scheduleId back; participants will sign at their
+            // convenience via ScheduleSignTransaction. We track the
+            // scheduleId + expiration so the share view can display
+            // the right context, but the realtime per-tx fields
+            // (signaturesCollected, threshold, polling) stay null —
+            // mirror node is source of truth for schedule status.
+            next.scheduleId = (p.scheduleId as string) || null;
+            next.scheduleExpirationTime = (p.expirationTime as number | null) ?? null;
+            next.scheduleMemo = (p.scheduleMemo as string | null) || null;
+            // Bring the session out of 'waiting' so the share step
+            // renders. Re-using 'received' rather than minting a new
+            // SessionState keeps the existing transition logic intact.
+            next.sessionState = 'received';
             return next;
           }
           case 'TRANSACTION_REJECTED': {

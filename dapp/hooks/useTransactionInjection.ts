@@ -15,18 +15,38 @@ interface NodeSelection {
   nodeIds?: string[];
 }
 
+interface ScheduleParams {
+  /** Duration ("24h", "30d") or ISO-8601 timestamp. Validated upstream. */
+  expirationInput: string;
+  scheduleMemo?: string;
+  payerAccountId?: string;
+  /** Public key string (DER or raw hex) for ScheduleCreate's setAdminKey. */
+  adminKey?: string;
+}
+
 interface InjectParams {
   txType: TransactionType;
   txFields: Record<string, string>;
   walletAccountId: string | null;
   sessionId?: string;
   /**
-   * Node-freeze strategy. Default: random subset of 6 (resilient to
-   * per-node downtime, well under Hedera's 6 KB tx-size cap). Set to
-   * `'all'` for small/local networks, or `'specific'` with `nodeIds`
-   * to pin to particular nodes (e.g. for testing).
+   * Node-freeze strategy. Default: single-node freeze for wallet
+   * compatibility — see shared/node-selection.js for rationale. Bump
+   * `subsetSize` for CLI-only ceremonies that don't involve a wallet.
+   *
+   * Ignored when `scheduled` is set: scheduled transactions don't
+   * use a multi-node freeze; the inner transaction body has no
+   * nodeAccountIds and the network picks at execution time.
    */
   nodeSelection?: NodeSelection;
+  /**
+   * When set, the inner tx is built unfrozen, wrapped in a
+   * ScheduleCreateTransaction with these options, and the wallet
+   * submits the ScheduleCreate to the network. The resulting
+   * scheduleId is announced to the WS session via SCHEDULE_ANNOUNCE
+   * instead of the realtime TRANSACTION_INJECT.
+   */
+  scheduled?: ScheduleParams;
 }
 
 interface UseTransactionInjectionReturn {
@@ -66,7 +86,7 @@ export function useTransactionInjection(
   const [injectionDone, setInjectionDone] = useState(false);
 
   const inject = useCallback(async (params: InjectParams) => {
-    const { txType, txFields, walletAccountId, sessionId, nodeSelection } = params;
+    const { txType, txFields, walletAccountId, sessionId, nodeSelection, scheduled } = params;
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setInjectError('WebSocket is not connected.');
@@ -184,6 +204,153 @@ export function useTransactionInjection(
       // Generate transaction ID BEFORE freezing (multi-sig hash stability)
       tx.setTransactionId(TransactionId.generate(operatorId));
 
+      // ── Scheduled-mode branch (HIP-423) ─────────────────────────────
+      // The inner transaction stays UNFROZEN with no nodeAccountIds —
+      // those concepts don't apply to a scheduled tx, the network picks
+      // a node at execution time. Wrap the inner tx in a
+      // ScheduleCreateTransaction, have the connected wallet
+      // sign+execute it directly to the network, extract the
+      // scheduleId from the receipt, and announce it to the WS session
+      // via SCHEDULE_ANNOUNCE so participants can sign asynchronously.
+      if (scheduled) {
+        const { parseExpirationTime } = await import('../lib/timeParser');
+        const expiresAt = parseExpirationTime(scheduled.expirationInput);
+        if (!expiresAt) {
+          throw new Error('Schedule expiration is required.');
+        }
+
+        // Loosely-typed SDK access — the chained-setter shape on
+        // ScheduleCreateTransaction trips TS strict-mode through the
+        // `import('@hashgraph/sdk')` boundary. We only need the four
+        // method names we actually call; everything else is typed as
+        // `unknown` and asserted on use.
+        type ScheduleTx = {
+          setScheduledTransaction: (tx: unknown) => ScheduleTx;
+          setExpirationTime: (d: Date) => ScheduleTx;
+          setScheduleMemo: (s: string) => ScheduleTx;
+          setPayerAccountId: (id: unknown) => ScheduleTx;
+          setAdminKey: (k: unknown) => ScheduleTx;
+          executeWithSigner: (signer: unknown) => Promise<{
+            getReceiptWithSigner: (signer: unknown) => Promise<{ scheduleId: { toString(): string } | null }>;
+          }>;
+        };
+        const sdk = await import('@hashgraph/sdk');
+        const sdkAny = sdk as unknown as {
+          ScheduleCreateTransaction: new () => ScheduleTx;
+          PublicKey: { fromString: (s: string) => unknown };
+        };
+
+        const scheduleTx = new sdkAny.ScheduleCreateTransaction();
+        scheduleTx.setScheduledTransaction(tx);
+        scheduleTx.setExpirationTime(expiresAt);
+        if (scheduled.scheduleMemo) {
+          scheduleTx.setScheduleMemo(scheduled.scheduleMemo);
+        }
+        if (scheduled.payerAccountId) {
+          scheduleTx.setPayerAccountId(AccountId.fromString(scheduled.payerAccountId));
+        }
+        if (scheduled.adminKey) {
+          try {
+            scheduleTx.setAdminKey(sdkAny.PublicKey.fromString(scheduled.adminKey));
+          } catch (e) {
+            throw new Error(`Invalid admin key: ${(e as Error).message}`);
+          }
+        }
+
+        // Have the connected wallet sign + execute the
+        // ScheduleCreate. The wallet pays this fee — separate from
+        // the inner tx's fee, which is paid by `payerAccountId` (or
+        // the threshold account by default) at execution time.
+        const { getDAppConnector } = await import('../lib/walletconnect');
+        const dappConnector = getDAppConnector();
+        if (!dappConnector || !dappConnector.signers || dappConnector.signers.length === 0) {
+          throw new Error('Wallet not connected — connect HashPack (or another wallet) first.');
+        }
+        const signer = dappConnector.signers[0] as unknown;
+
+        const response = await scheduleTx.executeWithSigner(signer);
+        const receipt = await response.getReceiptWithSigner(signer);
+        const scheduleId = receipt.scheduleId?.toString();
+        if (!scheduleId) {
+          throw new Error('ScheduleCreate succeeded but no scheduleId in receipt — re-run.');
+        }
+
+        // Pre-decode the inner tx fields so participants can review
+        // without re-fetching from the network. Same shape as the
+        // realtime path's metadata/abi handling.
+        const innerTxDetails: Record<string, unknown> = {
+          type: TX_TYPE_LABELS[txType] || txType,
+          ...txFields,
+        };
+        let innerAbi: unknown[] | null = null;
+        if (txType === 'contract-call' && txFields.abiJson) {
+          try {
+            const parsed = JSON.parse(txFields.abiJson);
+            if (Array.isArray(parsed)) innerAbi = parsed;
+          } catch {
+            // Skip; user already saw the form-level ABI error.
+          }
+        }
+
+        // Announce to the WS session. Server promotes session.mode to
+        // 'scheduled' and broadcasts SCHEDULE_CREATED to participants.
+        await new Promise<void>((resolve, reject) => {
+          const ws = wsRef.current!;
+          const timeout = setTimeout(() => {
+            reject(new Error('Schedule announcement timed out.'));
+          }, 15000);
+
+          const handler = (event: MessageEvent) => {
+            try {
+              const msg = JSON.parse(event.data as string);
+              if (msg.type === 'SCHEDULE_CREATED') {
+                clearTimeout(timeout);
+                ws.removeEventListener('message', handler);
+                resolve();
+              } else if (msg.type === 'INJECTION_FAILED' || msg.type === 'ERROR') {
+                clearTimeout(timeout);
+                ws.removeEventListener('message', handler);
+                reject(new Error(msg.payload?.message || 'Schedule announcement failed.'));
+              }
+            } catch { /* ignore */ }
+          };
+          ws.addEventListener('message', handler);
+
+          ws.send(JSON.stringify({
+            type: 'SCHEDULE_ANNOUNCE',
+            payload: {
+              scheduleId,
+              expirationTime: Math.floor(expiresAt.getTime() / 1000),
+              scheduleMemo: scheduled.scheduleMemo || null,
+              payerAccountId: scheduled.payerAccountId || null,
+              adminKey: scheduled.adminKey || null,
+              innerTxDetails,
+              innerTxBase64: null, // future: serialize the inner-tx body for signature-side decoding
+              ...(innerAbi ? { abi: innerAbi } : {}),
+            },
+          }));
+        });
+
+        setInjectionDone(true);
+        saveTxHistoryEntry({
+          timestamp: new Date().toISOString(),
+          transactionId: scheduleId,
+          transactionType: `Scheduled${TX_TYPE_LABELS[txType] || txType}`,
+          status: 'PENDING',
+          network: DEFAULT_NETWORK,
+          sessionId: sessionId || undefined,
+          details: {
+            ...txFields,
+            transactionType: txType,
+            scheduled: true,
+            scheduleId,
+            expirationTime: expiresAt.toISOString(),
+          },
+        });
+        return; // Skip the realtime freeze/inject path below.
+      }
+
+      // ── Realtime branch (default) ───────────────────────────────────
       // Multi-node freeze (canonical Hedera multi-sig pattern). Each
       // SignedTransaction body carries a distinct nodeAccountID, so
       // signers produce one ED25519 signature per body and the
