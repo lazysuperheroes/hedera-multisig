@@ -592,9 +592,9 @@ the WalletConnect pairing or stop to read prompts. If it expires, the
 coordinator stays alive — click **"Build another transaction"** in the
 `/create` tab and restart from step 5. The hybrid flow (one wallet,
 one CLI) is much harder to time-out than the all-web variant. For
-windows of hours-to-days instead of 120s, see `walkthrough-scheduled`
-(coming next — async signing via HIP-423 long-window scheduled
-transactions).
+windows of hours-to-days instead of 120s, see
+[`../walkthrough-scheduled/`](../walkthrough-scheduled/) — async
+signing via HIP-423 long-window scheduled transactions.
 
 **CLI participant says `key is no longer eligible`** — bob's encrypted
 key file's public key doesn't match an entry in `walkthrough-state.json`'s
@@ -605,11 +605,16 @@ in sequence so the keyfile and the on-chain threshold key match.
 
 ---
 
-## Coming next: `walkthrough-scheduled`
+## See also: `walkthrough-scheduled`
 
 The 120s constraint is the dominant pain point above. **Scheduled
 transactions** (HIP-423) relax it to up to 62 days — each signer signs
-on their own time, the network executes when threshold is met. We're
-shipping a `walkthrough-scheduled/` walkthrough that demonstrates the
-async flow end-to-end. Same hosted-dApp signing path, no countdown,
-cross-timezone friendly.
+on their own time, the network executes when threshold is met. The
+sibling walkthrough lives at
+[`../walkthrough-scheduled/`](../walkthrough-scheduled/) and uses
+the same dApp + same accounts + same threshold, just with the
+"Schedule this transaction" toggle on. Side-by-side, the two
+walkthroughs make the protocol shape clear: realtime collects
+signatures into the wire-frozen tx and submits once at threshold;
+scheduled has each signer hit the network independently and lets
+the consensus layer count.

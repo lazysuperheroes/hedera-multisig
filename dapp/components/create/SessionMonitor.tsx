@@ -75,6 +75,13 @@ export interface SessionLiveState {
   freezeStrategy: string | null;
   freezeNodeCount: number | null;
   frozenTxBytes: number | null;
+  /** Set when the session is in HIP-423 scheduled mode. The coordinator's
+   * realtime "phase" doesn't fit (no on-chain completion event arrives
+   * over WS — signers act asynchronously, mirror tracks). ShareStep
+   * uses this to render a "Schedule launched — build another?" CTA
+   * instead of the realtime signing/completed/failed views. */
+  scheduleId: string | null;
+  scheduleExpirationTime: number | null;
 }
 
 /** Map server-reported participant status to the monitor's pill vocabulary. */
@@ -286,6 +293,8 @@ export function SessionMonitor({
       freezeStrategy: state.freezeStrategy,
       freezeNodeCount: state.freezeNodeCount,
       frozenTxBytes: state.frozenTxBytes,
+      scheduleId: state.scheduleId || null,
+      scheduleExpirationTime: state.scheduleExpirationTime || null,
     });
   }, [state, onStateChange]);
 

@@ -445,7 +445,14 @@ When the server starts, it writes a `.multisig-session.json` file in the current
 
 For teams where not all signers can be online simultaneously, use scheduled transactions instead of real-time sessions.
 
-### Creating a Scheduled Transaction
+Two paths — both produce identical on-chain results:
+
+- **Via the dApp `/create` page** (recommended for visual coordinators): toggle the "Schedule this transaction" disclosure below the freeze-strategy panel, set expiration / memo / advanced options, and the dApp submits `ScheduleCreateTransaction` through your connected wallet, then announces the schedule to the WS session via `SCHEDULE_ANNOUNCE`. Participants on `/session/<id>` get a dedicated `ScheduledReview` (no 120s countdown). Walkthrough: [`examples/walkthrough-scheduled/`](../examples/walkthrough-scheduled/).
+- **Via the CLI** (the original path; useful for scripts / agents): the three-step flow below.
+
+For both paths, pair `npx hedera-multisig server --session-timeout 86400` (or longer, up to ~62 days) so the coordination session stays alive as long as the on-chain schedule. CLI participants joining a scheduled session get the schedule context inline via the `SCHEDULE_CREATED` broadcast (or AUTH_SUCCESS for late joiners) and prompt for `YES` natively — no need to drop to a separate `schedule sign` invocation.
+
+### Creating a Scheduled Transaction (CLI)
 
 1. Freeze the transaction you want to schedule:
 

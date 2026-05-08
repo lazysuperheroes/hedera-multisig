@@ -152,30 +152,60 @@ class ScheduledWorkflow {
 
       const transactionId = txResponse.transactionId.toString();
 
+      // Detect whether this signature met the threshold (i.e. the
+      // inner tx executed in the same response). Hedera surfaces
+      // this on TransactionReceipt.scheduledTransactionId — if the
+      // schedule fired, it's the inner tx's id; otherwise null.
+      // Distinguishes "your signature met threshold" from "your
+      // signature was accepted, more sigs still needed", which the
+      // bare receipt status of SUCCESS can't tell you.
+      const innerTxId = receipt.scheduledTransactionId
+        ? receipt.scheduledTransactionId.toString()
+        : null;
+      const executed = !!innerTxId;
+
       if (this.options.verbose) {
         console.log(chalk.green(`\n✅ Schedule signed successfully!`));
         console.log(chalk.white(`   Transaction ID: ${transactionId}`));
-        console.log(chalk.white(`   Status: ${receipt.status.toString()}\n`));
+        console.log(chalk.white(`   Status: ${receipt.status.toString()}`));
+        if (executed) {
+          console.log(chalk.bold.green(
+            `   🎉 Threshold met — inner tx executed: ${innerTxId}\n`
+          ));
+        } else {
+          console.log(chalk.gray(
+            '   Signature accepted; threshold not yet met. Other signers can still add their sigs.\n'
+          ));
+        }
       }
 
       return {
         success: true,
         transactionId,
         status: receipt.status.toString(),
+        executed,
+        innerTxId,
       };
 
     } catch (error) {
       this.progress.stopSpinner();
 
-      // Check if the schedule was already executed (threshold met by this signature)
+      // SCHEDULE_ALREADY_EXECUTED means somebody else's signature
+      // brought the schedule to threshold first — this submission
+      // was a no-op. The inner tx is already on-chain. Distinct
+      // from "your signature met threshold" (receipt-driven branch
+      // above), where executed comes from receipt.scheduledTransactionId.
       if (error.message && error.message.includes('SCHEDULE_ALREADY_EXECUTED')) {
         if (this.options.verbose) {
-          console.log(chalk.green(`\n✅ Schedule was executed! Threshold met with this signature.\n`));
+          console.log(chalk.green(
+            '\n✅ Schedule was already executed by another signer — your signature was redundant (no fee charged for the duplicate).\n'
+          ));
         }
         return {
           success: true,
           executed: true,
-          message: 'Schedule executed — threshold met',
+          alreadyExecuted: true,
+          message: 'Schedule already executed by another signer',
         };
       }
 

@@ -397,6 +397,254 @@ Examples:
           showTransactionWindow(data?.txDetails);
         });
 
+        // HIP-423 scheduled-tx flow. Distinct from realtime:
+        //   - No frozen-tx body to sign. The coordinator already
+        //     submitted a ScheduleCreateTransaction on-chain; we just
+        //     add this participant's signature via ScheduleSignTransaction.
+        //   - Submission goes to the Hedera network directly (NOT
+        //     through the WS server), so we need OPERATOR_ID/KEY in
+        //     env to act as fee payer + Hedera client operator.
+        //   - No 120s ticker — the schedule lives on-chain until its
+        //     own expiration (up to ~62d). Missing the prompt is fine;
+        //     the user can re-run `hedera-multisig schedule sign` later.
+        //
+        // Used both for live SCHEDULE_CREATED broadcasts AND for
+        // late-joiners whose AUTH_SUCCESS sessionInfo carries an
+        // already-announced scheduleId — same review/sign flow.
+        const handleScheduledTransaction = async (data) => {
+          // Field names come from server/WebSocketServer.js
+          // SCHEDULE_CREATED broadcast payload (search for `type:
+          // 'SCHEDULE_CREATED'` to confirm shape). Late-joiner
+          // sessionInfo uses `scheduleExpirationTime` instead, so
+          // we accept both and normalize.
+          const {
+            scheduleId,
+            expirationTime: livePayloadExpiry,
+            scheduleExpirationTime,
+            scheduleMemo,
+            payerAccountId,
+            innerTxDetails,
+          } = data || {};
+          const expirationTime = livePayloadExpiry ?? scheduleExpirationTime;
+
+          if (!scheduleId) {
+            console.log(chalk.red('\n⚠️  scheduleCreated event missing scheduleId — ignoring.'));
+            return;
+          }
+
+          console.log('\n' + chalk.cyan('═'.repeat(60)));
+          console.log(chalk.bold.yellow('📅 Scheduled transaction (HIP-423)'));
+          console.log(chalk.cyan('═'.repeat(60)));
+          console.log(chalk.white(
+            'Async signing — no 120-second window. Once you sign, your signature\n' +
+            'lands on-chain via ScheduleSignTransaction. Hedera executes the\n' +
+            'inner transaction when threshold is met or when the schedule expires.\n'
+          ));
+
+          console.log(chalk.bold.white('Schedule:'));
+          console.log(chalk.white(`  ID:      ${scheduleId}`));
+          if (expirationTime) {
+            const expiresAt = new Date(expirationTime * 1000);
+            const ms = expiresAt.getTime() - Date.now();
+            if (Number.isFinite(ms) && ms > 0) {
+              const days = Math.floor(ms / 86400000);
+              const hours = Math.floor((ms % 86400000) / 3600000);
+              const human = days > 0
+                ? `~${days}d${hours > 0 ? ` ${hours}h` : ''}`
+                : `~${hours}h`;
+              console.log(chalk.white(`  Expires: ${expiresAt.toISOString()} (${human} from now)`));
+            } else {
+              console.log(chalk.yellow(`  Expires: ${expiresAt.toISOString()} (already expired!)`));
+            }
+          }
+          if (scheduleMemo) console.log(chalk.white(`  Memo:    ${scheduleMemo}`));
+          if (payerAccountId) console.log(chalk.white(`  Payer:   ${payerAccountId}`));
+          console.log('');
+
+          if (innerTxDetails && Object.keys(innerTxDetails).length > 0) {
+            console.log(chalk.bold.white('Inner transaction:'));
+            const innerType = innerTxDetails.type || 'Transaction';
+            console.log(chalk.white(`  Type: ${innerType}`));
+            for (const [k, v] of Object.entries(innerTxDetails)) {
+              if (k === 'type' || k === 'abiJson') continue;
+              const display = typeof v === 'object'
+                ? JSON.stringify(v)
+                : String(v);
+              console.log(chalk.white(`  ${k}: ${display}`));
+            }
+            console.log('');
+          }
+
+          console.log(chalk.gray(
+            'Verify the schedule on-chain:\n' +
+            `  https://hashscan.io/${normalizedNetwork}/schedule/${scheduleId}\n`
+          ));
+          console.log(chalk.cyan('═'.repeat(60)));
+
+          // Pre-prompt env check. CLI participants don't have a
+          // wallet adapter; they need OPERATOR_ID/OPERATOR_KEY in
+          // env to pay the ~$0.00001 ScheduleSign fee. We check
+          // BEFORE asking for YES so the user doesn't approve and
+          // then hit a wall — they can either Ctrl+C out, set the
+          // env, and re-launch, or run `schedule sign` manually
+          // from a separately-configured shell.
+          require('../utils/cliUtils').loadDotenvFromAncestors();
+          const operatorId = process.env.OPERATOR_ID;
+          const operatorKey = process.env.OPERATOR_KEY;
+          const operatorReady = !!(operatorId && operatorKey);
+
+          if (!operatorReady) {
+            console.log(chalk.bold.red(
+              '\n⚠️  This terminal cannot submit ScheduleSign — OPERATOR_ID / OPERATOR_KEY missing in env.'
+            ));
+            console.log(chalk.white(
+              '   The signer key (loaded from your keyfile) signs the schedule, but a\n' +
+              '   Hedera operator account is needed to pay the ScheduleSign network fee.\n'
+            ));
+            console.log(chalk.white('   Two ways to proceed:'));
+            console.log(chalk.white(
+              '     1. Ctrl+C, set OPERATOR_ID / OPERATOR_KEY in your .env, and re-join.\n' +
+              `     2. Sign from a separately-configured shell:\n` +
+              `          hedera-multisig schedule sign --schedule-id ${scheduleId} \\\n` +
+              `            --keyfile <your-keyfile> --passphrase <your-passphrase>\n`
+            ));
+            console.log(chalk.gray(
+              '   The session stays open either way. The schedule lives on-chain until expiry.\n'
+            ));
+            console.log(chalk.cyan('═'.repeat(60)) + '\n');
+            return;
+          }
+
+          // Decide: auto-approve (--yes) or prompt
+          let approve;
+          if (options.yes) {
+            approve = true;
+            console.log(chalk.gray('\n--yes was set — auto-approving and submitting ScheduleSign.\n'));
+          } else {
+            const ans = readlineSync.question(
+              chalk.bold.cyan('\nSign this schedule? Type YES to approve, anything else to skip: ')
+            );
+            approve = ans.trim() === 'YES';
+          }
+
+          if (!approve) {
+            console.log(chalk.yellow(
+              '\n⚠️  You declined to sign this schedule.\n' +
+              '   The schedule remains on-chain and may still execute if other\n' +
+              '   signers reach threshold. You can sign later with:\n' +
+              `     hedera-multisig schedule sign --schedule-id ${scheduleId} --keyfile <path>\n` +
+              '   The session stays open — the coordinator may issue more schedules.\n'
+            ));
+            return;
+          }
+
+          // Submit the ScheduleSignTransaction. The participant's
+          // `privateKey` (loaded earlier) signs the schedule itself;
+          // the operator account just pays the wrapper's fee.
+          try {
+            const { Client, AccountId, PrivateKey } = require('@hashgraph/sdk');
+            const ScheduledWorkflow = require('../../workflows/ScheduledWorkflow');
+
+            const hederaClient = normalizedNetwork === 'mainnet'
+              ? Client.forMainnet()
+              : Client.forTestnet();
+            hederaClient.setOperator(
+              AccountId.fromString(operatorId),
+              PrivateKey.fromString(operatorKey)
+            );
+
+            const workflow = new ScheduledWorkflow(hederaClient, { verbose: true });
+            const result = await workflow.signSchedule(scheduleId, privateKey);
+
+            if (result.success) {
+              console.log(chalk.cyan('═'.repeat(60)));
+              if (result.alreadyExecuted) {
+                // Someone else's signature reached threshold first;
+                // ours was a no-op. Inner tx already on-chain.
+                console.log(chalk.bold.yellow(
+                  '\n📭 Schedule already executed by another signer'
+                ));
+                console.log(chalk.white(
+                  '   Your signature wasn\'t needed — the threshold was already met.\n' +
+                  '   The inner transaction is on-chain. No fee charged for the duplicate.\n'
+                ));
+              } else if (result.executed) {
+                // Our signature met the threshold; receipt carried
+                // the inner tx's transactionId.
+                console.log(chalk.bold.green(
+                  '\n✅ Schedule signature submitted — threshold met!'
+                ));
+                if (result.transactionId) {
+                  console.log(chalk.white(`   Sign tx:  ${result.transactionId}`));
+                }
+                if (result.innerTxId) {
+                  console.log(chalk.bold.green(
+                    `   🎉 Inner tx executed: ${result.innerTxId}`
+                  ));
+                  console.log(chalk.gray(
+                    `      https://hashscan.io/${normalizedNetwork}/transaction/${result.innerTxId}`
+                  ));
+                }
+              } else {
+                // Sig accepted, more sigs still needed.
+                console.log(chalk.bold.green(
+                  '\n✅ Schedule signature submitted on-chain'
+                ));
+                if (result.transactionId) {
+                  console.log(chalk.white(`   Sign tx: ${result.transactionId}`));
+                }
+                console.log(chalk.gray(
+                  '   Threshold not yet met — the schedule waits for additional signers.\n' +
+                  `   Track progress: hedera-multisig schedule status --schedule-id ${scheduleId}`
+                ));
+              }
+              console.log(chalk.gray(
+                '\nThe session stays open. The coordinator may issue another schedule\n' +
+                'or a realtime transaction. Press Ctrl+C to disconnect.\n'
+              ));
+              console.log(chalk.cyan('═'.repeat(60)) + '\n');
+            } else {
+              console.error(chalk.bold.red('\n❌ ScheduleSign failed:'));
+              console.error(chalk.red(`   ${result.error || 'unknown error'}`));
+            }
+
+            hederaClient.close();
+          } catch (err) {
+            console.error(chalk.bold.red('\n❌ ScheduleSign threw:'), err.message);
+          }
+        };
+
+        client.on('scheduleCreated', (data) => {
+          handleScheduledTransaction(data).catch((err) => {
+            console.error(chalk.red('\n❌ Scheduled-tx handler crashed:'), err.message);
+          });
+        });
+
+        // Late-joiner: when this participant joined an already-
+        // announced scheduled session, AUTH_SUCCESS sessionInfo
+        // carries the scheduleId + context. Replay the same flow as
+        // a live SCHEDULE_CREATED so they get the same prompt
+        // without having to drop to a separate CLI command.
+        const sInfo = connectionResult.sessionInfo || {};
+        if (sInfo.mode === 'scheduled' && sInfo.scheduleId) {
+          // Defer one tick so all banners above print first.
+          setImmediate(() => {
+            console.log(chalk.gray(
+              '\n💡 You joined a session that already has a scheduled transaction. ' +
+              'Reviewing it now…'
+            ));
+            handleScheduledTransaction({
+              scheduleId: sInfo.scheduleId,
+              scheduleExpirationTime: sInfo.scheduleExpirationTime,
+              scheduleMemo: sInfo.scheduleMemo,
+              payerAccountId: sInfo.schedulePayerAccountId,
+              innerTxDetails: sInfo.innerTxDetails,
+            }).catch((err) => {
+              console.error(chalk.red('\n❌ Late-join scheduled-tx review crashed:'), err.message);
+            });
+          });
+        }
+
         client.on('transactionExecuted', (data) => {
           console.log(chalk.bold.green('\n✅ Transaction executed successfully!'));
           console.log(chalk.white(`   Transaction ID: ${data.transactionId}`));

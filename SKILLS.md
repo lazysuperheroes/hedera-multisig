@@ -67,6 +67,16 @@ The system has a `CoordinationTransport` interface (`shared/CoordinationTranspor
 
 The `SigningSessionManager` is already transport-agnostic — it manages state through method calls and event handlers with no WebSocket coupling. The `AgentSigningClient` accepts a `transportType` option.
 
+### Scheduled-Transaction (HIP-423) Protocol Seam
+
+Scheduled mode runs a fundamentally different shape from realtime: signatures go around the WS server, not through it. The server is a **signaling channel + status feed**, not a signature broker. Mirror node is the source of truth for "who has signed".
+
+Flow: dApp `/create` (or CLI coordinator) submits `ScheduleCreateTransaction` directly via wallet/SDK, gets back a `scheduleId`, then sends **`SCHEDULE_ANNOUNCE`** to the WS server with the scheduleId + inner-tx context. Server stamps `session.mode = 'scheduled'` + persists context, broadcasts **`SCHEDULE_CREATED`** to all participants. Each participant (browser via `ScheduledReview` component, CLI via `scheduleCreated` event handler in `cli/commands/participant.js`) reviews and signs `ScheduleSignTransaction` directly to the network. No `SIGNATURE_SUBMIT` message exists for scheduled mode — the server never sees individual sigs.
+
+Late joiners get scheduled context via `AUTH_SUCCESS.sessionInfo` (same shape as the broadcast payload) so they enter the review flow without a re-broadcast.
+
+If you're touching scheduled-tx code: don't add WS-collected signature paths; don't track signature counts server-side; query `mirror-node-client.getScheduleInfo(scheduleId)` for status. Tests live at `test/schedule-announce.test.js`.
+
 ---
 
 ## 3. Key Files

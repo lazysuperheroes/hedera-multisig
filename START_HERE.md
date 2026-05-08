@@ -13,6 +13,7 @@
 > - [`examples/walkthrough-contract/`](./examples/walkthrough-contract/) — smart-contract path: deploy as EOA, convert to multi-sig, ceremony for `increment()` + `withdraw()` (~45 min, ~10 ℏ).
 > - [`examples/walkthrough-token/`](./examples/walkthrough-token/) — three ceremonies in one session: token-association, fungible transfer, NFT transfer. Smoke test for the dApp's non-HBAR transaction-builder paths (~35 min, ~8 ℏ).
 > - [`examples/walkthrough-agent/`](./examples/walkthrough-agent/) — automated co-signer with `AgentSigningClient` + `PolicyEngine`. Three demo scenarios prove policy approves / rejects with clear reasons. Showcase for the agent SDK (~25 min, ~7 ℏ).
+> - [`examples/walkthrough-scheduled/`](./examples/walkthrough-scheduled/) — async multi-sig via HIP-423 scheduled transactions. **No 120-second window** — each signer signs on their own time, network executes when threshold is met. Same dApp, same accounts as walkthrough-dapp, different temporal model (~25 min, ~6 ℏ).
 
 ---
 

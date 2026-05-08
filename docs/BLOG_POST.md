@@ -120,7 +120,7 @@ npx hedera-multisig schedule sign \
 
 `--expiration-time` accepts ISO-8601 (`2026-06-30T12:00:00Z`) or duration suffixes (`30d`, `8w`, `2h`). Capped at the HIP-423 horizon (~62 days).
 
-For UI users: the dApp's `/create` page builds a scheduled transaction the same way you'd build an interactive one. Use `--session-timeout` on `npx hedera-multisig server` to keep the coordination session alive long enough to match the schedule's window.
+**Full dApp parity** — no need to drop to a terminal. Toggle "Schedule this transaction" on `/create`, set the expiration window (`24h`, `30d`, ISO-8601), optional memo / admin key / payer override; the dApp signs `ScheduleCreateTransaction` through your wallet and announces the resulting schedule to the WS session. Participants joining `/session/<id>` get a dedicated review surface (no 120s countdown — "expires in 23h 47m" framing, live mirror-node signature progression, single "Approve & sign on-chain" button); the CLI participant gets the same prompt natively when the schedule is announced. Pair it with `--session-timeout 86400` on `npx hedera-multisig server` so the coordination session lives as long as the on-chain schedule. End-to-end walkthrough: [`examples/walkthrough-scheduled/`](https://github.com/lazysuperheroes/hedera-multisig/tree/main/examples/walkthrough-scheduled).
 
 ### Agent signing — when a policy can decide for you
 **Use when:** automated treasury agents, programmatic approvals, agent-to-agent coordination on Hedera.
@@ -181,7 +181,7 @@ Half an hour from a fresh testnet account to a successful 2-of-3 multi-sig trans
 
 **50-minute path** — contracts and EOA migration:
 
-The contract walkthrough deploys a Counter contract as a single-sig EOA, interacts normally, then converts the EOA to 2-of-3 multi-sig via `AccountUpdateTransaction`, runs a *negative test* proving single-sig is dead, then runs multi-sig `increment()` and `withdraw()` ceremonies. Covers every common contract path including the deploy-as-multisig (HIP-423) alternative.
+The contract walkthrough deploys a Counter contract as a single-sig EOA, interacts normally, then converts the EOA to 2-of-3 multi-sig via `AccountUpdateTransaction`, runs a *negative test* proving single-sig is dead, then runs multi-sig `increment()` and `withdraw()` ceremonies. Covers every common contract path including the deploy-as-multisig alternative.
 
 Both walkthroughs live at [`/learn`](https://testnet-multisig.lazysuperheroes.com/learn) on the testnet dApp, with prerequisites + GitHub links + a `[ ]` checklist of setup steps.
 
@@ -217,6 +217,7 @@ For the developer audience, the complete inventory:
 - Treasury + Console registers
 - WalletConnect (HashPack, Blade, Kabila — including HashPack's hardware-wallet flow)
 - Build-from-form / paste-frozen-base64 / CLI-inject — three ways to get a transaction into a session
+- **HIP-423 scheduled-tx UI** — single toggle on `/create` for async multi-day signing; dedicated `ScheduledReview` surface on `/session/<id>` with on-chain signature progression
 - ABI editor for contract calls (arrays, tuples, structs)
 - Browser-local transaction history with CSV export
 - First-run onboarding (visit-counter-driven nudges; no auto-suggest)

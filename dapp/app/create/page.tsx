@@ -703,6 +703,14 @@ export default function CreatePage() {
                 setTxFields({});
                 setPastedBase64('');
                 setPastedAbiJson('');
+                // Reset scheduleOptions so re-issuing after a
+                // schedule expired or executed doesn't carry the
+                // previous toggle ON state implicitly. The
+                // coordinator can re-toggle if they want another
+                // scheduled tx — explicit beats sticky for an
+                // affordance with cost implications (creating a
+                // schedule pays a small fee).
+                setScheduleOptions(SCHEDULE_OPTIONS_DEFAULT);
                 // Clear lifted live state too — SessionMonitor will
                 // republish fresh state when the next TRANSACTION_RECEIVED
                 // arrives, but null-ing here avoids a brief flash of the

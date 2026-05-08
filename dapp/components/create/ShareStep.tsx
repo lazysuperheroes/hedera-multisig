@@ -44,10 +44,37 @@ export function ShareStep({
   onTogglePinInLink,
   onStartAnother,
 }: ShareStepProps) {
-  // Phase: signing (default) / completed / failed. `idle` collapses to
-  // signing — when we land on the Share step we've just injected, so
-  // there's always a transaction in flight from the coordinator's
-  // perspective.
+  // Phase: signing (default) / completed / failed / scheduled.
+  // `idle` collapses to signing — when we land on the Share step
+  // we've just injected, so there's always a transaction in flight
+  // from the coordinator's perspective.
+  //
+  // Scheduled mode is its own branch: the coordinator's part is
+  // done (schedule submitted on-chain), but no realtime "completed"
+  // event will arrive over WS — signers act asynchronously and
+  // mirror node tracks. We render a dedicated banner so the
+  // coordinator gets a clear "your work here is done, build
+  // another?" affordance instead of staring at the signing-view
+  // share panel forever.
+  const isScheduled = !!liveState?.scheduleId &&
+    liveState.phase !== 'completed' &&
+    liveState.phase !== 'failed';
+
+  if (isScheduled) {
+    return (
+      <ScheduledLaunched
+        liveState={liveState!}
+        sessionCredentials={sessionCredentials}
+        connectionString={connectionString}
+        shareableUrl={shareableUrl}
+        network={network}
+        includePinInLink={includePinInLink}
+        onTogglePinInLink={onTogglePinInLink}
+        onStartAnother={onStartAnother}
+      />
+    );
+  }
+
   const phase = liveState?.phase === 'completed' || liveState?.phase === 'failed'
     ? liveState.phase
     : 'signing';
@@ -83,6 +110,129 @@ export function ShareStep({
       onTogglePinInLink={onTogglePinInLink}
     />
   );
+}
+
+// ---------------------------------------------------------------------------
+// Phase: scheduled. Schedule submitted on-chain, signers act asynchronously,
+// mirror node tracks signature progression. Coordinator's WS-side work is
+// done — surface a clear "build another?" affordance plus the connection
+// string in case more signers need to join later.
+// ---------------------------------------------------------------------------
+
+function ScheduledLaunched({
+  liveState,
+  sessionCredentials,
+  connectionString,
+  shareableUrl,
+  network,
+  includePinInLink,
+  onTogglePinInLink,
+  onStartAnother,
+}: {
+  liveState: SessionLiveState;
+  sessionCredentials: SessionCredentials;
+  connectionString: string;
+  shareableUrl: string;
+  network: 'testnet' | 'mainnet';
+  includePinInLink?: boolean;
+  onTogglePinInLink?: (next: boolean) => void;
+  onStartAnother?: () => void;
+}) {
+  const scheduleId = liveState.scheduleId!;
+  const expiresAt = liveState.scheduleExpirationTime
+    ? new Date(liveState.scheduleExpirationTime * 1000)
+    : null;
+  const expiresInLabel = expiresAt
+    ? formatRelativeFuture(expiresAt.getTime())
+    : 'unspecified';
+  const hashScanUrl = `https://hashscan.io/${network}/schedule/${scheduleId}`;
+
+  return (
+    <section aria-label="Schedule launched" className="space-y-6">
+      <div className="rounded-lg border-2 border-info bg-info-soft p-5">
+        <h2 className="text-base font-bold text-info-soft-fg">
+          Schedule launched (HIP-423)
+        </h2>
+        <p className="mt-2 text-sm text-info-soft-fg/90 leading-relaxed">
+          Your part is done — the schedule is on-chain. Signers will sign at
+          their convenience via <code className="font-mono">ScheduleSignTransaction</code>.
+          The Hedera network executes the inner transaction automatically the
+          moment threshold is met (or expires the schedule if not).
+        </p>
+
+        <dl className="mt-4 space-y-1.5 text-sm">
+          <div className="flex gap-3">
+            <dt className="w-32 flex-shrink-0 text-info-soft-fg/80">Schedule ID:</dt>
+            <dd className="flex-1 min-w-0">
+              <code className="font-mono text-info-soft-fg break-all">{scheduleId}</code>
+              <a
+                href={hashScanUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 underline text-info-soft-fg hover:no-underline whitespace-nowrap"
+              >
+                HashScan ↗
+              </a>
+            </dd>
+          </div>
+          <div className="flex gap-3">
+            <dt className="w-32 flex-shrink-0 text-info-soft-fg/80">Expires:</dt>
+            <dd className="text-info-soft-fg">
+              {expiresInLabel}
+              {expiresAt && (
+                <span className="ml-2 text-info-soft-fg/70 text-xs">
+                  ({expiresAt.toUTCString().replace(/:\d\d GMT/, ' GMT')})
+                </span>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      {onStartAnother && (
+        <button
+          type="button"
+          onClick={onStartAnother}
+          className="
+            w-full px-6 py-3 rounded-md text-base font-semibold
+            bg-accent text-accent-fg hover:bg-accent-hover transition-colors
+          "
+        >
+          Build another transaction
+        </button>
+      )}
+
+      <details className="group border-t border-border pt-4">
+        <summary className="cursor-pointer list-none flex items-center justify-between text-sm text-foreground-muted hover:text-foreground transition-colors py-1">
+          <span>Need to share the session with another signer?</span>
+          <span aria-hidden className="text-xs opacity-60 group-open:hidden">show</span>
+          <span aria-hidden className="text-xs opacity-60 hidden group-open:inline">hide</span>
+        </summary>
+
+        <div className="mt-4">
+          <ShareKit
+            sessionCredentials={sessionCredentials}
+            serverUrl=""
+            connectionString={connectionString}
+            shareableUrl={shareableUrl}
+            includePinInLink={includePinInLink}
+            onTogglePinInLink={onTogglePinInLink}
+          />
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function formatRelativeFuture(targetMs: number): string {
+  const ms = targetMs - Date.now();
+  if (ms <= 0) return 'expired';
+  const days = Math.floor(ms / 86400000);
+  const hours = Math.floor((ms % 86400000) / 3600000);
+  const mins = Math.floor((ms % 3600000) / 60000);
+  if (days > 0) return `in ${days}d${hours > 0 ? ` ${hours}h` : ''}`;
+  if (hours > 0) return `in ${hours}h${mins > 0 ? ` ${mins}m` : ''}`;
+  return `in ${mins}m`;
 }
 
 // ---------------------------------------------------------------------------

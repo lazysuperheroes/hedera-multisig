@@ -399,6 +399,16 @@ class SigningClient {
           this._onTransactionReceived(message.payload);
           break;
 
+        case 'SCHEDULE_CREATED':
+          // HIP-423 scheduled-tx broadcast. Pure event emit — the CLI
+          // participant (`cli/commands/participant.js`) decides whether
+          // to prompt for review and sign via ScheduleSignTransaction
+          // or treat it as informational. Distinct from
+          // TRANSACTION_RECEIVED: there's no frozen-tx body to sign,
+          // and signing happens directly to the network (not over WS).
+          this._emit('scheduleCreated', message.payload);
+          break;
+
         case 'SIGNATURE_ACCEPTED':
           this._log('Signature accepted by server', 'success');
           this._emit('signatureAccepted', message.payload);
