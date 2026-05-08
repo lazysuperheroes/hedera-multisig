@@ -1146,70 +1146,81 @@ class MultiSigWebSocketServer {
         }
       }
 
-      // Store in session via SessionStore
+      // Store in session via SessionStore.
+      //
+      // Bail early if the session can't be found — silently
+      // broadcasting TRANSACTION_RECEIVED to a phantom session is its
+      // own bug, and falling through to the post-block use of
+      // `changedStatuses` would have masked the real cause behind a
+      // generic ReferenceError ("changedStatuses is not defined") in
+      // the coordinator's INJECTION_FAILED toast.
       const session = await this.sessionManager.store.getSession(sessionId);
-      if (session) {
-        // Clear any existing expiration timeout via TimerController
-        if (session.expirationTimerId) {
-          timerController.clear(session.expirationTimerId);
-        }
+      if (!session) {
+        throw new Error(`Session ${sessionId} not found — cannot inject transaction`);
+      }
 
-        // Clear stale per-transaction state from any previous ceremony
-        // in this session (signatures Map, signaturesCollected stat,
-        // participant statuses still marked 'signed' / 'rejected').
-        // Without this, a coordinator who clicks "Build another
-        // transaction" after a successful ceremony hits two bugs:
-        //   1. Signing the new tx fails — the server's `submitSignature`
-        //      sees the previous public-key entry in `signatures` and
-        //      rejects with "this public key has already signed".
-        //   2. The dApp's session monitor flashes stale "alice/bob ✓
-        //      signed" pills against the new tx — confusing during the
-        //      120s validity window when seconds matter.
-        //
-        // `clearTransactionState` returns the participants whose status
-        // it changed; we broadcast `PARTICIPANT_STATUS_UPDATE` for each
-        // so connected dApp / CLI views update their pills without
-        // having to invent a "guess server reset participants" code
-        // path on the client.
-        let changedStatuses = [];
-        if (typeof this.sessionManager.store.clearTransactionState === 'function') {
-          changedStatuses = await this.sessionManager.store.clearTransactionState(sessionId) || [];
-        }
+      // Clear stale per-transaction state from any previous ceremony
+      // in this session (signatures Map, signaturesCollected stat,
+      // participant statuses still marked 'signed' / 'rejected').
+      // Without this, a coordinator who clicks "Build another
+      // transaction" after a successful ceremony hits two bugs:
+      //   1. Signing the new tx fails — the server's `submitSignature`
+      //      sees the previous public-key entry in `signatures` and
+      //      rejects with "this public key has already signed".
+      //   2. The dApp's session monitor flashes stale "alice/bob ✓
+      //      signed" pills against the new tx — confusing during the
+      //      120s validity window when seconds matter.
+      //
+      // `clearTransactionState` returns the participants whose status
+      // it changed; we broadcast `PARTICIPANT_STATUS_UPDATE` for each
+      // below so connected dApp / CLI views update their pills
+      // without having to invent a "guess server reset participants"
+      // code path on the client. Declared at function scope so the
+      // post-block broadcast (formerly an out-of-scope reference) can
+      // see it.
+      let changedStatuses = [];
+      if (typeof this.sessionManager.store.clearTransactionState === 'function') {
+        changedStatuses = await this.sessionManager.store.clearTransactionState(sessionId) || [];
+      }
 
-        session.frozenTransaction = normalizedTx;
-        session.txDetails = txDetails;
-        // Persist the JSON-serializable ABI so late-joining participants
-        // can reconstruct verified contract-call display. The original
-        // ethers Interface object can't be serialized.
-        session.serializableAbi = serializableAbi || null;
-        session.status = 'transaction-received';
-        session.transactionReceivedAt = Date.now();
+      // Clear any existing expiration timeout via TimerController
+      if (session.expirationTimerId) {
+        timerController.clear(session.expirationTimerId);
+      }
 
-        // Calculate expiration time from txDetails
-        // txDetails should contain validStartTimestamp and transactionValidDuration
-        // IMPORTANT: Store transaction expiration separately from session expiration
-        if (txDetails && txDetails.validStartTimestamp) {
-          const validDuration = txDetails.transactionValidDuration || 120;
-          const txExpiresAt = txDetails.validStartTimestamp + validDuration;
-          session.transactionExpiresAt = txExpiresAt; // Separate from session.expiresAt
+      session.frozenTransaction = normalizedTx;
+      session.txDetails = txDetails;
+      // Persist the JSON-serializable ABI so late-joining participants
+      // can reconstruct verified contract-call display. The original
+      // ethers Interface object can't be serialized.
+      session.serializableAbi = serializableAbi || null;
+      session.status = 'transaction-received';
+      session.transactionReceivedAt = Date.now();
 
-          // Set up expiration timeout
-          const now = Math.floor(Date.now() / 1000);
-          const timeUntilExpiry = (txExpiresAt - now) * 1000;
+      // Calculate expiration time from txDetails
+      // txDetails should contain validStartTimestamp and transactionValidDuration
+      // IMPORTANT: Store transaction expiration separately from session expiration
+      if (txDetails && txDetails.validStartTimestamp) {
+        const validDuration = txDetails.transactionValidDuration || 120;
+        const txExpiresAt = txDetails.validStartTimestamp + validDuration;
+        session.transactionExpiresAt = txExpiresAt; // Separate from session.expiresAt
 
-          if (timeUntilExpiry > 0) {
-            session.expirationTimerId = timerController.setTimeout(async () => {
-              await this._handleTransactionExpired(sessionId);
-            }, timeUntilExpiry, `tx-expiry-${sessionId}`);
+        // Set up expiration timeout
+        const now = Math.floor(Date.now() / 1000);
+        const timeUntilExpiry = (txExpiresAt - now) * 1000;
 
-            if (this.options.verbose) {
-              console.log(chalk.yellow(`⏱️  Transaction expires in ${Math.round(timeUntilExpiry / 1000)}s`));
-            }
-          } else {
-            // Already expired
+        if (timeUntilExpiry > 0) {
+          session.expirationTimerId = timerController.setTimeout(async () => {
             await this._handleTransactionExpired(sessionId);
-            return;
+          }, timeUntilExpiry, `tx-expiry-${sessionId}`);
+
+          if (this.options.verbose) {
+            console.log(chalk.yellow(`⏱️  Transaction expires in ${Math.round(timeUntilExpiry / 1000)}s`));
           }
+        } else {
+          // Already expired
+          await this._handleTransactionExpired(sessionId);
+          return;
         }
       }
 
