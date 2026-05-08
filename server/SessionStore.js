@@ -659,6 +659,24 @@ class SessionStore {
         // the +5-minute deletion below) skip this block — `justExpired`
         // is false the second time around.
         if (justExpired) {
+          // Visibility: previously this transition was silent — operators
+          // would see participants suddenly drop without anything in the
+          // server log, leading to "did the server die?" confusion. The
+          // process keeps running; only the session was reaped.
+          const livedMs = now - (session.createdAt || now);
+          const livedMin = Math.round(livedMs / 60000);
+          // Only the first-time expiry logs (we're already inside
+          // `if (justExpired)`); the +5min deletion path stays silent.
+          // Use console (so it shows in the operator's terminal) and
+          // a structured log line if one exists on the session
+          // manager — best-effort, no hard dep on a logger.
+          // eslint-disable-next-line no-console
+          console.log(
+            `\n⏱️  Session ${sessionId} expired after ~${livedMin} min ` +
+            `(coordinator + ${session.participants ? session.participants.size : 0} participant socket(s) closed). ` +
+            `Server is still running — start a new session or stop with Ctrl+C.\n`
+          );
+
           const expiredMsg = JSON.stringify({
             type: 'SESSION_EXPIRED',
             payload: { sessionId },

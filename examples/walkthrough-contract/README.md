@@ -211,12 +211,19 @@ npx hedera-multisig server \
   -k "$(node -p "require('./demo-account-state.json').thresholdConfig.publicKeys.join(',')")" \
   --port 3001 \
   --no-tunnel \
+  --timeout 0 \
   --allowed-origins http://localhost:3000
 ```
 
 `--allowed-origins http://localhost:3000` is required for the dApp's
 browser tab to connect — the server denies browser origins by default.
 CLI participants are unaffected (no `Origin` header).
+
+`--timeout 0` keeps the session alive until you Ctrl+C the server.
+Contract walkthroughs typically span a couple of injects (`increment`
+then `withdraw`) and you don't want the session expiring between them.
+Without the flag, the default 30-minute cap fires silently and the
+next inject lands on a dead session.
 
 Note the printed **session ID**, **PIN**, **coordinator token**, and
 **connection string**.

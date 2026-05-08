@@ -210,8 +210,17 @@ npx hedera-multisig server \
   -k "$(node -p "require('./walkthrough-state.json').publicKeys.join(',')")" \
   --port 3001 \
   --tunnel-provider ngrok \
+  --timeout 0 \
   --allowed-origins https://testnet-multisig.lazysuperheroes.com
 ```
+
+`--timeout 0` keeps the session alive until you stop the server with
+Ctrl+C. The default 30-minute cap is fine for tightly-coordinated
+real-time signing, but treasury-style ceremonies (where signers
+coordinate over chat / async) routinely run longer than that. Without
+the flag, the session expires silently mid-conversation and your
+participants see a "connection lost" page that's easy to misread as a
+server crash.
 
 The server prints:
 

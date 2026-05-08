@@ -117,7 +117,7 @@ async function main() {
 
   console.log(chalk.bold.white('\nCeremony steps (run in parallel terminals):'));
   console.log(chalk.gray('  1. (already running?) Coordinator server:'));
-  console.log(`     ${chalk.cyan('npx hedera-multisig server -t 2 -k "' + state.thresholdConfig.publicKeys.join(',') + '" --port 3001 --no-tunnel')}`);
+  console.log(`     ${chalk.cyan('npx hedera-multisig server -t 2 -k "' + state.thresholdConfig.publicKeys.join(',') + '" --port 3001 --no-tunnel --timeout 0')}`);
   console.log(chalk.gray('  2. Inject this transaction via dApp /create — paste both the base64 above AND the ABI above.'));
   console.log(chalk.gray('  3. Two of [alice, bob, carol] join + sign — see README.'));
   console.log(chalk.gray(`  4. Verify: ${chalk.cyan('node verify-on-mirror.js ' + txId.toString())}`));

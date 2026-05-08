@@ -133,8 +133,14 @@ npx hedera-multisig server \
   -k "$(node -e "console.log(require('./walkthrough-state.json').publicKeys.join(','))")" \
   --port 3001 \
   --no-tunnel \
+  --timeout 0 \
   --allowed-origins http://localhost:3000
 ```
+
+`--timeout 0` makes the session live until you Ctrl+C the server.
+Without it, the session quietly expires after 30 minutes and any
+participant still attached gets disconnected — fine for a smoke test,
+unhelpful when you want to walk through the steps at a relaxed pace.
 
 The server prints:
 - Session ID

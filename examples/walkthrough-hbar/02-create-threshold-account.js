@@ -86,7 +86,7 @@ async function main() {
 
   console.log(chalk.bold.cyan('\nNext: start the coordinator server (see README step 3).\n'));
   console.log(chalk.gray('Quick start:'));
-  console.log(chalk.gray(`  npx hedera-multisig server -t 2 -k "${state.publicKeys.join(',')}" --port 3001 --no-tunnel\n`));
+  console.log(chalk.gray(`  npx hedera-multisig server -t 2 -k "${state.publicKeys.join(',')}" --port 3001 --no-tunnel --timeout 0\n`));
 
   client.close();
 }
