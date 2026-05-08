@@ -102,6 +102,47 @@ export interface SessionInfo {
     connectedAt?: number;
     isAgent?: boolean;
   }>;
+  /**
+   * Session mode. 'realtime' is the default — signers connect, the
+   * coordinator injects, signatures collected over WebSocket, server
+   * executes. 'scheduled' is HIP-423 — coordinator submits a
+   * ScheduleCreate to the network, scheduleId distributed via WS,
+   * signers submit ScheduleSignTransaction independently to the
+   * network at their convenience. Mirror node is source of truth
+   * for schedule status in scheduled mode.
+   */
+  mode?: 'realtime' | 'scheduled';
+  scheduleId?: string | null;
+  /** Seconds since epoch. */
+  scheduleExpirationTime?: number | null;
+  scheduleMemo?: string | null;
+  schedulePayerAccountId?: string | null;
+  scheduleAdminKey?: string | null;
+  innerTxDetails?: TransactionDetails | Record<string, unknown> | null;
+  innerTxBase64?: string | null;
+}
+
+/**
+ * Server broadcast announcing a freshly-created HIP-423 schedule.
+ * Distinct from TransactionReceivedMessage: there's no frozen
+ * transaction, no signature collection over WS — the wire payload
+ * is just enough context for participants to display the inner tx,
+ * find the schedule on the network, and submit their own
+ * ScheduleSignTransaction.
+ */
+export interface ScheduleCreatedMessage {
+  type: 'SCHEDULE_CREATED';
+  payload: {
+    scheduleId: string;
+    expirationTime: number | null;
+    scheduleMemo: string | null;
+    payerAccountId: string | null;
+    adminKey: string | null;
+    innerTxDetails: TransactionDetails | Record<string, unknown> | null;
+    innerTxBase64: string | null;
+    abi?: unknown;
+    announcedAt: number;
+  };
 }
 
 export interface TransactionDetails {
@@ -311,6 +352,7 @@ export type ServerMessage =
   | AuthSuccessMessage
   | AuthFailedMessage
   | TransactionReceivedMessage
+  | ScheduleCreatedMessage
   | SignatureAcceptedMessage
   | SignatureRejectedMessage
   | SignatureReceivedMessage
@@ -344,6 +386,7 @@ export interface SigningClientEvents {
   connected: (data: { participantId: string; sessionInfo: SessionInfo }) => void;
   ready: (data: { publicKey: string }) => void;
   transactionReceived: (data: TransactionReceivedMessage['payload']) => void;
+  scheduleCreated: (data: ScheduleCreatedMessage['payload']) => void;
   signed: (data: { publicKey: string }) => void;
   signatureAccepted: (data: SignatureAcceptedMessage['payload']) => void;
   signatureRejected: (data: SignatureRejectedMessage['payload']) => void;

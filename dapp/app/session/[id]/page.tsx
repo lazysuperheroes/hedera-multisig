@@ -27,6 +27,7 @@ import { useToast } from '../../../hooks/useToast';
 import { useSessionRecovery } from '../../../hooks/useSessionRecovery';
 import { WalletStatus } from '../../../components/WalletStatus';
 import { TransactionReview } from '../../../components/TransactionReview';
+import { ScheduledReview } from '../../../components/ScheduledReview';
 import { SignatureProgress } from '../../../components/SignatureProgress';
 import { PostSigningStatus } from '../../../components/PostSigningStatus';
 import { ToastContainer } from '../../../components/Toast';
@@ -398,8 +399,71 @@ export default function SessionPage({ params }: PageProps) {
     }
   };
 
-  // Handle transaction approval
+  // Handle transaction approval — branches by session mode.
   const handleApprove = async () => {
+    // HIP-423 scheduled-tx branch. Distinct flow:
+    //   1. Build a ScheduleSignTransaction(scheduleId).
+    //   2. Have the wallet sign + execute it directly to the network.
+    //   3. NO SIGNATURE_SUBMIT over WS — the signature lives on-chain.
+    //      The coordinator and other participants discover it via
+    //      mirror-node `getScheduleInfo`.
+    if (signingSession.state.schedule) {
+      const schedule = signingSession.state.schedule;
+      try {
+        setCurrentStep('signing');
+        setErrorMessage(null);
+        toast.info('Signing Schedule', 'Please approve in your wallet — your signature goes on-chain');
+
+        const sdk = await import('@hashgraph/sdk');
+        const sdkAny = sdk as unknown as {
+          ScheduleSignTransaction: new () => {
+            setScheduleId: (id: unknown) => unknown;
+            executeWithSigner: (signer: unknown) => Promise<{
+              transactionId: { toString(): string };
+              getReceiptWithSigner: (signer: unknown) => Promise<{ status: { toString(): string } }>;
+            }>;
+          };
+          ScheduleId: { fromString: (s: string) => unknown };
+        };
+
+        const { getDAppConnector } = await import('../../../lib/walletconnect');
+        const dappConnector = getDAppConnector();
+        if (!dappConnector || !dappConnector.signers || dappConnector.signers.length === 0) {
+          throw new Error('Wallet not connected — connect your wallet first.');
+        }
+        const signer = dappConnector.signers[0] as unknown;
+
+        const signTx = new sdkAny.ScheduleSignTransaction();
+        signTx.setScheduleId(sdkAny.ScheduleId.fromString(schedule.scheduleId));
+
+        const response = await (signTx as unknown as {
+          executeWithSigner: (s: unknown) => Promise<{
+            transactionId: { toString(): string };
+            getReceiptWithSigner: (s: unknown) => Promise<{ status: { toString(): string } }>;
+          }>;
+        }).executeWithSigner(signer);
+        const receipt = await response.getReceiptWithSigner(signer);
+
+        toast.success('Signature on-chain', `ScheduleSign tx submitted: ${response.transactionId.toString()}`);
+
+        // Mark this user as signed locally. Other participants discover
+        // it via mirror node — no WS broadcast needed.
+        setSignedTransactionId(response.transactionId.toString());
+        setSignedTransactionDetails({
+          type: 'ScheduleSignTransaction',
+          memo: schedule.scheduleMemo || `Sign schedule ${schedule.scheduleId}`,
+        });
+        setCurrentStep('signed');
+      } catch (error) {
+        console.error('ScheduleSign failed:', error);
+        const msg = (error as Error).message || 'Unknown signing error';
+        setErrorMessage(msg);
+        toast.error('Signing Failed', msg);
+        setCurrentStep('reviewing');
+      }
+      return;
+    }
+
     if (!signingSession.state.transaction.frozenTransaction) {
       setErrorMessage('No transaction to sign');
       return;
@@ -980,8 +1044,28 @@ export default function SessionPage({ params }: PageProps) {
           </>
         )}
 
-        {/* Step 3: Transaction Review */}
-        {currentStep === 'reviewing' && signingSession.state.transaction.frozenTransaction && (
+        {/* Step 3: Review.
+            Branches by session mode: scheduled sessions get the
+            HIP-423 long-window review (no 120s countdown, on-chain
+            signing); realtime sessions get the canonical frozen-tx
+            review path. The `state.schedule` slot is only populated
+            when the coordinator created via /create's scheduled
+            toggle (Phase 1) or for late joiners on AUTH_SUCCESS. */}
+        {currentStep === 'reviewing' && signingSession.state.schedule && (
+          <ScheduledReview
+            scheduleId={signingSession.state.schedule.scheduleId}
+            expirationTime={signingSession.state.schedule.expirationTime}
+            scheduleMemo={signingSession.state.schedule.scheduleMemo}
+            payerAccountId={signingSession.state.schedule.payerAccountId}
+            adminKey={signingSession.state.schedule.adminKey}
+            innerTxDetails={signingSession.state.schedule.innerTxDetails as Record<string, unknown> | null}
+            network={DEFAULT_NETWORK as 'testnet' | 'mainnet'}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            disabled={false}
+          />
+        )}
+        {currentStep === 'reviewing' && !signingSession.state.schedule && signingSession.state.transaction.frozenTransaction && (
           <TransactionReview
             frozenTransactionBase64={signingSession.state.transaction.frozenTransaction.base64}
             metadata={signingSession.state.transaction.metadata || undefined}

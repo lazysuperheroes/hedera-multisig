@@ -424,3 +424,60 @@ export async function fetchTransactionStatus(
     };
   }
 }
+
+/**
+ * Schedule status from mirror node — the source of truth for HIP-423
+ * scheduled transactions. Realtime ceremonies track "M of N sigs
+ * collected" in WebSocket state; scheduled ceremonies track sigs
+ * on-chain and the only authoritative status comes from this.
+ *
+ * Returns null if the schedule isn't found yet (mirror lag — schedules
+ * created in the last few seconds may not have propagated).
+ */
+export interface ScheduleStatus {
+  scheduleId: string;
+  creatorAccountId: string | null;
+  payerAccountId: string | null;
+  scheduleMemo: string | null;
+  /** ISO 8601 timestamp string. */
+  expirationTime: string | null;
+  /** Set when Hedera has executed the schedule (threshold met OR waitForExpiry hit). */
+  executedTimestamp: string | null;
+  /** True if the schedule was deleted before execution (admin-key holder action). */
+  deleted: boolean;
+  /** Array of {public_key_prefix, type} entries — one per signature already collected. */
+  signatures: Array<{ public_key_prefix?: string; type?: string }>;
+  /** Raw transaction body bytes (base64). Lets the dApp decode the inner tx. */
+  transactionBody: string | null;
+  waitForExpiry: boolean;
+}
+
+export async function fetchScheduleInfo(
+  scheduleId: string,
+  network: 'testnet' | 'mainnet' = 'testnet',
+): Promise<ScheduleStatus | null> {
+  const url = `${getMirrorNodeUrl(network)}/schedules/${encodeURIComponent(scheduleId)}`;
+  try {
+    const response = await fetch(url);
+    if (response.status === 404) return null; // mirror lag — caller polls again
+    if (!response.ok) {
+      throw new Error(`Mirror node returned ${response.status}`);
+    }
+    const json = await response.json();
+    return {
+      scheduleId: json.schedule_id || scheduleId,
+      creatorAccountId: json.creator_account_id || null,
+      payerAccountId: json.payer_account_id || null,
+      scheduleMemo: json.memo || null,
+      expirationTime: json.expiration_time || null,
+      executedTimestamp: json.executed_timestamp || null,
+      deleted: !!json.deleted,
+      signatures: Array.isArray(json.signatures) ? json.signatures : [],
+      transactionBody: json.transaction_body || null,
+      waitForExpiry: !!json.wait_for_expiry,
+    };
+  } catch (error) {
+    console.warn(`fetchScheduleInfo(${scheduleId}) failed:`, error);
+    return null;
+  }
+}

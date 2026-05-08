@@ -37,6 +37,24 @@ export interface SigningSessionState {
     metadata: Record<string, unknown> | null;
     contractInterface: unknown | null;
   };
+  /**
+   * HIP-423 scheduled-tx context. Populated by AUTH_SUCCESS (for late
+   * joiners) or by the SCHEDULE_CREATED broadcast (for participants
+   * connected at announcement time). Null in real-time ceremonies —
+   * the existing `transaction` slot is what realtime signers care about.
+   * Sessions don't change mode mid-flight; mode is set at the first
+   * inject/announce and stays put.
+   */
+  schedule: {
+    scheduleId: string;
+    expirationTime: number | null; // seconds since epoch
+    scheduleMemo: string | null;
+    payerAccountId: string | null;
+    adminKey: string | null;
+    innerTxDetails: TransactionDetails | Record<string, unknown> | null;
+    innerTxBase64: string | null;
+    abi?: unknown;
+  } | null;
   stats: {
     participantsConnected: number;
     participantsReady: number;
@@ -69,6 +87,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
       metadata: null,
       contractInterface: null,
     },
+    schedule: null,
     stats: {
       participantsConnected: 0,
       participantsReady: 0,
@@ -182,9 +201,27 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
               })
           : [];
 
+      // Seed `state.schedule` from the AUTH_SUCCESS sessionInfo for
+      // late joiners on a scheduled session. The server stamps these
+      // fields onto `getSessionInfo` once a SCHEDULE_ANNOUNCE arrives,
+      // so a participant who connects AFTER the schedule was created
+      // gets the context inline rather than waiting for a re-broadcast
+      // (which never fires).
+      const sched = data.sessionInfo.scheduleId
+        ? {
+            scheduleId: data.sessionInfo.scheduleId,
+            expirationTime: data.sessionInfo.scheduleExpirationTime ?? null,
+            scheduleMemo: data.sessionInfo.scheduleMemo ?? null,
+            payerAccountId: data.sessionInfo.schedulePayerAccountId ?? null,
+            adminKey: data.sessionInfo.scheduleAdminKey ?? null,
+            innerTxDetails: data.sessionInfo.innerTxDetails ?? null,
+            innerTxBase64: data.sessionInfo.innerTxBase64 ?? null,
+          }
+        : null;
+
       setState((prev) => ({
         ...prev,
-        status: 'connected',
+        status: sched ? 'reviewing' : 'connected',
         connected: true,
         participantId: data.participantId,
         sessionInfo: data.sessionInfo,
@@ -199,6 +236,7 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
           signaturesRequired: data.sessionInfo.threshold,
         },
         participants: seededParticipants,
+        schedule: sched,
         error: null,
       }));
     });
@@ -280,6 +318,33 @@ export function useSigningSession(options: UseSigningSessionOptions = {}) {
         participants: prev.participants.map((p) =>
           p.status === 'signed' ? { ...p, status: 'ready' as const } : p,
         ),
+      }));
+    });
+
+    // HIP-423 scheduled-tx broadcast. Coordinator already submitted
+    // ScheduleCreate to the network; we just need to track scheduleId
+    // + expiration so the UI can render the long-window review screen.
+    // Distinct from transactionReceived (no frozen-tx body to verify;
+    // signing happens via ScheduleSignTransaction submitted directly
+    // to the network, not over WebSocket).
+    clientRef.current.on('scheduleCreated', (data) => {
+      if (!isMountedRef.current) return;
+      setState((prev) => ({
+        ...prev,
+        status: 'reviewing',
+        schedule: {
+          scheduleId: data.scheduleId,
+          expirationTime: data.expirationTime ?? null,
+          scheduleMemo: data.scheduleMemo ?? null,
+          payerAccountId: data.payerAccountId ?? null,
+          adminKey: data.adminKey ?? null,
+          innerTxDetails: data.innerTxDetails ?? null,
+          innerTxBase64: data.innerTxBase64 ?? null,
+          abi: data.abi,
+        },
+        // Don't touch the realtime `transaction` slot — sessions
+        // don't change mode mid-flight, and a stray frozen-tx blob
+        // here would confuse the review screen's mode detection.
       }));
     });
 

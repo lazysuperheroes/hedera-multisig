@@ -415,6 +415,21 @@ export class BrowserSigningClient {
           this.onTransactionReceived(message.payload);
           break;
 
+        case 'SCHEDULE_CREATED':
+          // HIP-423 scheduled-tx flavour of TRANSACTION_RECEIVED. The
+          // coordinator submitted ScheduleCreate to the network and is
+          // now distributing the scheduleId so participants can sign at
+          // their convenience via ScheduleSignTransaction. There's no
+          // frozen-tx body to verify in the realtime sense — the inner
+          // tx context arrives in payload.innerTxDetails / innerTxBase64.
+          this.log(
+            `Schedule created: ${message.payload?.scheduleId || '?'}`,
+            'info',
+          );
+          this.status = 'reviewing';
+          this.emit('scheduleCreated', message.payload);
+          break;
+
         case 'TRANSACTION_REJECTED':
           // Fired by the server when ANY participant rejects (the
           // server resets the per-tx state and broadcasts to everyone).
