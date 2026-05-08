@@ -6,6 +6,7 @@
  */
 
 const crypto = require('crypto');
+const chalk = require('chalk');
 const SessionStore = require('./SessionStore');
 const {
   TransactionDecoder: SharedDecoder,
@@ -647,28 +648,87 @@ class SigningSessionManager {
         throw new Error('Invalid frozen transaction format - cannot reconstruct transaction');
       }
 
-      for (const sig of signatures) {
-        const publicKey = PublicKey.fromString(sig.publicKey);
+      // Pre-flight: check whether any signer submitted fewer
+      // signatures than there are SignedTransaction bodies in the
+      // multi-node freeze. The canonical case is HashPack via
+      // WalletConnect: it signs only body[0] regardless of how many
+      // bodies the freeze contains, so a 6-node freeze gets back 1
+      // signature from that signer. The SDK's `addSignature(key, sigs)`
+      // requires `sigs.length === signedTransactions.list.length` and
+      // throws "Signature array must match the number of transactions"
+      // otherwise.
+      //
+      // Recovery: trim the multi-node freeze down to its first body
+      // before attaching signatures. Every signer (CLI or wallet) is
+      // guaranteed to have signed at least body[0] (it's bodyBytes[0]
+      // either way), so a single-node submission to nodeAccountId[0]
+      // works. Cost: lose multi-node submission resilience (if that
+      // node is down, retry won't fan out to siblings). For a one-shot
+      // ceremony this is the right tradeoff vs failing entirely. CLI-
+      // only ceremonies retain the full multi-node path.
+      const bodyCount = signedTx?._signedTransactions?.list?.length || 1;
+      const sigLists = signatures.map((sig) => {
+        if (Array.isArray(sig.signatures) && sig.signatures.length > 0) return sig.signatures;
+        if (typeof sig.signature === 'string' && sig.signature.length > 0) return [sig.signature];
+        return null;
+      });
+      const downgradeToSingleNode =
+        bodyCount > 1 &&
+        sigLists.some((sl) => sl !== null && sl.length < bodyCount);
 
-        // Multi-node freeze: array of base64 sigs, one per body. SDK
-        // accepts an array on addSignature() and pairs them positionally
-        // with each SignedTransaction's sigMap. Legacy single-sig
-        // promotes to a 1-element array.
-        const sigList = Array.isArray(sig.signatures) && sig.signatures.length > 0
-          ? sig.signatures
-          : (typeof sig.signature === 'string' && sig.signature.length > 0
-              ? [sig.signature]
-              : null);
-        if (!sigList) {
+      if (downgradeToSingleNode) {
+        // Mutate SDK internals to keep only the first body, nodeId, and
+        // transactionId. Private API (`_signedTransactions`,
+        // `_nodeAccountIds`, `_transactionIds`) but the alternative is
+        // refusing to execute a ceremony that just collected enough
+        // signatures.
+        if (signedTx._signedTransactions && Array.isArray(signedTx._signedTransactions.list)) {
+          signedTx._signedTransactions.list = [signedTx._signedTransactions.list[0]];
+        }
+        if (signedTx._nodeAccountIds && typeof signedTx._nodeAccountIds.setLocked === 'function') {
+          // newer SDKs lock node IDs after freeze; setLocked(false) lets us trim.
+          try { signedTx._nodeAccountIds.setLocked(false); } catch { /* ignore */ }
+        }
+        if (signedTx._nodeAccountIds && Array.isArray(signedTx._nodeAccountIds.list)) {
+          signedTx._nodeAccountIds.list = [signedTx._nodeAccountIds.list[0]];
+        } else if (Array.isArray(signedTx._nodeAccountIds)) {
+          signedTx._nodeAccountIds = [signedTx._nodeAccountIds[0]];
+        }
+        if (signedTx._transactionIds && Array.isArray(signedTx._transactionIds.list)) {
+          signedTx._transactionIds.list = [signedTx._transactionIds.list[0]];
+        }
+        if (signedTx._signedTransactionsBytesList && Array.isArray(signedTx._signedTransactionsBytesList)) {
+          signedTx._signedTransactionsBytesList = [signedTx._signedTransactionsBytesList[0]];
+        }
+        this.log.warn(
+          'Single-sig submission against multi-node freeze — downgrading execution to single-node',
+          { sessionId, originalBodyCount: bodyCount, signersWithSingleSig: sigLists.filter((sl) => sl && sl.length < bodyCount).length }
+        );
+        if (this.options.verbose) {
+          console.log(chalk.yellow(
+            `\n⚠️  Wallet signer(s) returned single signature against ${bodyCount}-node freeze.\n` +
+            `   Downgrading to single-node submission so the ceremony can complete.\n` +
+            `   This loses multi-node resilience but the transaction will still execute.\n`
+          ));
+        }
+      }
+
+      for (let i = 0; i < signatures.length; i++) {
+        const sig = signatures[i];
+        const publicKey = PublicKey.fromString(sig.publicKey);
+        const fullList = sigLists[i];
+        if (!fullList) {
           throw new Error(`No signature stored for public key ${sig.publicKey}`);
         }
-
+        // After the downgrade we want exactly one sig per signer
+        // (matching the trimmed body count). Take the first — that's
+        // the one guaranteed to verify against bodyBytes[0].
+        const sigList = downgradeToSingleNode ? [fullList[0]] : fullList;
         const sigBytesArray = sigList.map((sigStr) => (
           sigStr.startsWith('0x')
             ? Buffer.from(sigStr.slice(2), 'hex')
             : Buffer.from(sigStr, 'base64')
         ));
-
         signedTx = signedTx.addSignature(publicKey, sigBytesArray);
       }
 
