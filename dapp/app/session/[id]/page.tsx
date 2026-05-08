@@ -839,19 +839,46 @@ export default function SessionPage({ params }: PageProps) {
         )}
 
         {/* Step 1: Connect Wallet
-            Path A (wallet already connected globally via NavBar): we
-            render the ConnectingBanner immediately so the user sees
-            progress feedback the instant they land on the page,
-            instead of a "Connect Wallet" button that flickers for a
-            frame before the auto-advance effect fires. The banner is
-            the same one shown during session-connect, so the visual
-            experience is "land → see banner → see banner → connected"
-            with no jarring intermediate state. */}
-        {currentStep === 'wallet-connect' && wallet.isConnected && (
+            Three sub-states, in priority order:
+              (a) wallet hook still initializing (`!isInitialized`) →
+                  show a quick "checking" spinner so the page doesn't
+                  appear hung between mount and the wallet's first
+                  hydration tick. We don't yet KNOW if the user has a
+                  paired wallet, so showing either the "Connect Wallet"
+                  prompt or the ConnectingBanner is misleading.
+              (b) initialized, wallet connected (Path A — paired via
+                  NavBar) → ConnectingBanner with rotating messages.
+              (c) initialized, wallet not connected (Path B / cold load)
+                  → "Connect Wallet" prompt with the explainer details. */}
+        {currentStep === 'wallet-connect' && !wallet.isInitialized && (
+          <div
+            className="bg-info-soft border-2 border-info/40 rounded-lg p-6"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <div className="flex items-center gap-4">
+              <div
+                className="w-8 h-8 border-2 border-info/30 border-t-info rounded-full animate-spin shrink-0"
+                aria-hidden="true"
+              />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-info-soft-fg">
+                  Standby — checking session…
+                </h3>
+                <p className="text-xs text-info-soft-fg/80 mt-0.5">
+                  Looking for a paired wallet. This is usually instant.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentStep === 'wallet-connect' && wallet.isInitialized && wallet.isConnected && (
           <ConnectingBanner accountId={wallet.accountId} />
         )}
 
-        {currentStep === 'wallet-connect' && !wallet.isConnected && (
+        {currentStep === 'wallet-connect' && wallet.isInitialized && !wallet.isConnected && (
           <>
             {/* Phase C17: prime first-time users on what's about to happen */}
             <details className="mb-4 rounded-lg border border-info/40 bg-info-soft p-4">
