@@ -203,6 +203,22 @@ The script also writes `multisig-increment-tx.json` with the bytes,
 ABI, expected function name, and the transaction ID for later
 verification.
 
+> **Why single-node freeze for contract calls?**
+> The script uses `subsetSize: 1` (the package default since `2.1.10`).
+> HashPack via WalletConnect re-freezes `ContractExecuteTransaction`
+> internally before signing — applying its own gas/fee/timestamp
+> adjustments — and its signatures end up valid against ITS bytes but
+> not against the coordinator's. Multi-node freeze + wallet signer =
+> 0 valid signatures with no recovery path. Single-node sidesteps it.
+>
+> If your ceremony is **CLI-only** (every signer using a key file or
+> the SDK directly, no HashPack/Blade/etc. in the mix), bump
+> `subsetSize: 6` in step 7's script for multi-node submission
+> resilience. CLI signers produce full per-body signature arrays that
+> verify cleanly against the coordinator's stored bytes.
+>
+> See the project's root README for the full node-selection write-up.
+
 ### 7b. Start the coordinator (terminal 2)
 
 ```bash

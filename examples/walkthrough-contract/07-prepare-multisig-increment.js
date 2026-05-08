@@ -59,13 +59,24 @@ async function main() {
   // Build + freeze. We do NOT sign here — the multi-sig ceremony attaches
   // signatures after participants review.
   //
-  // Multi-node freeze (canonical Hedera multi-sig pattern). Default is
-  // a random subset of 6 nodes — resilient to per-node downtime, well
-  // under Hedera's 6 KB tx-size cap. The shared helper validates the
-  // strategy + dedupes the network's gRPC/gRPC-Web entries.
+  // Single-node freeze (DEFAULT_SUBSET_SIZE = 1). Counter-intuitive
+  // for a multi-sig contract call but mandatory for wallet
+  // compatibility:
+  //
+  //   - HashPack via WalletConnect re-freezes ContractExecuteTransaction
+  //     internally before signing (gas / fee / timestamp adjustments).
+  //     Its signatures are valid against ITS bytes but NOT against
+  //     ours, so a multi-node freeze + wallet signer = "0 signatures
+  //     verified" with no recovery path.
+  //   - Single-node sidesteps it: only one body to sign, wallet's
+  //     re-freeze either matches verbatim or its drift is contained.
+  //
+  // For CLI-only ceremonies (every signer using sign-via-key, no
+  // wallets in the mix), bump `subsetSize: 6` for multi-node submission
+  // resilience. See the project's root README for the full rationale.
   const nodeAccountIds = selectNodeAccountIds(client, {
     strategy: 'subset',
-    subsetSize: DEFAULT_SUBSET_SIZE,
+    subsetSize: DEFAULT_SUBSET_SIZE, // 1 — wallet-compatible default
   });
   const tx = new ContractExecuteTransaction()
     .setContractId(ContractId.fromString(state.contractId))

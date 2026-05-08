@@ -109,12 +109,15 @@ Scheduled transactions (`ScheduledWorkflow`) bypass this constraint entirely.
 - `KeyProvider.sign(txBytes)` is the preferred signing interface (works with opaque signers)
 - Use `shared/crypto-utils.js` for `timingSafeCompare`, `sanitizePublicKey` — no duplicating
 
-### Multi-node Freeze (canonical multi-sig pattern)
+### Node freeze selection
 
-- Multi-sig transactions must be frozen against multiple nodes via `setNodeAccountIds([...])`. Each `SignedTransaction` body has a distinct `nodeAccountID`, so signers produce **one ED25519 signature per body** and pass the array to `transaction.addSignature(publicKey, sigBytesArray)`. Single-sig attach against multi-node freeze fails with the SDK error "Signature array must match the number of transactions".
-- Use `selectNodeAccountIds(client, options)` from `shared/node-selection.js` (Node) or `dapp/lib/node-selection.ts` (browser). Default: random subset of 6 — resilient under per-node downtime, well within Hedera's 6 KB tx-size cap. Override only with reason. Strategies: `'subset'` (default), `'all'`, `'specific'`.
+- **Default: single-node freeze (`subsetSize=1`)**. Counter-intuitive for a multi-sig library — multi-node is the canonical Hedera pattern, and signing every node body up front lets execute() rotate to any healthy one. We default to single-node anyway because **HashPack via WalletConnect re-freezes `ContractExecuteTransaction` internally** before signing (applies its own gas/fee/timestamp adjustments), and its signatures are valid against ITS frozen bytes, not against the coordinator's stored bytes. Multi-node + wallet signer = "0 signatures verified" with no recovery path. Single-node sidesteps it. HBAR transfers happen to work either way (HashPack signs them verbatim) so the bug doesn't surface in transfer-only walkthroughs.
+- **Bump `subsetSize` for CLI-only ceremonies**: pass `subsetSize: 6` (or higher) to `selectNodeAccountIds(client, options)` when you control all signers and they're all CLI/SDK-based. Resilient to per-node downtime; comfortably under Hedera's 6 KB tx-size cap.
+- Multi-sig transactions get frozen against the chosen nodes via `setNodeAccountIds([...])`. Each `SignedTransaction` body has a distinct `nodeAccountID`, so signers produce **one ED25519 signature per body** and pass the array to `transaction.addSignature(publicKey, sigBytesArray)`. The server tolerates "single-sig submission against multi-node freeze" by trimming to body[0] at execute time (see `SigningSessionManager._executeTransactionLocked`) — that fallback rescues HBAR transfers when a wallet signer only delivers body[0]'s signature, but it can't rescue contract calls because the wallet's body[0] doesn't even match.
+- Use `selectNodeAccountIds(client, options)` from `shared/node-selection.js` (Node) or `dapp/lib/node-selection.ts` (browser). Strategies: `'subset'` (default), `'all'`, `'specific'`.
 - The 6 KB cap matters: a 5-of-9 multi-sig × 30-node freeze is ~22 KB and won't submit. Use `shared/tx-size-estimator.js` (Node) / `dapp/lib/tx-size-estimator.ts` (browser) to predict size before freezing; the dApp's `TxSizeEstimateBar` surfaces green/amber/red status pre-injection.
 - Wire protocol: `signatures: string[]` (canonical, base64-per-body). Legacy single-sig `signature: string` is accepted by promoting to a 1-element array. `SignatureCollector` outputs `publicKey:sig0,sig1,...,sigN` for offline workflows.
+- **Track**: revisit this default if/when wallets stop re-freezing — see `docs/ROADMAP.md`.
 
 ### Git Signing
 - ALWAYS use GPG-signed commits — Never use `--no-gpg-sign`

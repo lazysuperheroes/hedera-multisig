@@ -55,12 +55,16 @@ async function main() {
   const calldata = iface.encodeFunctionData('withdraw', []);
   const txId = TransactionId.generate(state.demoAccountId);
 
-  // Multi-node freeze with random subset of 6 — see
-  // shared/node-selection.js. Resilient to per-node downtime, well
-  // under Hedera's 6 KB tx-size cap.
+  // Single-node freeze (DEFAULT_SUBSET_SIZE = 1). Mandatory for
+  // wallet-signer compatibility on contract calls — HashPack
+  // re-freezes ContractExecuteTransaction internally and multi-node
+  // freezes leave its signatures stranded against bodies the
+  // coordinator never saw. See README + shared/node-selection.js
+  // for the full rationale. CLI-only ceremonies can bump
+  // `subsetSize: 6` for multi-node submission resilience.
   const nodeAccountIds = selectNodeAccountIds(client, {
     strategy: 'subset',
-    subsetSize: DEFAULT_SUBSET_SIZE,
+    subsetSize: DEFAULT_SUBSET_SIZE, // 1 — wallet-compatible default
   });
   const tx = new ContractExecuteTransaction()
     .setContractId(ContractId.fromString(state.contractId))

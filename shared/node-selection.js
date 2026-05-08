@@ -1,17 +1,40 @@
 /**
  * Node selection for multi-sig transaction freezes.
  *
- * Multi-node freeze is the canonical Hedera multi-sig pattern: signing
- * every node body up front lets execute() rotate to any healthy node
- * if the first one is busy. But freezing against the FULL network is
- * impractical past ~14 nodes (3-signer transfer hits the 6 KB tx-size
- * cap; mainnet's 30+ nodes won't submit at all). This helper picks a
- * resilient-but-bounded subset.
+ * Default: single-node freeze (subsetSize=1). Counter-intuitive choice
+ * for a multi-sig library — the canonical Hedera pattern is to freeze
+ * against multiple nodes so execute() can rotate to any healthy one if
+ * the first is busy. Why we default to 1 anyway:
+ *
+ *   - HashPack via WalletConnect (the dominant browser wallet for
+ *     Hedera) re-freezes `ContractExecuteTransaction` internally —
+ *     it applies its own gas / fee / timestamp adjustments before
+ *     signing. The signatures it returns are valid against ITS frozen
+ *     bytes but not against the coordinator's stored bytes, so a
+ *     multi-node freeze + wallet signer = "0 signatures verified" and
+ *     the ceremony hard-fails with no recovery path.
+ *   - HBAR transfers happen to work (HashPack signs them verbatim) so
+ *     the bug doesn't surface in transfer-only walkthroughs.
+ *   - Single-node freeze sidesteps the issue entirely: there's only
+ *     one body, the wallet either signs it verbatim or its re-freeze
+ *     happens to match. Either way the ceremony completes.
+ *
+ * Trade-off: lose multi-node submission resilience. If the chosen
+ * node is busy, the SDK's submit retry doesn't have siblings to fan
+ * out to. Acceptable: per-node Hedera consensus uptime is high; a
+ * one-shot ceremony is short-lived; the alternative is "works for
+ * CLI but breaks for browser wallets" which is a worse default.
+ *
+ * Bump `subsetSize` for CLI-only ceremonies that don't involve any
+ * wallet signers — those benefit from full multi-node resilience and
+ * never trigger the wallet re-freeze quirk.
+ *
+ * If/when wallets fix the re-freeze behavior, revisit this default —
+ * see docs/ROADMAP.md.
  *
  * Strategies:
- *   - 'subset' (default): random N from client.network. Default N=6.
- *     Resilient to per-node downtime (1−p^N where p = per-node downtime
- *     probability), comfortably under the 6 KB cap for typical txs.
+ *   - 'subset' (default): random N from client.network. Default N=1.
+ *     Pass `subsetSize: 6` (or higher) for CLI-only ceremonies.
  *   - 'all': every unique node. Use only when you know the network is
  *     small (e.g., a single-node local dev cluster).
  *   - 'specific': exactly the AccountIds you supply. Validates each
@@ -20,7 +43,7 @@
 
 const { AccountId } = require('@hashgraph/sdk');
 
-const DEFAULT_SUBSET_SIZE = 6;
+const DEFAULT_SUBSET_SIZE = 1;
 
 /**
  * @param {import('@hashgraph/sdk').Client} client

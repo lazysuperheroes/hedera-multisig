@@ -143,36 +143,11 @@ export default function CreatePage() {
     setBalanceError(null);
   }, [txType]);
 
-  // Wallet-compatibility default: contract calls auto-default to a
-  // single-node freeze. HashPack (and likely other wallets) appears to
-  // re-freeze ContractExecuteTransaction internally — applying its own
-  // gas/fee/timestamp adjustments — before signing, which leaves all
-  // signatures invalid against the coordinator's stored bodies. With
-  // subsetSize=1 there's only one body for the wallet to sign, so the
-  // server can either match exactly OR fall through to its existing
-  // single-node downgrade path (it's already that). HBAR transfers
-  // don't have this problem because HashPack signs them verbatim, so
-  // they keep the resilient subsetSize=6 default.
-  //
-  // The user can still override (the strategy picker is exposed in
-  // the UI for non-default ceremonies) — this is a default, not a
-  // lock.
-  const isContractType = txType === 'contract-call';
-  useEffect(() => {
-    if (isContractType) {
-      setNodeStrategy((prev) =>
-        prev.strategy === 'subset' && prev.subsetSize === DEFAULT_SUBSET_SIZE
-          ? { ...prev, subsetSize: 1 }
-          : prev,
-      );
-    } else {
-      setNodeStrategy((prev) =>
-        prev.strategy === 'subset' && prev.subsetSize === 1
-          ? { ...prev, subsetSize: DEFAULT_SUBSET_SIZE }
-          : prev,
-      );
-    }
-  }, [isContractType]);
+  // Note: the package-wide DEFAULT_SUBSET_SIZE is now 1 (see
+  // `shared/node-selection.js` for the wallet-compatibility rationale),
+  // so contract calls land on single-node freeze automatically without
+  // a special-case override here. CLI-only coordinators who want
+  // multi-node resilience bump it via the strategy picker below.
 
   const handleTransactionReset = useCallback(() => {
     // Server confirmed TRANSACTION_RESET. Clear the form fields the previous

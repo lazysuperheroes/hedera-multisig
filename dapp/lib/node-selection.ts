@@ -6,13 +6,15 @@
  * this is the same algorithm in TypeScript with the dApp's lazy-import
  * pattern for `@hashgraph/sdk`.
  *
- * See `shared/node-selection.js` for the full rationale on subset
- * sizing, the 6 KB tx-size cap, and why multi-node freeze is canonical.
+ * Default subset size is 1 — see `shared/node-selection.js` for the
+ * full rationale (TL;DR: HashPack re-freezes ContractExecuteTransaction
+ * internally before signing, multi-node freezes break wallet-signed
+ * ceremonies with no recovery path). Bump for CLI-only ceremonies.
  */
 
 import type { AccountId, Client } from '@hashgraph/sdk';
 
-export const DEFAULT_SUBSET_SIZE = 6;
+export const DEFAULT_SUBSET_SIZE = 1;
 
 export type NodeStrategy = 'subset' | 'all' | 'specific';
 

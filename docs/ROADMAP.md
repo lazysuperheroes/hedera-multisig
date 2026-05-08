@@ -192,6 +192,50 @@ All initial priorities completed across 20 sessions. See release history below.
 
 ## Future Considerations
 
+### Revisit the single-node freeze default
+
+**Status**: Deferred | **Blocked By**: Wallet behavior change
+
+`DEFAULT_SUBSET_SIZE` was bumped from 6 down to 1 in 2.1.10 because
+HashPack via WalletConnect re-freezes `ContractExecuteTransaction`
+internally before signing — applying its own gas / fee / timestamp
+adjustments — and its signatures end up valid against ITS frozen bytes
+rather than the coordinator's stored bytes. Multi-node freeze + wallet
+signer = "0 signatures verified" with no recovery path.
+
+The single-node default sidesteps this entirely (one body, no drift
+window) but loses multi-node submission resilience: if the picked node
+is busy or unhealthy at submit time, the SDK doesn't have siblings to
+retry against. We mitigate via `orderByHealth` (mirror-node-backed
+node ranking on freeze; see `shared/node-selection.js`), but it's a
+real downside compared to the multi-node ideal.
+
+**Watch list**:
+
+- HashPack's WalletConnect adapter starts signing
+  `ContractExecuteTransaction` verbatim (preserving the coordinator's
+  bytes), or
+- A new browser wallet ships with verbatim signing across all tx types
+  and gains meaningful adoption, or
+- A WalletConnect spec change forces wallets to preserve signable
+  body bytes.
+
+When any of those land, revisit this default. The `selectNodeAccountIds`
+API already supports per-call `subsetSize` overrides so the change is
+contained to changing the constant + walkthrough script defaults +
+docs.
+
+**Files that would need touching** (audit at change time):
+
+- `shared/node-selection.js` and `dapp/lib/node-selection.ts` — the
+  `DEFAULT_SUBSET_SIZE` constant.
+- `examples/walkthrough-contract/07-prepare-multisig-increment.js`
+  and `08-prepare-multisig-withdraw.js` — currently call out "single-
+  node by default for wallet compat" in their comments.
+- `examples/walkthrough-contract/README.md` — Step 7a's call-out box.
+- Root `README.md` — the "Node freeze defaults" section.
+- `CLAUDE.md` — the "Node freeze selection" section.
+
 ### Hybrid Air-Gap Bridge
 
 **Status**: Deferred | **Blocked By**: Phase 4 (Scheduled Transactions)

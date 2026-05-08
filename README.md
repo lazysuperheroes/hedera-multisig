@@ -353,6 +353,73 @@ const session = await sessionManager.createSession(null, {
 
 ---
 
+## 🌐 Node freeze defaults — read this if you're integrating
+
+**TL;DR**: The library defaults to a **single-node freeze** (`subsetSize: 1`).
+If you only have CLI / SDK signers and want resilience against per-node
+downtime, opt up to multi-node by passing `subsetSize: 6` to
+`selectNodeAccountIds()`.
+
+### Why single-node by default
+
+Multi-node freeze is the canonical Hedera multi-sig pattern: sign every
+node body up front so `execute()` can rotate to any healthy node if the
+first is busy. Beautiful in theory; broken with browser wallets in
+practice.
+
+**HashPack via WalletConnect re-freezes `ContractExecuteTransaction`
+internally** before signing — it applies its own gas / fee / timestamp
+adjustments. The signatures it returns are valid against ITS frozen
+bytes, not against the coordinator's stored bytes. Result with a
+multi-node freeze:
+
+```
+[multisig] wallet returned 6 sigMap entries, 0 verified against original bodies
+Error: Wallet returned 6 signatures but none verified against the original transaction bodies.
+```
+
+There's no recovery path — none of the wallet's signatures match any of
+the bodies the server has, so even the executor's "downgrade to
+single-node body[0]" fallback can't rescue the ceremony.
+
+HBAR transfers happen to work multi-node because HashPack signs them
+verbatim, which is why this only surfaces when you start signing
+contract calls.
+
+Single-node freeze sidesteps the whole mess: there's only one body, the
+wallet's re-freeze either matches verbatim or is close enough to land,
+and the ceremony completes.
+
+### When to opt up
+
+```js
+const { selectNodeAccountIds } = require('@lazysuperheroes/hedera-multisig');
+
+// Default — works everywhere, including with HashPack contract calls
+const nodes = selectNodeAccountIds(client);
+
+// CLI-only treasury workflow with no wallet signers? Opt up:
+const nodes = selectNodeAccountIds(client, { subsetSize: 6 });
+```
+
+CLI signers (`cli/`, `client/`) produce a full per-body signature array
+because they sign the SDK's bodyBytes directly — no re-freeze. They get
+the full multi-node resilience: if one node is busy, `execute()` retries
+against the others.
+
+### Cost of the default
+
+Single-node = if the chosen node is busy or unhealthy at submit time,
+the ceremony's submission can fail with no fanout. We mitigate by
+biasing the picker toward healthy / recently-active nodes (see
+`shared/node-selection.js#orderByHealth` and `MirrorNodeClient`),
+but it's a real downside vs the multi-node ideal.
+
+If/when wallets stop re-freezing, we'll revisit the default — tracked
+in [`docs/ROADMAP.md`](./docs/ROADMAP.md).
+
+---
+
 ## 📚 Documentation
 
 ### Core Concepts
