@@ -214,24 +214,52 @@ function JoinPageContent() {
                 title="Paste from clipboard"
                 aria-label="Paste from clipboard"
               >
-                <span className="treasury-label">Paste</span>
+                <span className="treasury-label inline-flex items-center gap-1.5">
+                  <Icon name="content_paste" size={16} />
+                  Paste
+                </span>
                 <span className="console-label">[paste]</span>
               </button>
               <button
                 type="button"
                 onClick={() => setShowQRScanner(true)}
-                className="px-4 py-4 rounded-md text-sm text-foreground-muted hover:text-foreground hover:bg-surface-recessed border border-border transition-colors"
+                className="touch-primary px-4 py-4 rounded-md text-sm text-foreground-muted hover:text-foreground hover:bg-surface-recessed border border-border transition-colors"
                 title="Scan QR code"
                 aria-label="Scan QR code"
               >
-                <span className="treasury-label">Scan QR</span>
+                <span className="treasury-label inline-flex items-center gap-1.5">
+                  <Icon name="qr_code_scanner" size={16} />
+                  Scan QR
+                </span>
                 <span className="console-label">[scan]</span>
               </button>
             </div>
+
+            {/* Hint + primer bundled. Confident user reads the line and
+                pastes; confused user expands the question for the full
+                explanation. Replaces the previous bottom-of-page details
+                element so the primer lives next to the action it
+                explains, not after it. Console hides the prose entirely;
+                the field's placeholder + label carry the meaning. */}
             <p className="console-hide mt-3 text-sm text-foreground-subtle">
               Paste the connection string from your coordinator, or
               scan its QR code.
             </p>
+            <details className="console-hide mt-2 text-sm text-foreground-subtle">
+              <summary className="cursor-pointer hover:text-foreground transition-colors">
+                What&apos;s a connection string?
+              </summary>
+              <p className="mt-2 leading-relaxed">
+                A short token starting with{' '}
+                <code className="bg-surface-recessed px-1 rounded font-mono">hmsc:</code>{' '}
+                that bundles the coordinator&apos;s server URL, the session
+                ID, and (optionally) the PIN. Your coordinator generates
+                it when they create the session and shares it via Slack,
+                email, or a QR code. Paste it above to auto-fill the
+                session details.
+              </p>
+            </details>
+
             {parseError && (
               <p role="alert" className="mt-3 text-sm text-destructive">{parseError}</p>
             )}
@@ -244,16 +272,22 @@ function JoinPageContent() {
               itself preceded by a smaller, less prominent header. */}
           {!showManualForm && (
             <div className="mt-12 flex items-center gap-4 text-sm text-foreground-muted">
-              <hr className="flex-1 border-t border-border" />
+              {/* Rules hidden in console — horizontal-rule sandwich is
+                  treasury-flavoured composition; console wants a flat
+                  left-aligned `--manual` flag without decoration. */}
+              <hr className="console-hide flex-1 border-t border-border" />
               <button
                 type="button"
                 onClick={() => setShowManualForm(true)}
-                className="text-foreground-muted hover:text-foreground transition-colors"
+                className="text-foreground hover:text-accent hover:underline underline-offset-4 transition-colors font-medium"
               >
-                <span className="treasury-label">or enter session details manually</span>
+                <span className="treasury-label">
+                  or enter session details manually
+                  <span className="ml-1 opacity-70">→</span>
+                </span>
                 <span className="console-label">--manual</span>
               </button>
-              <hr className="flex-1 border-t border-border" />
+              <hr className="console-hide flex-1 border-t border-border" />
             </div>
           )}
 
@@ -275,20 +309,22 @@ function JoinPageContent() {
                 </div>
               )}
 
-              {/* Trust signal for the coordinator URL. Tunnel case
-                  uses border-l-4 — that's the case where the user
-                  most needs to read it; whisper-thin 2px would let
-                  it slide past. */}
+              {/* Trust signal for the coordinator URL. All three
+                  variants share border-l-2 — different widths read
+                  as inconsistency, not severity. Severity is carried
+                  by color (warning vs info vs neutral) and the bold
+                  opening sentence; the panel doesn't need geometric
+                  variation on top of that. */}
               {hostTrust && (
                 <div
                   role="status"
                   className={`
-                    rounded-md pl-4 py-3 text-sm
+                    rounded-md pl-4 py-3 text-sm border-l-2
                     ${hostTrust === 'tunnel'
-                      ? 'border-l-4 border-warning bg-warning-soft text-warning-soft-fg'
+                      ? 'border-warning bg-warning-soft text-warning-soft-fg'
                       : hostTrust === 'localhost'
-                      ? 'border-l-2 border-border-strong bg-surface-recessed text-foreground-muted'
-                      : 'border-l-2 border-info bg-info-soft text-info-soft-fg'}
+                      ? 'border-border-strong bg-surface-recessed text-foreground-muted'
+                      : 'border-info bg-info-soft text-info-soft-fg'}
                   `}
                 >
                   {hostTrust === 'tunnel' && (
@@ -351,22 +387,34 @@ function JoinPageContent() {
                 )}
               </div>
 
-              {/* Optional display label. Lighter affordance than the
-                  required fields above — small label, demoted intro
-                  line. Treasury operators usually skip; CLI signers
-                  have always set it via --label. */}
-              <Field
-                id="label" name="label"
-                label="Your name (optional)"
-                placeholder="e.g. alice"
-                value={formData.label}
-                onChange={handleChange}
-              />
-              <p className="console-hide -mt-4 text-xs text-foreground-subtle">
-                Shown next to your row in the participant list. The
-                coordinator still verifies your signature against the
-                eligible-keys list — this is just a friendly label.
-              </p>
+              {/* Optional display label, properly demoted. Tucked
+                  inside <details> so the form's required-field rhythm
+                  reads as three rows, not four. Confident operators
+                  skip past; the curious open it. Console renders the
+                  summary as `--label (optional)` — flag-style. */}
+              <details className="group">
+                <summary className="cursor-pointer text-sm text-foreground-muted hover:text-foreground transition-colors list-none">
+                  <span className="treasury-label">
+                    Add a display name <span className="text-foreground-subtle">(optional)</span>
+                    <span className="ml-1 opacity-60 group-open:rotate-180 inline-block transition-transform">▾</span>
+                  </span>
+                  <span className="console-label">--label (optional)</span>
+                </summary>
+                <div className="mt-4 space-y-2">
+                  <Field
+                    id="label" name="label"
+                    label="Your name"
+                    placeholder="e.g. alice"
+                    value={formData.label}
+                    onChange={handleChange}
+                  />
+                  <p className="console-hide text-xs text-foreground-subtle">
+                    Shown next to your row in the participant list. The
+                    coordinator still verifies your signature against the
+                    eligible-keys list — this is just a friendly label.
+                  </p>
+                </div>
+              </details>
 
               <button
                 type="submit"
@@ -378,38 +426,33 @@ function JoinPageContent() {
                 "
               >
                 Connect
+                {/* Treasury gets a quiet → mirroring the keyboard-affordance
+                    metaphor; console gets $⏎ via the .cmd class instead. */}
+                <span className="treasury-label ml-2 opacity-70">→</span>
               </button>
 
               {/* Action preview — what comes next, in three concrete
-                  steps. Replaces the previous footnote-flavoured
-                  copy with structured information that helps the
-                  user form an expectation of the flow. */}
-              <ol className="console-checklist mt-2 space-y-1.5 text-xs text-foreground-subtle list-decimal list-inside marker:text-foreground-muted">
-                <li>Connect a Hedera wallet (HashPack, Blade, or Kabila)</li>
-                <li>Review the transaction details in the dApp and your wallet</li>
-                <li>Approve to sign — the coordinator collects, the network confirms</li>
+                  steps. Inline numbered series with mono prefixes so
+                  the structure carries the visual weight, not the
+                  default browser <ol> markers. Console mode keeps
+                  the [ ] checklist treatment via .console-checklist. */}
+              <ol className="console-checklist mt-3 space-y-2 text-sm text-foreground-muted list-none">
+                <li className="flex gap-3">
+                  <span className="treasury-label font-mono text-xs text-foreground-subtle pt-0.5 select-none tabular-nums">01</span>
+                  <span>Connect a Hedera wallet (HashPack, Blade, or Kabila)</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="treasury-label font-mono text-xs text-foreground-subtle pt-0.5 select-none tabular-nums">02</span>
+                  <span>Review the transaction details in the dApp and your wallet</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="treasury-label font-mono text-xs text-foreground-subtle pt-0.5 select-none tabular-nums">03</span>
+                  <span>Approve to sign — the coordinator collects, the network confirms</span>
+                </li>
               </ol>
             </section>
           )}
         </form>
-
-        {/* Tertiary helper — collapsed by default, opens to a one-paragraph
-            primer for first-time visitors who don't yet know what a
-            connection string is. */}
-        <details className="mt-12 text-xs text-foreground-subtle">
-          <summary className="cursor-pointer font-medium text-foreground-muted hover:text-foreground">
-            What&apos;s a connection string?
-          </summary>
-          <p className="mt-2 leading-relaxed">
-            A short token starting with{' '}
-            <code className="bg-surface-recessed px-1 rounded font-mono">hmsc:</code>{' '}
-            that bundles the coordinator&apos;s server URL, the session
-            ID, and (optionally) the PIN. Your coordinator generates
-            it when they create the session and shares it via Slack,
-            email, or a QR code. Paste it above to auto-fill the
-            session details.
-          </p>
-        </details>
       </section>
 
       <Footer variant="compact" />

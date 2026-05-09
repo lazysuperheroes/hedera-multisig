@@ -332,6 +332,23 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* Touch-device promotion. On coarse-pointer viewports (phones, most
+   tablets), elements marked .touch-primary get accent-fill priority —
+   reserved for affordances that are dramatically lower-friction on
+   touch than on desktop. Currently used by /join's "Scan QR" button:
+   on a phone, scanning beats pasting (paste = switch app, copy, switch
+   back; scan = point camera). Desktop keeps the ghost treatment. */
+@media (pointer: coarse) {
+  .touch-primary {
+    background-color: var(--accent) !important;
+    color: var(--accent-fg) !important;
+    border-color: var(--accent) !important;
+  }
+  .touch-primary:hover {
+    background-color: var(--accent-hover) !important;
+  }
+}
+
 /* Smooth scroll */
 html {
   scroll-behavior: smooth;
