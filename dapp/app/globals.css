@@ -349,6 +349,22 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* Register-aware primary CTA. Treasury keeps the filled-accent treatment
+   (Stripe-y "primary action"); console flattens to ghost so the two
+   landing CTAs become 50/50 flag-style commands rather than ranked
+   action/secondary. Reasoning: in treasury, most arrivals are joiners
+   from Slack links — Join should be the obvious click. In console, the
+   audience is devs who are equally likely to be coordinators (creating
+   sessions) as participants (joining), so equal-weight CTAs match. */
+[data-register="console"] .hero-cta-primary {
+  background-color: transparent !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--border-strong) !important;
+}
+[data-register="console"] .hero-cta-primary:hover {
+  background-color: var(--surface-recessed) !important;
+}
+
 /* Smooth scroll */
 html {
   scroll-behavior: smooth;

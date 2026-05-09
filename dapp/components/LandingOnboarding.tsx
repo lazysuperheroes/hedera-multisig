@@ -38,15 +38,21 @@ export function LandingOnboarding() {
     !state.dismissed.includes('try-console') &&
     register === 'treasury';
 
+  // Two onboarding callouts share a coherent visual family: same
+  // border-l-2 border-accent, same flat bg-accent-soft tint (no
+  // gradient — the brand explicitly avoids marketing gradients), same
+  // padding rhythm. The Console nudge gets a slightly more prominent
+  // tint because it's a deliberate invitation rather than an
+  // explanation that all visitors see.
   return (
     <>
       {showHowThisWorks && (
-        <div className="animate-slide-up delay-300 mt-10 max-w-2xl border-l-2 border-accent/30 pl-5 py-1 text-sm text-foreground-muted leading-relaxed relative">
+        <div className="mt-10 max-w-2xl border-l-2 border-accent bg-accent-soft/20 rounded-r-md pl-5 pr-10 py-3 text-sm text-foreground-muted leading-relaxed relative">
           <button
             onClick={() => dismissPrompt('how-this-works')}
             aria-label="Dismiss intro"
             className="
-              absolute top-0 right-0 -mt-1 -mr-1 w-7 h-7 inline-flex items-center justify-center
+              absolute top-1 right-1 w-7 h-7 inline-flex items-center justify-center
               text-foreground-subtle hover:text-foreground hover:bg-surface-recessed rounded-md transition-colors
             "
           >
@@ -70,9 +76,8 @@ export function LandingOnboarding() {
         <div
           role="note"
           className="
-            animate-slide-up mt-6 max-w-2xl
-            border-l-2 border-accent
-            bg-gradient-to-r from-accent-soft/60 to-transparent
+            mt-6 max-w-2xl
+            border-l-2 border-accent bg-accent-soft/30
             rounded-r-md pl-5 pr-4 py-3.5 text-sm text-foreground-muted
             flex items-start gap-3
           "
