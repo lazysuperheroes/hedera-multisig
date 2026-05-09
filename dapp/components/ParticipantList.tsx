@@ -1,13 +1,21 @@
 /**
  * ParticipantList Component
  *
- * Displays the list of connected participants with their status and public keys.
- * Shows real-time updates as participants join, become ready, sign, or disconnect.
+ * Flat list of session participants with status, public key, and
+ * eligibility. Replaces the previous bordered-cards-in-a-bordered-card
+ * structure — every emoji-icon (🔗 ✓ ✅ ⚫ 👥 ⚠️) replaced with proper
+ * Icon-component glyphs or color-token presence dots. Each row reads
+ * as a flat hover-tinted entry, not a card.
+ *
+ * Real-time updates as participants join, become ready, sign, or
+ * disconnect. The current user's row carries a small accent-left-
+ * border to identify "this is you" without per-row card chrome.
  */
 
 'use client';
 
 import { CopyButton } from './CopyButton';
+import { Icon } from './Icon';
 import { toRawPublicKeyHex, publicKeysEqual } from '../lib/keyCanonical';
 import type { Participant } from '../hooks/useSigningSession';
 
@@ -30,53 +38,59 @@ function truncateKey(key: string): string {
   const raw = toRawPublicKeyHex(key);
   if (!raw) return '';
   if (raw.length <= 20) return raw;
-  return `${raw.slice(0, 10)}...${raw.slice(-8)}`;
+  return `${raw.slice(0, 10)}…${raw.slice(-8)}`;
 }
 
 /**
- * Get status badge styling
+ * Status presentation. Three pieces:
+ *   - dotColor: the row-leading 6px presence dot (matches the legend)
+ *   - badgeBg / badgeText: the right-side pill
+ *   - label: human-readable status name
+ *
+ * No emoji. Color carries severity; the legend at the bottom maps
+ * dot-color → status name.
  */
-function getStatusBadge(status: Participant['status']): {
-  bg: string;
-  text: string;
+function getStatusPresentation(status: Participant['status']): {
+  dotColor: string;
+  badgeBg: string;
+  badgeText: string;
   label: string;
-  icon: string;
 } {
   switch (status) {
     case 'connected':
       return {
-        bg: 'bg-warning-soft',
-        text: 'text-warning-soft-fg',
+        dotColor: 'bg-warning',
+        badgeBg: 'bg-warning-soft',
+        badgeText: 'text-warning-soft-fg',
         label: 'Connected',
-        icon: '🔗',
       };
     case 'ready':
       return {
-        bg: 'bg-info-soft',
-        text: 'text-info-soft-fg',
+        dotColor: 'bg-info',
+        badgeBg: 'bg-info-soft',
+        badgeText: 'text-info-soft-fg',
         label: 'Ready',
-        icon: '✓',
       };
     case 'signed':
       return {
-        bg: 'bg-success-soft',
-        text: 'text-success-soft-fg',
+        dotColor: 'bg-success',
+        badgeBg: 'bg-success-soft',
+        badgeText: 'text-success-soft-fg',
         label: 'Signed',
-        icon: '✅',
       };
     case 'disconnected':
       return {
-        bg: 'bg-surface-recessed',
-        text: 'text-foreground-subtle',
+        dotColor: 'bg-foreground-subtle',
+        badgeBg: 'bg-surface-recessed',
+        badgeText: 'text-foreground-subtle',
         label: 'Disconnected',
-        icon: '⚫',
       };
     default:
       return {
-        bg: 'bg-surface-recessed',
-        text: 'text-foreground-muted',
+        dotColor: 'bg-foreground-subtle',
+        badgeBg: 'bg-surface-recessed',
+        badgeText: 'text-foreground-muted',
         label: 'Unknown',
-        icon: '?',
       };
   }
 }
@@ -101,31 +115,29 @@ export function ParticipantList({
 
   if (sortedParticipants.length === 0) {
     return (
-      <div className="bg-surface border-2 border-border-strong rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Participants</h3>
-        <div className="text-center py-8 text-foreground-subtle">
-          <div className="text-4xl mb-2">👥</div>
-          <p>Waiting for participants to connect...</p>
-        </div>
-      </div>
+      <section aria-label="Participants">
+        <h3 className="text-xs uppercase tracking-wider font-medium text-foreground-muted mb-3">
+          <span className="treasury-label">Participants</span>
+          <span className="console-label">participants</span>
+        </h3>
+        <p className="text-sm text-foreground-subtle">
+          Waiting for participants to connect…
+        </p>
+      </section>
     );
   }
 
   return (
-    <div className="bg-surface border-2 border-border-strong rounded-lg p-6">
-      {/* Title only — the per-row entries already show how many are
-          connected, and the top-of-page SignatureProgress carries the
-          authoritative session-wide "X / Y connected" counter. Showing
-          a "1 connected" badge here when SignatureProgress legitimately
-          says "2 / 3" (e.g. a participant who signed earlier is still
-          counted server-side) reads as a contradiction even though the
-          two counters are answering different questions. */}
-      <h3 className="text-lg font-semibold text-foreground mb-4">Participants</h3>
+    <section aria-label="Participants">
+      <h3 className="text-xs uppercase tracking-wider font-medium text-foreground-muted mb-3">
+        <span className="treasury-label">Participants</span>
+        <span className="console-label">participants</span>
+      </h3>
 
-      <div className="space-y-3">
+      <ul className="divide-y divide-border">
         {sortedParticipants.map((participant) => {
           const isCurrentUser = participant.id === currentParticipantId;
-          const statusBadge = getStatusBadge(participant.status);
+          const presentation = getStatusPresentation(participant.status);
           // Eligibility check must canonicalize across DER vs raw —
           // CLI-registered eligible keys arrive in DER form; wallet-
           // delivered participant keys arrive raw. A naïve string
@@ -134,93 +146,86 @@ export function ParticipantList({
           const isEligible = participant.publicKey
             ? eligiblePublicKeys.some((k) => publicKeysEqual(k, participant.publicKey))
             : null;
+          const isDisconnected = participant.status === 'disconnected';
 
           return (
-            <div
+            <li
               key={participant.id}
-              className={`p-3 rounded-lg border-2 transition-colors ${
-                isCurrentUser
-                  ? 'border-accent bg-info-soft'
-                  : participant.status === 'disconnected'
-                  ? 'border-border bg-surface-recessed opacity-60'
-                  : 'border-border bg-surface-recessed'
-              }`}
+              className={`
+                flex items-center gap-3 py-3 px-2 -mx-2 rounded-md transition-colors
+                ${isCurrentUser ? 'border-l-2 border-accent pl-3 -ml-3' : ''}
+                ${isDisconnected ? 'opacity-60' : ''}
+              `}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {/* Status Icon */}
-                  <span className="text-lg">{statusBadge.icon}</span>
+              {/* Status presence dot — matches the legend below. */}
+              <span
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${presentation.dotColor}`}
+                aria-hidden="true"
+              />
 
-                  {/* Participant Info — prefer the user-supplied
-                      display label (set on /join's "Your name" field
-                      or via the CLI's --label) over the generic
-                      "Participant" placeholder. The label is a
-                      *display* hint only; the eligibility check
-                      against the public key is what proves identity. */}
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground text-sm">
-                        {isCurrentUser ? 'You' : (participant.label || 'Participant')}
-                      </span>
-                      {isCurrentUser && (
-                        <span className="px-1.5 py-0.5 bg-info-soft text-info-soft-fg text-xs rounded">
-                          (You)
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Public Key */}
-                    {participant.publicKey ? (
-                      <div className="flex items-center gap-1 mt-1">
-                        <code className="text-xs font-mono text-foreground-muted bg-surface-recessed px-1.5 py-0.5 rounded">
-                          {truncateKey(participant.publicKey)}
-                        </code>
-                        <CopyButton
-                          text={participant.publicKey}
-                          label="public key"
-                          size="sm"
-                        />
-                        {isEligible === false && (
-                          <span className="text-xs text-destructive" title="Not in eligible keys list">
-                            ⚠️
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-foreground-subtle italic">
-                        Waiting for public key...
+              {/* Identity column: name + (You) tag + public key chip. */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-foreground text-sm">
+                    {isCurrentUser ? 'You' : (participant.label || 'Participant')}
+                  </span>
+                  {isCurrentUser && participant.label && (
+                    <span className="text-xs text-foreground-subtle">
+                      ({participant.label})
+                    </span>
+                  )}
+                </div>
+                {participant.publicKey ? (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <code className="text-xs font-mono text-foreground-muted">
+                      {truncateKey(participant.publicKey)}
+                    </code>
+                    <CopyButton
+                      text={participant.publicKey}
+                      label="public key"
+                      size="sm"
+                    />
+                    {isEligible === false && (
+                      <span
+                        className="inline-flex items-center text-destructive"
+                        title="Not in eligible keys list"
+                      >
+                        <Icon name="warning" size={14} className="text-destructive" />
                       </span>
                     )}
                   </div>
-                </div>
-
-                {/* Status Badge */}
-                <span
-                  className={`px-2 py-1 rounded text-xs font-medium ${statusBadge.bg} ${statusBadge.text}`}
-                >
-                  {statusBadge.label}
-                </span>
+                ) : (
+                  <span className="text-xs text-foreground-subtle italic">
+                    Waiting for public key…
+                  </span>
+                )}
               </div>
-            </div>
+
+              {/* Status badge — right-aligned pill. */}
+              <span
+                className={`flex-shrink-0 px-2 py-1 rounded text-xs font-medium ${presentation.badgeBg} ${presentation.badgeText}`}
+              >
+                {presentation.label}
+              </span>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
-      {/* Legend */}
-      <div className="mt-4 pt-3 border-t border-border">
-        <div className="flex flex-wrap gap-3 text-xs text-foreground-subtle">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-warning"></span> Connected
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-info"></span> Ready
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-success"></span> Signed
-          </span>
-        </div>
+      {/* Legend — dot-color → status mapping. Matches the row dots
+          exactly so the legend is a real key, not decoration. */}
+      <div className="mt-4 flex flex-wrap gap-4 text-xs text-foreground-subtle">
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-warning" /> Connected
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-info" /> Ready
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-success" /> Signed
+        </span>
       </div>
-    </div>
+    </section>
   );
 }
 

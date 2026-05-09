@@ -1,11 +1,21 @@
 /**
  * SignatureProgress Component
  *
- * Displays signature collection progress towards threshold.
- * Shows participant status and completion indicators.
+ * Flat presentation of signature collection progress. The progress bar
+ * is the centerpiece; supporting stats (connected, ready) sit below as
+ * a quiet <dl>. Replaces the previous bordered-card-of-nested-cards
+ * structure (outer card + status callout card + two stat mini-cards +
+ * a pill list of "Signature 1, Signature 2…") with a single flat
+ * section.
+ *
+ * The "who has signed" detail lives in ParticipantList, not here —
+ * this component answers "how many" and "are we there yet"; the
+ * sibling component answers "who specifically".
  */
 
 'use client';
+
+import { Icon } from './Icon';
 
 export interface SignatureProgressProps {
   signaturesCollected: number;
@@ -35,140 +45,83 @@ export function SignatureProgress({
     : null;
   const progress = signaturesRequired > 0 ? (signaturesCollected / signaturesRequired) * 100 : 0;
   const isComplete = thresholdMet || signaturesCollected >= signaturesRequired;
+  const remaining = Math.max(0, signaturesRequired - signaturesCollected);
 
   return (
-    <div className="bg-surface border-2 border-border rounded-lg p-6">
-      <h3 className="text-lg font-semibold text-foreground mb-4">Signature Collection Progress</h3>
-
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-foreground-muted tabular-nums">
-            {signaturesCollected} / {signaturesRequired} signatures
-          </span>
-          <span className="text-sm font-medium text-foreground-muted tabular-nums">{Math.round(progress)}%</span>
+    <section aria-label="Signature collection progress">
+      {/* Title row — eyebrow + counter inline. The counter ("2 of 3 ·
+          67%") sits where it can be read at a glance without
+          disturbing the heading hierarchy below. */}
+      <div className="flex items-baseline justify-between mb-2">
+        <h3 className="text-xs uppercase tracking-wider font-medium text-foreground-muted">
+          <span className="treasury-label">Signatures</span>
+          <span className="console-label">signatures</span>
+        </h3>
+        <div className="text-xs font-mono tabular-nums text-foreground-muted">
+          <span className="text-foreground font-semibold">{signaturesCollected}</span>
+          {' of '}
+          <span className="text-foreground font-semibold">{signaturesRequired}</span>
+          <span className="text-foreground-subtle"> · {Math.round(progress)}%</span>
         </div>
+      </div>
+
+      {/* Progress bar — the visual centerpiece. Slimmer than before
+          (h-2 instead of h-4) so it reads as a meter, not a card. */}
+      <div
+        className="w-full bg-surface-recessed rounded-full h-2 overflow-hidden"
+        role="progressbar"
+        aria-valuenow={signaturesCollected}
+        aria-valuemin={0}
+        aria-valuemax={signaturesRequired}
+        aria-label={`${signaturesCollected} of ${signaturesRequired} signatures collected`}
+      >
         <div
-          className="w-full bg-surface-recessed rounded-full h-4 overflow-hidden"
-          role="progressbar"
-          aria-valuenow={signaturesCollected}
-          aria-valuemin={0}
-          aria-valuemax={signaturesRequired}
-          aria-label={`${signaturesCollected} of ${signaturesRequired} signatures collected`}
-        >
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              isComplete ? 'bg-success' : 'bg-info'
-            }`}
-            style={{ width: `${Math.min(progress, 100)}%` }}
-          />
-        </div>
+          className={`h-full rounded-full transition-all duration-500 ${
+            isComplete ? 'bg-success' : 'bg-info'
+          }`}
+          style={{ width: `${Math.min(progress, 100)}%` }}
+        />
       </div>
 
-      {/* Threshold Status */}
-      {isComplete ? (
-        <div className="bg-success-soft border-2 border-success rounded p-4 mb-4">
-          <div className="flex items-center space-x-3">
-            <svg className="w-6 h-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <div>
-              <p className="font-semibold text-success-soft-fg">Threshold Met!</p>
-              <p className="text-sm text-success-soft-fg">
-                Collected {signaturesCollected} of {signaturesRequired} required signatures
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-info-soft border-2 border-info rounded p-4 mb-4">
-          <div className="flex items-center space-x-3">
-            <div className="animate-pulse">
-              <svg className="w-6 h-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="font-semibold text-info-soft-fg">Collecting Signatures...</p>
-              <p className="text-sm text-info-soft-fg">
-                Need {signaturesRequired - signaturesCollected} more signature
-                {signaturesRequired - signaturesCollected !== 1 ? 's' : ''}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Participant Stats */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-surface-recessed rounded p-3">
-          <div className="text-xs text-foreground-subtle dark:text-foreground-subtle mb-1">Participants Connected</div>
-          <div className="text-2xl font-bold text-foreground tabular-nums">
-            {participantsConnected}
-            {denom !== null && (
-              <span className="text-base font-medium text-foreground-muted">
-                {' / '}{denom}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="bg-surface-recessed rounded p-3">
-          <div className="text-xs text-foreground-subtle dark:text-foreground-subtle mb-1">Participants Ready</div>
-          <div className="text-2xl font-bold text-foreground tabular-nums">
-            {participantsReady}
-            {denom !== null && (
-              <span className="text-base font-medium text-foreground-muted">
-                {' / '}{denom}
-              </span>
-            )}
-          </div>
-        </div>
+      {/* Status line — flat row with Icon + prose. No nested card
+          chrome; tone carried by Icon color and copy. */}
+      <div className="mt-3 flex items-center gap-2 text-sm">
+        {isComplete ? (
+          <>
+            <Icon name="check_circle" size={18} fill={1} className="text-success flex-shrink-0" />
+            <span className="text-foreground">
+              <span className="font-semibold">Threshold met.</span>
+              <span className="text-foreground-muted"> Collected {signaturesCollected} of {signaturesRequired} required signatures.</span>
+            </span>
+          </>
+        ) : (
+          <>
+            <Icon name="schedule" size={18} className="text-info flex-shrink-0" />
+            <span className="text-foreground-muted">
+              Need {remaining} more signature{remaining === 1 ? '' : 's'}.
+            </span>
+          </>
+        )}
       </div>
 
-      {/* Signature List */}
-      {signaturesCollected > 0 && (
-        <div className="mt-4">
-          <div className="text-xs text-foreground-subtle dark:text-foreground-subtle mb-2">Signatures Collected:</div>
-          <div className="flex flex-wrap gap-2">
-            {Array.from({ length: signaturesCollected }).map((_, index) => (
-              <div
-                key={index}
-                className="flex items-center space-x-1 px-2 py-1 bg-success-soft text-success-soft-fg rounded text-xs"
-              >
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Signature {index + 1}</span>
-              </div>
-            ))}
-            {Array.from({ length: signaturesRequired - signaturesCollected }).map((_, index) => (
-              <div
-                key={`pending-${index}`}
-                className="flex items-center space-x-1 px-2 py-1 bg-surface-recessed text-foreground-subtle rounded text-xs"
-              >
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Pending</span>
-              </div>
-            ))}
-          </div>
+      {/* Participant counters — quiet inline dl. Two rows; no grid of
+          mini-cards. The denominator (expected total) only renders
+          when known. */}
+      <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <div className="flex items-baseline gap-2">
+          <dt className="text-foreground-subtle uppercase tracking-wider">Connected</dt>
+          <dd className="font-mono tabular-nums text-foreground">
+            {participantsConnected}{denom !== null && <span className="text-foreground-subtle">{' / '}{denom}</span>}
+          </dd>
         </div>
-      )}
-    </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-foreground-subtle uppercase tracking-wider">Ready</dt>
+          <dd className="font-mono tabular-nums text-foreground">
+            {participantsReady}{denom !== null && <span className="text-foreground-subtle">{' / '}{denom}</span>}
+          </dd>
+        </div>
+      </dl>
+    </section>
   );
 }
 
