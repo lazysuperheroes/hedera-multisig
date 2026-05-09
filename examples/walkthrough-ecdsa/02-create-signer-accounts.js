@@ -33,6 +33,7 @@ const {
   AccountCreateTransaction, Hbar,
 } = require('@hashgraph/sdk');
 const chalk = require('chalk');
+const MirrorNodeClient = require('../../shared/mirror-node-client');
 
 const KEYS_FILE = path.join(__dirname, 'walkthrough-keys.json');
 const SIGNER_ACCOUNTS_FILE = path.join(__dirname, 'walkthrough-signer-accounts.json');
@@ -80,8 +81,16 @@ async function main() {
     PrivateKey.fromString(process.env.OPERATOR_KEY)
   );
 
+  // Mirror client used to fetch authoritative `evm_address` after
+  // account creation. Locally deriving via `pubkey.toEvmAddress()`
+  // happens to match for "we just created with setKey(ecdsaPubkey)"
+  // but the canonical answer for an existing account is what the
+  // mirror reports — that handles aliased accounts, key rotations,
+  // and any future Hedera mechanics we don't yet anticipate.
+  const mirror = new MirrorNodeClient(network);
+
   const accounts = {};
-  for (const [name, { publicKey, evmAddress }] of signers) {
+  for (const [name, { publicKey }] of signers) {
     const pub = PublicKey.fromString(publicKey);
     console.log(chalk.gray(`Creating account for ${name} (ECDSA pub: ${publicKey.slice(0, 28)}…)...`));
     const tx = new AccountCreateTransaction()
@@ -91,9 +100,41 @@ async function main() {
     const submit = await tx.execute(client);
     const receipt = await submit.getReceipt(client);
     const accountId = receipt.accountId.toString();
+
+    // Fetch the mirror's `evm_address` for this freshly-created account.
+    // The MirrorNodeClient's `_fetch` retries with backoff so brief
+    // mirror-indexing lag is absorbed transparently. If the mirror is
+    // genuinely unreachable, the helper falls back to long-zero — which
+    // is wrong for ECDSA accounts, so we surface a warning rather than
+    // silently writing the bad value.
+    let evmAddress = null;
+    try {
+      evmAddress = await mirror.accountToEvmAddress(accountId);
+      // Long-zero detection: if the mirror lookup actually fell back,
+      // the address ends with the account number packed into the last
+      // 9-12 hex chars and the leading bytes are zero. ECDSA accounts
+      // never produce that pattern.
+      if (/^0x0{20,}/.test(evmAddress)) {
+        console.log(chalk.yellow(
+          `  ⚠  Mirror lookup for ${name} fell back to long-zero (${evmAddress}).`
+        ));
+        console.log(chalk.yellow(
+          `     This is wrong for an ECDSA account — mirror is likely indexing.`
+        ));
+        console.log(chalk.yellow(
+          `     Re-run \`node 02-create-signer-accounts.js\` (it's idempotent — won't double-create) once mirror has caught up.`
+        ));
+        evmAddress = null;
+      }
+    } catch (err) {
+      console.log(chalk.yellow(
+        `  ⚠  Mirror EVM-address lookup failed for ${name}: ${err.message}`
+      ));
+    }
+
     accounts[name] = { accountId, publicKey, evmAddress };
-    console.log(chalk.green(`  ✅ ${name.padEnd(8)} ${accountId}`),
-      chalk.gray(`(EVM ${evmAddress})`));
+    const evmLabel = evmAddress ? chalk.gray(`(EVM ${evmAddress})`) : chalk.yellow('(EVM not yet indexed)');
+    console.log(chalk.green(`  ✅ ${name.padEnd(8)} ${accountId}`), evmLabel);
   }
 
   const out = {
@@ -110,12 +151,17 @@ async function main() {
   for (const [name, { accountId, evmAddress }] of Object.entries(accounts)) {
     console.log(`   ${name.padEnd(8)} ${accountId}`);
     console.log(`             https://hashscan.io/${network}/account/${accountId}`);
-    console.log(chalk.gray(`             EVM address: ${evmAddress}`));
+    if (evmAddress) {
+      console.log(chalk.gray(`             EVM address: ${evmAddress}  (from mirror /api/v1/accounts/${accountId}.evm_address)`));
+    } else {
+      console.log(chalk.yellow(`             EVM address: pending mirror indexing — re-run this script to refresh`));
+    }
   }
   console.log(chalk.gray(`\n   State saved: ${SIGNER_ACCOUNTS_FILE}`));
   console.log(chalk.gray('   You can now import alice/bob/carol private keys into HashPack —'));
   console.log(chalk.gray('   the wallet will detect the secp256k1 key type and find the matching'));
-  console.log(chalk.gray('   accounts via mirror-node lookup.'));
+  console.log(chalk.gray('   accounts via mirror-node lookup (same flow we just used to fetch'));
+  console.log(chalk.gray('   the canonical evm_address values above).'));
 
   console.log(chalk.bold.cyan('\nNext: node 03-create-threshold-account.js\n'));
 

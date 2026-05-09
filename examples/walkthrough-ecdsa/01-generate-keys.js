@@ -76,11 +76,15 @@ function main() {
       privateKey: priv.toString(),
       publicKey: pubHex,
       keyType: 'ECDSA_SECP256K1',
-      // EVM address derived from the secp256k1 public key — the same address
-      // MetaMask would show for this key. Not used by our ceremony (Hedera
-      // identifies signers by their full public key in a KeyList), but useful
-      // for cross-referencing if you ever import this key into an EVM tool.
-      evmAddress: '0x' + priv.publicKey.toEvmAddress(),
+      // No EVM address recorded here. The canonical EVM address for an
+      // account is what the mirror node returns in `evm_address` on
+      // `/api/v1/accounts/{id}` — at this point we don't have an account
+      // yet, only a key. Step 2 creates the account and uses
+      // `MirrorNodeClient.accountToEvmAddress()` to record the mirror's
+      // authoritative value. Locally deriving via `pubkey.toEvmAddress()`
+      // would *happen* to match for accounts whose key was set at
+      // creation, but reinforces a wrong pattern (key rotations and HIP-32
+      // alias accounts both invalidate it). Always go to mirror.
     };
 
     const encryptedPath = path.join(OUT_DIR, `walkthrough-keys.${name}.encrypted`);
@@ -92,9 +96,7 @@ function main() {
     );
 
     console.log(chalk.green('✓'), chalk.bold(name.padEnd(8)),
-      pubHex.slice(0, 28) + '…',
-      chalk.gray('(EVM:'), chalk.gray(keys[name].evmAddress + ')')
-    );
+      pubHex.slice(0, 28) + '…');
   }
 
   const combinedPath = path.join(OUT_DIR, 'walkthrough-keys.json');

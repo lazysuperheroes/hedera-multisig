@@ -110,7 +110,12 @@ async function main() {
     signers: signers.map(([name, k]) => ({
       name,
       publicKey: k.publicKey,
-      evmAddress: k.evmAddress || null,
+      // EVM address is the mirror-confirmed value from step 2 (read
+      // from `walkthrough-signer-accounts.json`, originally fetched
+      // via `MirrorNodeClient.accountToEvmAddress()`). Don't derive
+      // locally from the pubkey — that path silently breaks for
+      // aliased / rotated accounts.
+      evmAddress: signerAccounts?.[name]?.evmAddress || null,
       accountId: signerAccounts?.[name]?.accountId || null,
     })),
     createdAt: new Date().toISOString(),

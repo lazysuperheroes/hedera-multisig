@@ -113,9 +113,15 @@ When alice imports her key into HashPack:
   the mirror node for an account whose key matches alice's pubkey,
   finds the one created in step 2, and binds the WalletConnect
   session to that account ID.
-- **HashPack will show alice's EVM address** in the account
-  details panel (`0x08954…`) — this is just the keccak-derived
-  address from her secp256k1 pubkey, not a separate identity.
+- **HashPack will show alice's EVM address** in the account details
+  panel — this is the mirror's `evm_address` field on her account,
+  not a long-zero translation of `0.0.X`. There's no client-side
+  derivation: the EVM address you see in HashPack came from the same
+  `/api/v1/accounts/{id}` lookup our step 2 used to record it
+  authoritatively. (For a long-zero account — i.e. an Ed25519-keyed
+  one — that field would be `null` and the long-zero form would be
+  the canonical answer instead. ECDSA accounts are the case where
+  this distinction matters.)
 
 Bob's CLI participant flow is identical to walkthrough-dapp:
 
