@@ -25,7 +25,6 @@ import { useSigningSession } from '../../../hooks/useSigningSession';
 import { useWallet } from '../../../hooks/useWallet';
 import { useToast } from '../../../hooks/useToast';
 import { useSessionRecovery } from '../../../hooks/useSessionRecovery';
-import { WalletStatus } from '../../../components/WalletStatus';
 import { TransactionReview } from '../../../components/TransactionReview';
 import { ScheduledReview } from '../../../components/ScheduledReview';
 import { SignatureProgress } from '../../../components/SignatureProgress';
@@ -37,6 +36,7 @@ import { ShareSessionDialog } from '../../../components/ShareSessionDialog';
 import { ParticipantList } from '../../../components/ParticipantList';
 import { StepProgress } from '../../../components/StepProgress';
 import { ConnectingBanner } from '../../../components/ConnectingBanner';
+import { Icon } from '../../../components/Icon';
 import { DEFAULT_NETWORK } from '../../../lib/walletconnect-config';
 
 interface SessionInfo {
@@ -718,35 +718,42 @@ export default function SessionPage({ params }: PageProps) {
     toast.info('Ready for Next Transaction', 'Waiting for coordinator to send another transaction');
   };
 
-  // Render error state
+  // Render error state — flat, asymmetric, no card. Matches the
+  // /join post-redesign convention: icon left, content right, single
+  // cluster of CTAs at the bottom.
   if (currentStep === 'error') {
     const isSessionMismatch = errorMessage?.includes('previously connected') || errorMessage?.includes('mismatch');
 
     return (
-      <main className="min-h-screen flex items-center justify-center p-8 bg-surface-recessed">
-        <div className="max-w-lg w-full bg-surface border-2 border-destructive rounded-lg p-8">
-          <div className="text-center mb-6">
-            <div className="text-6xl mb-4">❌</div>
-            <h1 className="text-2xl font-bold text-destructive-soft-fg mb-2">Error</h1>
-            <p className="text-destructive">{errorMessage}</p>
+      <main className="min-h-screen bg-background">
+        <section className="max-w-2xl mx-auto px-6 py-16 sm:py-24">
+          <div className="flex items-start gap-4">
+            <Icon name="error_outline" size={32} className="text-destructive flex-shrink-0 mt-1" />
+            <div className="flex-1">
+              <h1 className="page-hero font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-[1.05]">
+                Something went wrong
+              </h1>
+              <p className="mt-3 text-foreground-muted leading-relaxed">{errorMessage}</p>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                {isSessionMismatch && (
+                  <button
+                    onClick={handleClearAndRetry}
+                    className="cmd inline-flex items-center justify-center px-6 py-3 rounded-md text-base font-semibold bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
+                  >
+                    Clear cache & retry
+                    <span className="treasury-label ml-2 opacity-70">→</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => router.push('/join')}
+                  className="inline-flex items-center justify-center px-6 py-3 rounded-md text-base font-semibold text-foreground border border-border-strong hover:bg-surface-recessed transition-colors"
+                >
+                  Back to join
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="space-y-3">
-            {isSessionMismatch && (
-              <button
-                onClick={handleClearAndRetry}
-                className="w-full px-4 py-3 bg-success text-white rounded-lg hover:bg-success"
-              >
-                Clear Cache & Join This Session
-              </button>
-            )}
-            <button
-              onClick={() => router.push('/join')}
-              className="w-full px-4 py-3 bg-accent text-white rounded-lg hover:bg-accent-hover"
-            >
-              Back to Join Session
-            </button>
-          </div>
-        </div>
+        </section>
       </main>
     );
   }
@@ -766,56 +773,44 @@ export default function SessionPage({ params }: PageProps) {
   if (currentStep === 'loading') {
     if (wallet.isConnected) {
       return (
-        <main className="min-h-screen p-8 bg-surface-recessed" aria-busy="true" aria-label="Connecting to session">
-          <div className="max-w-4xl mx-auto space-y-6">
+        <main className="min-h-screen bg-background" aria-busy="true" aria-label="Connecting to session">
+          <section className="max-w-3xl mx-auto px-6 py-8 sm:py-12">
             <ConnectingBanner accountId={wallet.accountId} />
-          </div>
+          </section>
         </main>
       );
     }
     return (
-      <main className="min-h-screen p-8 bg-surface-recessed" aria-busy="true" aria-label="Loading session">
-        <div className="max-w-4xl mx-auto space-y-6">
-          {/* Skeleton: session header card */}
-          <div className="bg-surface border-2 border-border rounded-lg p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="skeleton h-6 w-56 rounded"></div>
-                <div className="skeleton h-4 w-36 rounded"></div>
-              </div>
-              <div className="skeleton h-9 w-24 rounded-lg"></div>
-            </div>
-            {/* Skeleton: step indicator */}
-            <div className="mt-6 flex items-center gap-1">
-              {[1,2,3,4,5].map((i) => (
-                <div key={i} className="flex items-center flex-1">
-                  <div className="flex flex-col items-center min-w-[56px]">
-                    <div className="skeleton w-10 h-10 rounded-full"></div>
-                    <div className="skeleton h-3 w-12 mt-1.5 rounded"></div>
-                  </div>
-                  {i < 5 && <div className="skeleton flex-1 h-1.5 rounded-full mx-1"></div>}
-                </div>
-              ))}
-            </div>
+      <main className="min-h-screen bg-background" aria-busy="true" aria-label="Loading session">
+        <section className="max-w-3xl mx-auto px-6 py-8 sm:py-12 space-y-8">
+          {/* Flat skeleton — eyebrow, headline, status row, body bones.
+              Matches the new flat structure (no card chrome) so the
+              loading state previews the actual page shape. */}
+          <div className="space-y-3">
+            <div className="skeleton h-3 w-32 rounded"></div>
+            <div className="skeleton h-10 w-72 rounded"></div>
           </div>
-          {/* Skeleton: content area */}
-          <div className="bg-surface border-2 border-border rounded-lg p-6 space-y-4">
-            <div className="skeleton h-5 w-40 rounded"></div>
-            <div className="skeleton h-4 w-full rounded"></div>
+          <div className="skeleton h-10 w-full rounded"></div>
+          <div className="space-y-2">
+            <div className="skeleton h-4 w-2/3 rounded"></div>
+            <div className="skeleton h-4 w-1/2 rounded"></div>
             <div className="skeleton h-4 w-3/4 rounded"></div>
-            <div className="skeleton h-12 w-full rounded-lg mt-4"></div>
           </div>
-        </div>
+        </section>
       </main>
     );
   }
 
+  const abbreviatedSessionId = sessionId.length > 16
+    ? `${sessionId.slice(0, 8)}…${sessionId.slice(-6)}`
+    : sessionId;
+  const isInActiveSession = ['session-connect', 'ready', 'waiting', 'reviewing', 'signing', 'signed', 'completed'].includes(currentStep);
+  const showShareButton = sessionInfo && (currentStep === 'waiting' || currentStep === 'reviewing' || currentStep === 'ready');
+
   return (
-    <main className="min-h-screen p-8 bg-surface-recessed">
-      {/* Toast Notifications */}
+    <main className="min-h-screen bg-background">
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
 
-      {/* Share Session Dialog */}
       {sessionInfo && (
         <ShareSessionDialog
           open={showShareDialog}
@@ -826,22 +821,51 @@ export default function SessionPage({ params }: PageProps) {
         />
       )}
 
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-surface border-2 border-border rounded-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Multi-Signature Session</h1>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm text-foreground-muted">Session ID:</span>
-                <code className="text-sm font-mono bg-surface-recessed px-2 py-0.5 rounded text-foreground">
-                  {sessionId.length > 16 ? `${sessionId.slice(0, 8)}...${sessionId.slice(-6)}` : sessionId}
-                </code>
-                <CopyButton text={sessionId} label="Session ID" size="sm" />
-              </div>
-            </div>
+      <section className="max-w-3xl mx-auto px-6 py-8 sm:py-12">
+
+        {/* Header — flat, asymmetric. Eyebrow + H1 + treasury sub-line.
+            No card chrome; the typography carries the hierarchy. */}
+        <header className="mb-8">
+          <div className="flex items-center gap-2 mb-3 text-xs">
+            <span className="font-medium uppercase tracking-wider text-foreground-muted">
+              <span className="treasury-label">Session</span>
+              <span className="console-label">session_id</span>
+            </span>
+            <code className="font-mono text-foreground-subtle">{abbreviatedSessionId}</code>
+            <CopyButton text={sessionId} label="Session ID" size="sm" />
+          </div>
+          <h1 className="page-hero font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-[1.05]">
+            Signing session
+          </h1>
+          <p className="console-hide mt-3 text-foreground-muted leading-relaxed max-w-md">
+            Review the transaction the coordinator sends. Approve in your
+            wallet to add your signature.
+          </p>
+        </header>
+
+        {/* Slim StepProgress + countdown row. Lifts the wizard state
+            out of the header card (which doesn't exist anymore) and
+            puts it just above the active-phase block. Share button
+            sits inline rather than competing with H1 for attention. */}
+        {isInActiveSession && (
+          <div className="mb-10 flex items-center justify-between gap-4 flex-wrap">
+            <StepProgress
+              steps={[
+                { key: 'wallet', label: 'Connect' },
+                { key: 'join', label: 'Join' },
+                { key: 'waiting', label: 'Waiting' },
+                { key: 'sign', label: 'Sign' },
+                { key: 'complete', label: 'Done' },
+              ]}
+              currentIndex={
+                currentStep === 'wallet-connect' ? 0 :
+                currentStep === 'session-connect' || currentStep === 'ready' ? 1 :
+                currentStep === 'waiting' ? 2 :
+                currentStep === 'reviewing' || currentStep === 'signing' ? 3 :
+                currentStep === 'signed' || currentStep === 'completed' ? 4 : 0
+              }
+            />
             <div className="flex items-center gap-3">
-              {/* Session countdown timer */}
               {signingSession.state.sessionInfo?.expiresAt && (
                 <SessionCountdown
                   expiresAt={signingSession.state.sessionInfo.expiresAt}
@@ -852,188 +876,217 @@ export default function SessionPage({ params }: PageProps) {
                   }}
                 />
               )}
-              {/* Share button - only show when session is connected */}
-              {sessionInfo && (currentStep === 'waiting' || currentStep === 'reviewing' || currentStep === 'ready') && (
+              {showShareButton && (
                 <button
                   onClick={() => setShowShareDialog(true)}
-                  className="px-4 py-2 text-sm bg-info-soft text-info-soft-fg rounded hover:bg-info-soft dark:hover:bg-accent-hover flex items-center gap-2"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-surface-recessed transition-colors"
                   title="Share session with other participants"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                  </svg>
+                  <Icon name="share" size={14} />
                   Share
                 </button>
               )}
-              <button
-                onClick={handleDisconnect}
-                className="px-4 py-2 text-sm bg-surface-recessed text-foreground-muted rounded hover:bg-border-strong dark:hover:bg-foreground-subtle"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
-
-          {/* Step Indicator */}
-          <div className="mt-6">
-            <StepProgress
-              steps={[
-                { key: 'wallet', label: 'Wallet' },
-                { key: 'join', label: 'Join' },
-                { key: 'waiting', label: 'Waiting' },
-                { key: 'sign', label: 'Sign' },
-                { key: 'complete', label: 'Complete' },
-              ]}
-              currentIndex={
-                currentStep === 'wallet-connect' ? 0 :
-                currentStep === 'session-connect' || currentStep === 'ready' ? 1 :
-                currentStep === 'waiting' ? 2 :
-                currentStep === 'reviewing' || currentStep === 'signing' ? 3 :
-                currentStep === 'signed' || currentStep === 'completed' ? 4 : 0
-              }
-            />
-          </div>
-        </div>
-
-        {/* Error Display */}
-        {errorMessage && (
-          <div className="bg-destructive-soft border-2 border-destructive rounded-lg p-4">
-            <div className="flex items-start space-x-3">
-              <svg className="w-6 h-6 text-destructive flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <div>
-                <h2 className="font-semibold text-destructive-soft-fg">Error</h2>
-                <p className="text-sm text-destructive">{errorMessage}</p>
-              </div>
             </div>
           </div>
         )}
 
-        {/* Step 1: Connect Wallet
-            Three sub-states, in priority order:
-              (a) wallet hook still initializing (`!isInitialized`) →
-                  show a quick "checking" spinner so the page doesn't
-                  appear hung between mount and the wallet's first
-                  hydration tick. We don't yet KNOW if the user has a
-                  paired wallet, so showing either the "Connect Wallet"
-                  prompt or the ConnectingBanner is misleading.
-              (b) initialized, wallet connected (Path A — paired via
-                  NavBar) → ConnectingBanner with rotating messages.
-              (c) initialized, wallet not connected (Path B / cold load)
-                  → "Connect Wallet" prompt with the explainer details. */}
-        {currentStep === 'wallet-connect' && !wallet.isInitialized && (
-          <div
-            className="bg-info-soft border-2 border-info/40 rounded-lg p-6"
-            role="status"
-            aria-live="polite"
-            aria-busy="true"
-          >
-            <div className="flex items-center gap-4">
-              <div
-                className="w-8 h-8 border-2 border-info/30 border-t-info rounded-full animate-spin shrink-0"
-                aria-hidden="true"
-              />
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-info-soft-fg">
-                  Standby — checking session…
-                </h3>
-                <p className="text-xs text-info-soft-fg/80 mt-0.5">
-                  Looking for a paired wallet. This is usually instant.
-                </p>
-              </div>
+        {/* Inline error banner — left-border treatment matches the trust
+            panels on /join. No bordered card; severity carried by color
+            and the bold opening sentence. */}
+        {errorMessage && (
+          <div role="alert" className="mb-8 flex items-start gap-3 border-l-2 border-destructive bg-destructive-soft pl-4 py-3 text-sm rounded-r-md">
+            <Icon name="error_outline" size={20} className="text-destructive flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-destructive-soft-fg">Error</p>
+              <p className="text-destructive-soft-fg/90">{errorMessage}</p>
             </div>
+          </div>
+        )}
+
+        {/* Connection panel — replaces WalletStatus + Session Status
+            cards with one flat <dl>. Only renders when there's
+            something meaningful to show (wallet initialized + active
+            session, or wallet-connect step's "not connected" state). */}
+        {wallet.isInitialized && (currentStep !== 'wallet-connect' || !wallet.isConnected) && (
+          <ConnectionPanel
+            wallet={wallet}
+            sessionInfoData={signingSession.state.sessionInfo}
+            connected={signingSession.state.connected}
+            participantStatus={signingSession.state.status}
+          />
+        )}
+
+        {/* Wallet-connect sub-states */}
+        {currentStep === 'wallet-connect' && !wallet.isInitialized && (
+          <div className="mt-8">
+            <PhaseStatus
+              icon="hourglass_empty"
+              title="Standby — checking session"
+              body="Looking for a paired wallet. This is usually instant."
+            />
           </div>
         )}
 
         {currentStep === 'wallet-connect' && wallet.isInitialized && wallet.isConnected && (
-          <ConnectingBanner accountId={wallet.accountId} />
+          <div className="mt-8">
+            <ConnectingBanner accountId={wallet.accountId} />
+          </div>
         )}
 
         {currentStep === 'wallet-connect' && wallet.isInitialized && !wallet.isConnected && (
-          <>
-            {/* Phase C17: prime first-time users on what's about to happen */}
-            <details className="mb-4 rounded-lg border border-info/40 bg-info-soft p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-info-soft-fg">
+          <div className="mt-8 space-y-6">
+            <details className="text-sm">
+              <summary className="cursor-pointer font-semibold text-foreground hover:text-accent transition-colors">
                 What&apos;s about to happen?
               </summary>
-              <ol className="mt-3 ml-1 space-y-2 text-sm text-info-soft-fg">
-                <li><strong>1.</strong> Connect your Hedera wallet (HashPack, Blade, or Kabila).</li>
-                <li><strong>2.</strong> Wait for the coordinator to inject a transaction — usually within a few minutes.</li>
-                <li><strong>3.</strong> Review the transaction details. You&apos;ll see exactly what you&apos;re being asked to sign — type, amounts, recipients, contract calls.</li>
-                <li><strong>4.</strong> Approve or reject. If you approve, your wallet asks for confirmation. Your private key never leaves your device.</li>
+              <ol className="console-checklist mt-3 ml-1 space-y-2 text-foreground-muted list-decimal list-inside">
+                <li>Connect your Hedera wallet (HashPack, Blade, or Kabila).</li>
+                <li>Wait for the coordinator to inject a transaction — usually within a few minutes.</li>
+                <li>Review the transaction details. You&apos;ll see exactly what you&apos;re being asked to sign — type, amounts, recipients, contract calls.</li>
+                <li>Approve or reject. If you approve, your wallet asks for confirmation. Your private key never leaves your device.</li>
               </ol>
             </details>
-            <WalletStatus
-              connected={wallet.isConnected}
-              connecting={wallet.isConnecting}
-              wallet={wallet.accountId ? { accountId: wallet.accountId, publicKey: wallet.publicKey || '', network: DEFAULT_NETWORK } : null}
-              error={wallet.error}
-              onConnect={handleConnectWallet}
-              onDisconnect={() => wallet.disconnect()}
+            <PhaseStatus
+              icon="account_balance_wallet"
+              title="Connect your Hedera wallet"
+              body="Choose HashPack, Blade, or Kabila. Your private key stays in the wallet — only the signature comes back to the dApp."
+              action={
+                <button
+                  onClick={handleConnectWallet}
+                  disabled={wallet.isConnecting}
+                  className="cmd inline-flex items-center justify-center px-6 py-3 rounded-md text-base font-semibold bg-accent text-accent-fg hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {wallet.isConnecting ? 'Connecting…' : 'Connect Wallet'}
+                  <span className="treasury-label ml-2 opacity-70">→</span>
+                </button>
+              }
             />
-          </>
+            {wallet.error && (
+              <p role="alert" className="text-sm text-destructive">{wallet.error}</p>
+            )}
+          </div>
         )}
 
-        {/* Step 2+: Session Connection (shows wallet status + session status) */}
-        {(currentStep === 'session-connect' || currentStep === 'ready' || currentStep === 'waiting' || currentStep === 'reviewing' || currentStep === 'signing' || currentStep === 'signed' || currentStep === 'completed') && (
-          <>
-            {/* Active feedback during the AUTH gap — WebSocket round-trip
-                through the ngrok tunnel + eligibility check is 1-3s and
-                otherwise looks like a frozen page. Banner unmounts as
-                soon as the server replies AUTH_SUCCESS. */}
-            {currentStep === 'session-connect' && !signingSession.state.connected && (
-              <ConnectingBanner accountId={wallet.accountId} />
-            )}
+        {/* AUTH gap banner — WebSocket round-trip + eligibility check
+            is otherwise dead air. Unmounts on AUTH_SUCCESS. */}
+        {currentStep === 'session-connect' && !signingSession.state.connected && (
+          <div className="mt-8">
+            <ConnectingBanner accountId={wallet.accountId} />
+          </div>
+        )}
 
-            <WalletStatus
-              connected={wallet.isConnected}
-              connecting={wallet.isConnecting}
-              wallet={wallet.accountId ? { accountId: wallet.accountId, publicKey: wallet.publicKey || '', network: DEFAULT_NETWORK } : null}
-              error={wallet.error}
-              onConnect={handleConnectWallet}
-              onDisconnect={() => wallet.disconnect()}
+        {/* Phase-aware body. Single persistent surface that swaps
+            icon/title/body/action by currentStep, replacing three
+            previously-identical centered-card templates (waiting,
+            signing, completed). The reviewing phase delegates to
+            the dedicated ScheduledReview / TransactionReview surfaces. */}
+        {currentStep === 'waiting' && (
+          <div className="mt-8">
+            <PhaseStatus
+              icon="schedule"
+              title="Waiting for transaction"
+              body="The coordinator will inject a transaction shortly. You can leave this tab open — we'll show it the moment it arrives."
             />
+          </div>
+        )}
 
-            {/* Session Status */}
-            <div className="bg-surface border-2 border-border rounded-lg p-6">
-              <h2 className="text-lg font-semibold text-foreground mb-4">Session Status</h2>
-              <dl className="space-y-3">
-                <StatusItem
-                  label="WebSocket Connection"
-                  status={signingSession.state.connected ? 'connected' : 'disconnected'}
-                />
-                <StatusItem
-                  label="Participant Status"
-                  status={signingSession.state.status === 'ready' || signingSession.state.status === 'waiting' ? 'ready' : signingSession.state.status}
-                />
-                {signingSession.state.sessionInfo && (
-                  <>
-                    <StatusItem label="Session Status" status={signingSession.state.sessionInfo.status} />
-                    <StatusItem label="Threshold" status={`${signingSession.state.sessionInfo.threshold} signatures required`} />
-                  </>
-                )}
-              </dl>
-            </div>
+        {currentStep === 'reviewing' && signingSession.state.schedule && (
+          <div className="mt-8">
+            <ScheduledReview
+              scheduleId={signingSession.state.schedule.scheduleId}
+              expirationTime={signingSession.state.schedule.expirationTime}
+              scheduleMemo={signingSession.state.schedule.scheduleMemo}
+              payerAccountId={signingSession.state.schedule.payerAccountId}
+              adminKey={signingSession.state.schedule.adminKey}
+              innerTxDetails={signingSession.state.schedule.innerTxDetails as Record<string, unknown> | null}
+              network={DEFAULT_NETWORK as 'testnet' | 'mainnet'}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              disabled={false}
+            />
+          </div>
+        )}
+        {currentStep === 'reviewing' && !signingSession.state.schedule && signingSession.state.transaction.frozenTransaction && (
+          <div className="mt-8">
+            <TransactionReview
+              frozenTransactionBase64={signingSession.state.transaction.frozenTransaction.base64}
+              metadata={signingSession.state.transaction.metadata || undefined}
+              contractInterface={signingSession.state.transaction.contractInterface}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              disabled={false}
+            />
+          </div>
+        )}
 
-            {/* Signature Progress */}
-            {(currentStep === 'waiting' || currentStep === 'reviewing' || currentStep === 'signing' || currentStep === 'signed' || currentStep === 'completed') && (
-              <SignatureProgress
-                signaturesCollected={signingSession.state.stats.signaturesCollected}
-                signaturesRequired={signingSession.state.stats.signaturesRequired}
-                participantsConnected={signingSession.state.stats.participantsConnected}
-                participantsReady={signingSession.state.stats.participantsReady}
-                participantsExpected={signingSession.state.stats.participantsExpected}
-                thresholdMet={currentStep === 'completed'}
-              />
-            )}
+        {currentStep === 'signing' && (
+          <div className="mt-8">
+            <PhaseStatus
+              icon="edit"
+              title="Approve in your wallet"
+              body="Your wallet popup is asking for the signature. The dApp continues once you approve."
+            />
+          </div>
+        )}
 
-            {/* Participant List */}
+        {currentStep === 'signed' && signedTransactionId && (
+          <div className="mt-8">
+            <PostSigningStatus
+              transactionId={signedTransactionId}
+              transactionDetails={signedTransactionDetails}
+              network={DEFAULT_NETWORK as 'testnet' | 'mainnet'}
+              onClear={handleClearPostSigning}
+            />
+          </div>
+        )}
+
+        {currentStep === 'completed' && (
+          <div className="mt-8">
+            <PhaseStatus
+              icon="check_circle"
+              title="Transaction executed"
+              body="The multi-signature transaction is confirmed on the Hedera network."
+              tone="success"
+              action={
+                <>
+                  <button
+                    onClick={handleClearPostSigning}
+                    className="cmd inline-flex items-center justify-center px-6 py-3 rounded-md text-base font-semibold bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
+                  >
+                    Wait for next transaction
+                    <span className="treasury-label ml-2 opacity-70">→</span>
+                  </button>
+                  <button
+                    onClick={() => router.push('/')}
+                    className="text-sm text-foreground-muted hover:text-foreground transition-colors"
+                  >
+                    Return home
+                  </button>
+                  <button
+                    onClick={() => router.push('/join')}
+                    className="text-sm text-foreground-muted hover:text-foreground transition-colors"
+                  >
+                    Join another session
+                  </button>
+                </>
+              }
+            />
+          </div>
+        )}
+
+        {/* Signature progress + participant list. Sub-components
+            still have their own card chrome internally — flagged
+            for follow-up flatten pass. */}
+        {(currentStep === 'waiting' || currentStep === 'reviewing' || currentStep === 'signing' || currentStep === 'signed' || currentStep === 'completed') && (
+          <div className="mt-10 space-y-6">
+            <SignatureProgress
+              signaturesCollected={signingSession.state.stats.signaturesCollected}
+              signaturesRequired={signingSession.state.stats.signaturesRequired}
+              participantsConnected={signingSession.state.stats.participantsConnected}
+              participantsReady={signingSession.state.stats.participantsReady}
+              participantsExpected={signingSession.state.stats.participantsExpected}
+              thresholdMet={currentStep === 'completed'}
+            />
             {(currentStep === 'waiting' || currentStep === 'reviewing' || currentStep === 'signing' || currentStep === 'signed') && (
               <ParticipantList
                 participants={signingSession.state.participants}
@@ -1041,152 +1094,116 @@ export default function SessionPage({ params }: PageProps) {
                 eligiblePublicKeys={signingSession.state.sessionInfo?.eligiblePublicKeys}
               />
             )}
-          </>
-        )}
-
-        {/* Step 3: Review.
-            Branches by session mode: scheduled sessions get the
-            HIP-423 long-window review (no 120s countdown, on-chain
-            signing); realtime sessions get the canonical frozen-tx
-            review path. The `state.schedule` slot is only populated
-            when the coordinator created via /create's scheduled
-            toggle (Phase 1) or for late joiners on AUTH_SUCCESS. */}
-        {currentStep === 'reviewing' && signingSession.state.schedule && (
-          <ScheduledReview
-            scheduleId={signingSession.state.schedule.scheduleId}
-            expirationTime={signingSession.state.schedule.expirationTime}
-            scheduleMemo={signingSession.state.schedule.scheduleMemo}
-            payerAccountId={signingSession.state.schedule.payerAccountId}
-            adminKey={signingSession.state.schedule.adminKey}
-            innerTxDetails={signingSession.state.schedule.innerTxDetails as Record<string, unknown> | null}
-            network={DEFAULT_NETWORK as 'testnet' | 'mainnet'}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            disabled={false}
-          />
-        )}
-        {currentStep === 'reviewing' && !signingSession.state.schedule && signingSession.state.transaction.frozenTransaction && (
-          <TransactionReview
-            frozenTransactionBase64={signingSession.state.transaction.frozenTransaction.base64}
-            metadata={signingSession.state.transaction.metadata || undefined}
-            contractInterface={signingSession.state.transaction.contractInterface}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            disabled={false}
-          />
-        )}
-
-        {/* Step 3a: Signing in progress */}
-        {currentStep === 'signing' && (
-          <div className="bg-info-soft border-2 border-info rounded-lg p-8 text-center">
-            <div className="animate-pulse mb-4">
-              <svg className="w-16 h-16 text-accent mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                />
-              </svg>
-            </div>
-            <h2 className="text-xl font-bold text-info-soft-fg mb-2">Signing Transaction...</h2>
-            <p className="text-info-soft-fg">Please approve the signature request in your wallet</p>
           </div>
         )}
 
-        {/* Step 3b: Signed - show post-signing status with mirror node polling */}
-        {currentStep === 'signed' && signedTransactionId && (
-          <PostSigningStatus
-            transactionId={signedTransactionId}
-            transactionDetails={signedTransactionDetails}
-            network={DEFAULT_NETWORK as 'testnet' | 'mainnet'}
-            onClear={handleClearPostSigning}
-          />
-        )}
-
-        {/* Step 4: Completed */}
-        {currentStep === 'completed' && (
-          <div className="bg-success-soft border-2 border-success rounded-lg p-8 text-center">
-            <div className="mb-4">
-              <svg className="w-20 h-20 text-success mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold text-success-soft-fg mb-2">Transaction Executed!</h2>
-            <p className="text-success-soft-fg mb-6">
-              The multi-signature transaction has been successfully executed on the Hedera network.
-            </p>
-
-            <div className="space-y-3">
-              {/* Hero: stay connected to this session and wait for the
-                  coordinator's next inject. The WebSocket stays open;
-                  we just reset the local tx-specific state back to
-                  'waiting'. Same handler as PostSigningStatus's
-                  "Ready for Next Transaction" so the two surfaces
-                  agree. */}
-              <button
-                onClick={handleClearPostSigning}
-                className="w-full px-6 py-3 bg-success text-white font-semibold rounded-lg hover:bg-success"
-              >
-                Wait for Next Transaction
-              </button>
-              <button
-                onClick={() => router.push('/')}
-                className="w-full px-6 py-3 bg-surface-recessed text-foreground-muted rounded-lg hover:bg-border-strong dark:hover:bg-foreground-subtle"
-              >
-                Return to Home
-              </button>
-              <button
-                onClick={() => router.push('/join')}
-                className="w-full px-6 py-3 bg-surface-recessed text-foreground-muted rounded-lg hover:bg-border-strong dark:hover:bg-foreground-subtle"
-              >
-                Join Another Session
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Waiting state */}
-        {currentStep === 'waiting' && (
-          <div className="bg-info-soft border-2 border-info/40 rounded-lg p-8 text-center">
-            <div className="animate-pulse mb-4">
-              <svg className="w-16 h-16 text-accent mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <h2 className="text-xl font-bold text-info-soft-fg mb-2">Waiting for Transaction...</h2>
-            <p className="text-info-soft-fg mb-6">The coordinator will send the transaction for review shortly</p>
-
+        {/* Disconnect — quiet ghost link at the bottom rather than a
+            shouting button next to the H1. Only shown when there's an
+            active session to disconnect from. */}
+        {currentStep !== 'wallet-connect' && (
+          <div className="mt-12 pt-6 border-t border-border">
             <button
               onClick={handleDisconnect}
-              className="px-6 py-2 bg-surface-recessed text-foreground-muted rounded-lg hover:bg-border-strong dark:hover:bg-foreground-subtle transition-colors"
+              className="text-sm text-foreground-muted hover:text-destructive transition-colors"
             >
-              Leave Session
+              Disconnect from session
             </button>
           </div>
         )}
-      </div>
+      </section>
     </main>
   );
 }
 
-// Helper Components
+// ---------------------------------------------------------------------------
+// Local sub-components
+// ---------------------------------------------------------------------------
 
-function StatusItem({ label, status }: { label: string; status: string }) {
+/**
+ * PhaseStatus — single persistent state-machine surface that swaps
+ * icon/title/body/action by phase. Replaces three previously-
+ * identical bordered "centered icon + heading + paragraph" cards
+ * (waiting, signing, completed). Flat composition: icon-left,
+ * content-right, action below.
+ */
+function PhaseStatus({ icon, title, body, action, tone = 'info' }: {
+  icon: string;
+  title: string;
+  body: string;
+  action?: React.ReactNode;
+  tone?: 'info' | 'success';
+}) {
+  const iconColor = tone === 'success' ? 'text-success' : 'text-accent';
   return (
-    <div className="flex items-center justify-between py-2 border-b border-border">
-      <dt className="text-sm text-foreground-muted">{label}</dt>
-      <dd className="text-sm font-mono font-semibold text-foreground">{status}</dd>
+    <div className="flex items-start gap-4">
+      <Icon name={icon} size={32} className={`${iconColor} flex-shrink-0 mt-1`} />
+      <div className="flex-1 min-w-0">
+        <h2 className="font-heading text-xl font-bold text-foreground mb-2">
+          {title}
+        </h2>
+        <p className="text-foreground-muted leading-relaxed">{body}</p>
+        {action && (
+          <div className="mt-6 flex flex-wrap items-center gap-4">{action}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ConnectionPanel — flat <dl> showing wallet + coordinator + session
+ * threshold status in three-or-four rows. Replaces the WalletStatus
+ * component AND the Session Status card with one consolidated block,
+ * since all three are connection states (wallet→user, WS→coordinator,
+ * session→threshold).
+ */
+function ConnectionPanel({
+  wallet,
+  sessionInfoData,
+  connected,
+  participantStatus,
+}: {
+  wallet: ReturnType<typeof useWallet>;
+  sessionInfoData: { threshold?: number; status?: string; eligiblePublicKeys?: string[] } | null;
+  connected: boolean;
+  participantStatus: string;
+}) {
+  const walletDisplay = wallet.isConnected
+    ? <><span className="font-semibold text-foreground">{wallet.accountId}</span>{wallet.publicKeyType && <span className="text-foreground-subtle"> · {wallet.publicKeyType}</span>}</>
+    : wallet.isConnecting
+      ? <span className="text-foreground-subtle">Connecting…</span>
+      : <span className="text-foreground-subtle">Not connected</span>;
+
+  return (
+    <dl className="border-t border-border pt-6 space-y-3 text-sm">
+      <Row label="Wallet" value={walletDisplay} />
+      <Row
+        label="Coordinator"
+        value={connected
+          ? <span className="text-success-soft-fg font-medium">Connected</span>
+          : <span className="text-foreground-subtle">Disconnected</span>}
+      />
+      {participantStatus && participantStatus !== 'idle' && (
+        <Row
+          label="Status"
+          value={<span className="text-foreground font-mono text-xs">{participantStatus}</span>}
+        />
+      )}
+      {sessionInfoData?.threshold !== undefined && (
+        <Row
+          label="Threshold"
+          value={<span className="text-foreground">{sessionInfoData.threshold} of {sessionInfoData.eligiblePublicKeys?.length ?? '?'} signatures required</span>}
+        />
+      )}
+    </dl>
+  );
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <dt className="w-32 flex-shrink-0 text-foreground-muted text-xs uppercase tracking-wider">{label}</dt>
+      <dd className="text-foreground font-mono text-sm">{value}</dd>
     </div>
   );
 }

@@ -47,14 +47,21 @@ export function NavBar() {
 
 function NavShell({ showWalletPanel }: { showWalletPanel: boolean }) {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const pathname = usePathname();
   const network = process.env.NEXT_PUBLIC_DEFAULT_NETWORK || 'testnet';
 
-  const navLinkClass =
-    'px-3 py-2 text-sm font-medium text-foreground-muted ' +
-    'hover:text-foreground hover:bg-surface-recessed rounded-md transition-colors';
+  // Active-page indicator. Match exact route for top-level links;
+  // for /session/* there's no nav link, so nothing is active there.
+  const isActive = (href: string) =>
+    pathname === href || pathname?.startsWith(href + '/');
+
+  const navLinkClass = (href: string) =>
+    isActive(href)
+      ? 'px-3 py-2 text-sm font-medium text-foreground bg-surface-recessed rounded-md'
+      : 'px-3 py-2 text-sm font-medium text-foreground-muted hover:text-foreground hover:bg-surface-recessed rounded-md transition-colors';
 
   return (
-    <nav className="sticky top-0 left-0 z-40 bg-background/85 backdrop-blur-sm border-b border-border">
+    <nav className="sticky top-0 left-0 z-40 bg-background border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16 sm:h-[68px] gap-4">
           {/* Brand lock-up */}
@@ -70,10 +77,10 @@ function NavShell({ showWalletPanel }: { showWalletPanel: boolean }) {
 
           {/* Desktop nav */}
           <div className="hidden sm:flex items-center gap-1">
-            <Link href="/join" className={navLinkClass}>Join</Link>
-            <Link href="/create" className={navLinkClass}>Create</Link>
-            <Link href="/history" className={navLinkClass}>History</Link>
-            <Link href="/learn" className={navLinkClass}>Learn</Link>
+            <Link href="/join" className={navLinkClass('/join')} aria-current={isActive('/join') ? 'page' : undefined}>Join</Link>
+            <Link href="/create" className={navLinkClass('/create')} aria-current={isActive('/create') ? 'page' : undefined}>Create</Link>
+            <Link href="/history" className={navLinkClass('/history')} aria-current={isActive('/history') ? 'page' : undefined}>History</Link>
+            <Link href="/learn" className={navLinkClass('/learn')} aria-current={isActive('/learn') ? 'page' : undefined}>Learn</Link>
           </div>
 
           {/* Right: theme + register toggles, wallet panel (when applicable), mobile menu.
@@ -149,17 +156,18 @@ function NetworkBadge({ network }: { network: string }) {
     <span
       className={`
         hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px]
-        font-semibold uppercase tracking-wider border
+        font-semibold uppercase tracking-wider
         ${isMainnet
-          ? 'border-success/40 bg-success-soft text-success-soft-fg'
-          : 'border-warning/40 bg-warning-soft text-warning-soft-fg'}
+          ? 'bg-success-soft text-success-soft-fg'
+          : 'bg-warning-soft text-warning-soft-fg'}
       `}
     >
-      {/* Thin presence-dot: 1px filled circle, no pulse — restores the
-          "live indicator" semantic the badge lost when the dot was
-          dropped (critique #3 minor obs). */}
+      {/* Presence dot — 6px filled circle. Drops the previous 1px hairline
+          (which was effectively invisible) and the /40 border. Color carries
+          the network semantic; soft bg + dot is enough definition without a
+          colored border. */}
       <span
-        className={`w-1 h-1 rounded-full ${isMainnet ? 'bg-success' : 'bg-warning'}`}
+        className={`w-1.5 h-1.5 rounded-full ${isMainnet ? 'bg-success' : 'bg-warning'}`}
         aria-hidden="true"
       />
       {network}
@@ -217,7 +225,11 @@ function WalletPanel() {
   return (
     <>
       <div className="hidden sm:flex items-center gap-2 relative">
-        {/* Compact pill: account ID + balance only. Click to expand details. */}
+        {/* Compact pill: account ID + balance. Click to expand the
+            details panel where Disconnect now lives. Demoting the
+            always-visible Disconnect button reduces nav real-estate
+            and turns disconnection into a deliberate two-step action
+            (open panel → confirm) rather than a one-click footgun. */}
         <button
           onClick={() => setShowDetails(!showDetails)}
           aria-expanded={showDetails}
@@ -246,17 +258,6 @@ function WalletPanel() {
             </>
           )}
           <Caret open={showDetails} />
-        </button>
-
-        <button
-          onClick={handleConnectClick}
-          className="
-            text-xs px-2 py-1 rounded-md text-foreground-subtle
-            hover:text-destructive hover:bg-destructive-soft transition-colors
-          "
-          title="Disconnect"
-        >
-          Disconnect
         </button>
 
         {/* Expandable details panel */}
@@ -304,6 +305,16 @@ function WalletPanel() {
                 </div>
               )}
             </dl>
+            <button
+              onClick={handleConnectClick}
+              className="
+                mt-4 w-full px-3 py-2 rounded-md text-xs font-medium
+                text-destructive border border-destructive/30
+                hover:bg-destructive-soft transition-colors
+              "
+            >
+              Disconnect wallet
+            </button>
           </div>
         )}
       </div>
