@@ -15,6 +15,7 @@
 | **Walk a 2-of-3 HBAR transfer end-to-end (CLI signers)** | [`examples/walkthrough-hbar/`](examples/walkthrough-hbar/) — keys, threshold account, coordinator, CLI participants, mirror verify | 30 min |
 | **Walk the same flow but signing in your browser via HashPack** | [`examples/walkthrough-dapp/`](examples/walkthrough-dapp/) — hosted testnet dApp + WalletConnect wallet | 30 min |
 | **Walk an async multi-sig (no 120s window — sign over hours/days)** | [`examples/walkthrough-scheduled/`](examples/walkthrough-scheduled/) — HIP-423 scheduled transactions, 24h+ expiration, mirror-node verification | 25 min |
+| **Walk a 2-of-3 ceremony with ECDSA (secp256k1) keys** | [`examples/walkthrough-ecdsa/`](examples/walkthrough-ecdsa/) — same shape as the dApp walkthrough, but with EVM-curve keys; validates the stack is genuinely curve-agnostic | 30 min |
 | **Walk a smart-contract multi-sig (deploy → convert → ceremony)** | [`examples/walkthrough-contract/`](examples/walkthrough-contract/) — `Counter.sol`, EOA-then-convert, multi-sig `increment()` + `withdraw()` | 45 min |
 | **Embed in your app** | `npm install @lazysuperheroes/hedera-multisig` ([library docs below](#-quick-start)) | varies |
 | **Automate signing with policies** | Build an agent with the [Agent Signing SDK](docs/AGENT_INTEGRATION.md) (PolicyEngine + composable rules) | 30+ min |

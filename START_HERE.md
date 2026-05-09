@@ -14,6 +14,7 @@
 > - [`examples/walkthrough-token/`](./examples/walkthrough-token/) — three ceremonies in one session: token-association, fungible transfer, NFT transfer. Smoke test for the dApp's non-HBAR transaction-builder paths (~35 min, ~8 ℏ).
 > - [`examples/walkthrough-agent/`](./examples/walkthrough-agent/) — automated co-signer with `AgentSigningClient` + `PolicyEngine`. Three demo scenarios prove policy approves / rejects with clear reasons. Showcase for the agent SDK (~25 min, ~7 ℏ).
 > - [`examples/walkthrough-scheduled/`](./examples/walkthrough-scheduled/) — async multi-sig via HIP-423 scheduled transactions. **No 120-second window** — each signer signs on their own time, network executes when threshold is met. Same dApp, same accounts as walkthrough-dapp, different temporal model (~25 min, ~6 ℏ).
+> - [`examples/walkthrough-ecdsa/`](./examples/walkthrough-ecdsa/) — 2-of-3 ceremony with **secp256k1 ECDSA keys** instead of Ed25519. Same dApp, same hybrid HashPack + CLI signing pattern; validates that the coordinator + protocol + signature verification + executor are genuinely curve-agnostic in a real ceremony (~30 min, ~7 ℏ).
 
 ---
 
