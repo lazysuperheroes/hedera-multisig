@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Footer } from '../../components/Footer';
+import { Icon } from '../../components/Icon';
 
 // Lazy load QR scanner to avoid SSR issues
 const QRScanner = lazy(() => import('../../components/QRScanner'));
@@ -26,8 +27,8 @@ function JoinPageContent() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [showQRScanner, setShowQRScanner] = useState(false);
 
-  // Check for URL parameters on load. Hydrating form state from query
-  // strings is "sync external system → React" — useEffect is the right tool.
+  // Hydrate form state from URL parameters. "External system → React"
+  // is the canonical use of useEffect.
   useEffect(() => {
     const server = searchParams.get('server') || searchParams.get('s');
     const session = searchParams.get('session') || searchParams.get('id') || searchParams.get('i');
@@ -44,7 +45,6 @@ function JoinPageContent() {
     e.preventDefault();
     if (!formData.serverUrl || !formData.sessionId || !formData.pin) return;
 
-    // Phase B2: per-tab handoff via sessionStorage (clears on tab close).
     try {
       sessionStorage.setItem('hedera-multisig-pending-join', JSON.stringify(formData));
     } catch {}
@@ -57,9 +57,8 @@ function JoinPageContent() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  /**
-   * Phase C18: classify the coordinator URL by trust signal.
-   */
+  // Classify the coordinator URL by trust signal — drives the warning
+  // panel under the manual form.
   const hostTrust = (() => {
     const url = formData.serverUrl.trim();
     if (!url) return null;
@@ -134,18 +133,18 @@ function JoinPageContent() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* QR Scanner Modal */}
+      {/* QR Scanner Modal — flat fallback, no card. The scrim itself
+          is the surface; wrapping a spinner in a bordered box adds
+          card-reflex weight that the brand asks against. */}
       {showQRScanner && (
         <Suspense
           fallback={
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center"
+              className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4"
               style={{ background: 'var(--scrim)' }}
             >
-              <div className="bg-surface border border-border p-8 rounded-md">
-                <Spinner large />
-                <p className="mt-4 text-foreground-muted">Loading camera…</p>
-              </div>
+              <Spinner large />
+              <p className="text-foreground-muted">Loading camera…</p>
             </div>
           }
         >
@@ -157,18 +156,38 @@ function JoinPageContent() {
       )}
 
       <section className="max-w-2xl mx-auto px-6 py-12 sm:py-16">
-        {/* Header — H1 only, no redundant subtitle */}
-        <h1 className="page-hero font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-12 leading-[1.1]">
-          Join a signing session
-        </h1>
 
-        <form onSubmit={handleSubmit} className="space-y-12">
+        {/* Header — H1 + a quiet sub-line that earns its place by
+            describing the action sequence about to happen. Treasury
+            only; console renders the H1 as a `$` prompt and the
+            wordy orientation prose dilutes that. */}
+        <header className="mb-10">
+          <h1 className="page-hero font-heading text-4xl sm:text-5xl font-bold tracking-tight text-foreground leading-[1.05]">
+            Join a signing session
+          </h1>
+          <p className="console-hide mt-4 text-base text-foreground-muted leading-relaxed max-w-md">
+            Connect to your coordinator. Review the transaction in your
+            wallet before approving.
+          </p>
+        </header>
 
-          {/* Section 1 — Quick connect. Section labelled by the input
-              label itself; no eyebrow needed. */}
-          <section aria-label="Quick connect">
-            <label htmlFor="connectionString" className="block text-sm font-medium text-foreground mb-2">
-              Connection string
+        <form onSubmit={handleSubmit}>
+
+          {/* CENTERPIECE — connection-string input. The single most
+              common entry path: paste the string, optionally scan,
+              fall through to manual only if neither lands. The
+              auxiliary buttons are equal-weight (no accent fill)
+              because the input itself IS the action; they're just
+              alternative ways to populate it. Accent-fill is
+              reserved exclusively for the Connect submit at the
+              bottom of the manual form. */}
+          <section aria-label="Connect by connection string">
+            <label
+              htmlFor="connectionString"
+              className="block text-xs uppercase tracking-wider font-medium text-foreground-muted mb-3"
+            >
+              <span className="treasury-label">Connection string</span>
+              <span className="console-label">connection_string</span>
             </label>
             <div className="flex gap-2">
               <input
@@ -176,13 +195,13 @@ function JoinPageContent() {
                 id="connectionString"
                 value={connectionString}
                 onChange={handleConnectionStringChange}
-                placeholder="Paste connection string (hmsc:…)"
+                placeholder="hmsc:eyJzZXJ2ZXJVcmwiOiJ3c3M6Ly8…"
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck={false}
                 className="
-                  flex-1 px-4 py-3 rounded-md font-mono text-sm
+                  flex-1 px-5 py-4 rounded-md font-mono text-base
                   bg-surface text-foreground placeholder:text-foreground-subtle
                   border border-border focus:border-accent
                   focus:outline-none focus:ring-2 focus:ring-accent
@@ -191,8 +210,9 @@ function JoinPageContent() {
               <button
                 type="button"
                 onClick={handlePaste}
-                className="px-3 py-3 rounded-md text-sm text-foreground hover:bg-surface-recessed border border-border transition-colors"
+                className="px-4 py-4 rounded-md text-sm text-foreground-muted hover:text-foreground hover:bg-surface-recessed border border-border transition-colors"
                 title="Paste from clipboard"
+                aria-label="Paste from clipboard"
               >
                 <span className="treasury-label">Paste</span>
                 <span className="console-label">[paste]</span>
@@ -200,68 +220,75 @@ function JoinPageContent() {
               <button
                 type="button"
                 onClick={() => setShowQRScanner(true)}
-                className="px-3 py-3 rounded-md text-sm bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
+                className="px-4 py-4 rounded-md text-sm text-foreground-muted hover:text-foreground hover:bg-surface-recessed border border-border transition-colors"
                 title="Scan QR code"
+                aria-label="Scan QR code"
               >
                 <span className="treasury-label">Scan QR</span>
                 <span className="console-label">[scan]</span>
               </button>
             </div>
-            <p className="mt-2 text-sm text-foreground-subtle">
-              Paste the connection string from your coordinator, or scan the QR code.
+            <p className="console-hide mt-3 text-sm text-foreground-subtle">
+              Paste the connection string from your coordinator, or
+              scan its QR code.
             </p>
             {parseError && (
-              <p role="alert" className="mt-2 text-sm text-destructive">{parseError}</p>
+              <p role="alert" className="mt-3 text-sm text-destructive">{parseError}</p>
             )}
           </section>
 
-          {/* Toggle between auto-filled view and manual entry. Console
-              renders this as a CLI-style flag (`--manual`) via the
-              .manual-toggle class — treasury keeps the prose. */}
+          {/* Section break — when the manual form is closed, this
+              acts as a decisive divider into the secondary path.
+              When the form is open (URL params, parsed string,
+              user-clicked), the divider is replaced by the form
+              itself preceded by a smaller, less prominent header. */}
           {!showManualForm && (
-            <button
-              type="button"
-              onClick={() => setShowManualForm(true)}
-              className="manual-toggle text-sm text-accent hover:underline"
-              data-treasury-label="Or enter session details manually →"
-              data-console-label="--manual"
-            >
-              <span className="treasury-label">
-                Or enter session details manually →
-              </span>
-              <span className="console-label">
-                --manual
-              </span>
-            </button>
+            <div className="mt-12 flex items-center gap-4 text-sm text-foreground-muted">
+              <hr className="flex-1 border-t border-border" />
+              <button
+                type="button"
+                onClick={() => setShowManualForm(true)}
+                className="text-foreground-muted hover:text-foreground transition-colors"
+              >
+                <span className="treasury-label">or enter session details manually</span>
+                <span className="console-label">--manual</span>
+              </button>
+              <hr className="flex-1 border-t border-border" />
+            </div>
           )}
 
-          {/* Section 2 — Manual / details */}
+          {/* MANUAL FORM — the secondary path. Stays collapsed until
+              the user opts in (link), pastes a parseable string
+              (auto-opens), or arrives via URL params (auto-opens).
+              No section H2 here; the field labels carry the
+              section's purpose, and adding one would compete with
+              the centerpiece for attention. */}
           {showManualForm && (
-            <section aria-label="Session details" className="space-y-6 pt-2">
-              {/* No section label — the field labels (Server URL / Session ID
-                  / Session PIN) make the section's purpose self-evident.
-                  The auto-fill confirmation badge floats top-right. */}
+            <section aria-label="Session details" className="mt-12 space-y-6">
               {connectionString && (
                 <div className="flex justify-end -mb-2">
                   <span className="text-xs text-success-soft-fg flex items-center gap-1.5">
-                    <CheckIcon />
+                    <Icon name="check_circle" size={14} fill={1} className="text-success" />
                     <span className="treasury-label">Auto-filled from connection string</span>
                     <span className="console-label">connection_string: parsed</span>
                   </span>
                 </div>
               )}
 
-              {/* Trust signal for the coordinator URL */}
+              {/* Trust signal for the coordinator URL. Tunnel case
+                  uses border-l-4 — that's the case where the user
+                  most needs to read it; whisper-thin 2px would let
+                  it slide past. */}
               {hostTrust && (
                 <div
                   role="status"
                   className={`
-                    rounded-md border-l-2 pl-4 py-3 text-sm
+                    rounded-md pl-4 py-3 text-sm
                     ${hostTrust === 'tunnel'
-                      ? 'border-warning bg-warning-soft text-warning-soft-fg'
+                      ? 'border-l-4 border-warning bg-warning-soft text-warning-soft-fg'
                       : hostTrust === 'localhost'
-                      ? 'border-border-strong bg-surface-recessed text-foreground-muted'
-                      : 'border-info bg-info-soft text-info-soft-fg'}
+                      ? 'border-l-2 border-border-strong bg-surface-recessed text-foreground-muted'
+                      : 'border-l-2 border-info bg-info-soft text-info-soft-fg'}
                   `}
                 >
                   {hostTrust === 'tunnel' && (
@@ -324,10 +351,10 @@ function JoinPageContent() {
                 )}
               </div>
 
-              {/* Optional display label so other participants and the
-                  coordinator see who's signing instead of a generic
-                  "Participant" row. CLI signers have always supplied
-                  this via --label; web signers couldn't until now. */}
+              {/* Optional display label. Lighter affordance than the
+                  required fields above — small label, demoted intro
+                  line. Treasury operators usually skip; CLI signers
+                  have always set it via --label. */}
               <Field
                 id="label" name="label"
                 label="Your name (optional)"
@@ -335,10 +362,10 @@ function JoinPageContent() {
                 value={formData.label}
                 onChange={handleChange}
               />
-              <p className="-mt-4 text-xs text-foreground-subtle">
-                Shown next to your row in the participant list. The coordinator
-                still verifies your signature against the eligible-keys list —
-                this is just a friendly label.
+              <p className="console-hide -mt-4 text-xs text-foreground-subtle">
+                Shown next to your row in the participant list. The
+                coordinator still verifies your signature against the
+                eligible-keys list — this is just a friendly label.
               </p>
 
               <button
@@ -350,26 +377,37 @@ function JoinPageContent() {
                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors
                 "
               >
-                Join Session
+                Connect
               </button>
-              <p className="text-xs text-foreground-subtle">
-                You&apos;ll need a Hedera wallet (HashPack, Blade, or Kabila) on the next page. After joining,
-                you&apos;ll review the transaction before signing — nothing executes until you approve.
-              </p>
+
+              {/* Action preview — what comes next, in three concrete
+                  steps. Replaces the previous footnote-flavoured
+                  copy with structured information that helps the
+                  user form an expectation of the flow. */}
+              <ol className="console-checklist mt-2 space-y-1.5 text-xs text-foreground-subtle list-decimal list-inside marker:text-foreground-muted">
+                <li>Connect a Hedera wallet (HashPack, Blade, or Kabila)</li>
+                <li>Review the transaction details in the dApp and your wallet</li>
+                <li>Approve to sign — the coordinator collects, the network confirms</li>
+              </ol>
             </section>
           )}
         </form>
 
-        {/* Connection string format hint — collapsed, minimal */}
+        {/* Tertiary helper — collapsed by default, opens to a one-paragraph
+            primer for first-time visitors who don't yet know what a
+            connection string is. */}
         <details className="mt-12 text-xs text-foreground-subtle">
           <summary className="cursor-pointer font-medium text-foreground-muted hover:text-foreground">
-            About connection strings
+            What&apos;s a connection string?
           </summary>
           <p className="mt-2 leading-relaxed">
-            Connection strings start with{' '}
+            A short token starting with{' '}
             <code className="bg-surface-recessed px-1 rounded font-mono">hmsc:</code>{' '}
-            followed by encoded session data. They contain the server URL, session ID, and optionally
-            the PIN. Your coordinator will provide this when creating a session.
+            that bundles the coordinator&apos;s server URL, the session
+            ID, and (optionally) the PIN. Your coordinator generates
+            it when they create the session and shares it via Slack,
+            email, or a QR code. Paste it above to auto-fill the
+            session details.
           </p>
         </details>
       </section>
@@ -422,14 +460,6 @@ function Field({ id, name, label, placeholder, value, onChange, type = 'text', m
         `}
       />
     </div>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
   );
 }
 
