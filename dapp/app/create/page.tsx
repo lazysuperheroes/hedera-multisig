@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useWallet } from '../../hooks/useWallet';
 import { useToast } from '../../hooks/useToast';
 import { useCoordinatorConnection } from '../../hooks/useCoordinatorConnection';
 import { useTransactionInjection } from '../../hooks/useTransactionInjection';
 import { useFeePayerCoverage } from '../../hooks/useFeePayerCoverage';
 import { useSessionSignableAccounts } from '../../hooks/useSessionSignableAccounts';
+import { useTheme } from '../../contexts/ThemeContext';
 import { ToastContainer } from '../../components/Toast';
+import { CopyButton } from '../../components/CopyButton';
 import { TransactionFields } from '../../components/create/TransactionFields';
 import { ConnectStep } from '../../components/create/ConnectStep';
 import { ShareStep } from '../../components/create/ShareStep';
@@ -31,6 +33,7 @@ import { Footer } from '../../components/Footer';
 import { DEFAULT_NETWORK } from '../../lib/walletconnect-config';
 import { resolveFeePayer } from '../../lib/fee-payer';
 import { fetchAccountBalance, AccountBalance } from '../../lib/mirror-node';
+import { formatRelativeFuture } from '../../lib/timeParser';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { generateConnectionString, parseConnectionString } = require('../../../shared/connection-string');
@@ -80,6 +83,8 @@ export default function CreatePage() {
   const toast = useToast();
   const connection = useCoordinatorConnection();
   const injection = useTransactionInjection(connection.wsRef);
+  const { register } = useTheme();
+  const isConsole = register === 'console';
 
   const [step, setStep] = useState<Step>('connect');
 
@@ -353,8 +358,35 @@ export default function CreatePage() {
           </p>
         </header>
 
+        {/* Connection-string chip — quiet header pill once a session
+            exists. Surfaces the share affordance throughout build-tx
+            (Pre-Session Workflow needs participants to connect BEFORE
+            the coordinator builds the transaction; the share step
+            comes after, which was a real UX gap). Hidden on the
+            connect step (no session yet) and on share (which has
+            its own full sharing UI). */}
+        {step === 'build-tx' && connection.sessionCredentials && shareConnectionString && (
+          <div className="flex items-center gap-3 mb-6 text-xs">
+            <span className="font-medium uppercase tracking-wider text-foreground-subtle flex-shrink-0">
+              <span className="treasury-label">Share</span>
+              <span className="console-label">share</span>
+            </span>
+            <code className="font-mono text-foreground-muted truncate flex-1 min-w-0">
+              {shareConnectionString.length > 48
+                ? `${shareConnectionString.slice(0, 32)}…${shareConnectionString.slice(-12)}`
+                : shareConnectionString}
+            </code>
+            <CopyButton text={shareConnectionString} label="connection string" size="sm" />
+          </div>
+        )}
+
         <div className="space-y-8">
-          <StepProgress steps={createSteps} currentIndex={currentStepIndex} />
+          {/* StepProgress — hide on share. Once the coordinator's at
+              the share step the wizard is over (the breadcrumb
+              showing "01 ✓ · 02 ✓ · 03 Share" is just chrome). */}
+          {step !== 'share' && (
+            <StepProgress steps={createSteps} currentIndex={currentStepIndex} />
+          )}
 
           {/* Step 1 — Connect */}
           {step === 'connect' && (
@@ -453,8 +485,8 @@ export default function CreatePage() {
                     <span className="treasury-label">Expires</span>
                     <span className="console-label">expires_at</span>
                   </dt>
-                  <dd className="text-foreground font-mono text-xs">
-                    {connection.sessionCredentials.expiresAt || '—'}
+                  <dd className="text-foreground">
+                    <ExpiresValue expiresAt={connection.sessionCredentials.expiresAt} />
                   </dd>
                 </dl>
               </div>
@@ -479,11 +511,17 @@ export default function CreatePage() {
                 </div>
               )}
 
-              {/* Transaction builder — KEEP the card here. This is where focus + chrome help.
-                  In console register, the .console-pane class + data-pane-label add a
-                  terminal-window header strip ("~/INJECT.TX") via globals.css. */}
+              {/* Transaction builder. Card chrome was redundant once
+                  the rest of the page flattened — single bordered
+                  surface on a flat page reads as "the special
+                  section" but every section is special on a
+                  coordinator's build-tx page. The console-pane class
+                  is kept so console mode still gets the terminal-
+                  window header strip ("~/INJECT.TX") via globals.css;
+                  treasury sees a flat section with border-t separator
+                  matching Live Session and Session info above. */}
               <div
-                className="console-pane bg-surface border border-border rounded-md p-6"
+                className="console-pane border-t border-border pt-6"
                 data-pane-label="~/inject.tx"
               >
                 <h2 className="text-xs uppercase tracking-wider font-medium text-foreground-muted mb-4">
@@ -523,44 +561,26 @@ export default function CreatePage() {
                     selected={txMode === 'paste'}
                     onClick={() => setTxMode('paste')}
                   >
-                    Paste frozen TX
+                    Paste frozen transaction
                   </TabButton>
                 </div>
 
                 {txMode === 'build' && (
                   <div role="tabpanel" id="build-panel" aria-labelledby="build-tab">
                     <div className="mb-6">
-                      <div className="block text-sm font-medium text-foreground mb-3">
+                      <div
+                        id="tx-type-label"
+                        className="text-sm font-medium text-foreground mb-3"
+                      >
                         Transaction type
                       </div>
-                      <div
-                        role="tablist"
-                        aria-label="Transaction type"
-                        className="flex flex-wrap gap-2"
-                      >
-                        {TX_TYPES.map((t) => {
-                          const isSelected = txType === t.value;
-                          return (
-                            <button
-                              key={t.value}
-                              type="button"
-                              role="tab"
-                              aria-selected={isSelected}
-                              onClick={() => {
-                                setTxType(t.value);
-                                setTxFields({});
-                              }}
-                              className={
-                                isSelected
-                                  ? 'px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-accent-fg transition-colors'
-                                  : 'px-3 py-1.5 rounded-md text-sm font-medium text-foreground-muted border border-border hover:text-foreground hover:bg-surface-recessed transition-colors'
-                              }
-                            >
-                              {t.label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <TxTypeTablist
+                        value={txType}
+                        onChange={(t) => {
+                          setTxType(t);
+                          setTxFields({});
+                        }}
+                      />
                     </div>
 
                     <div className="space-y-5">
@@ -589,30 +609,53 @@ export default function CreatePage() {
                       />
                     </div>
 
-                    {/* Multi-node freeze bookkeeping (Phase K).
-                        Default-collapsed one-line summary; auto-expands
-                        when the size estimate hits amber/red so the
-                        warning is unmissable. The strategy lever and
-                        the size readout live in the same panel — no
-                        more upward causality. */}
-                    <FreezeStrategy
-                      txType={txType}
-                      signerCount={connection.sessionCredentials?.threshold ?? 1}
-                      value={nodeStrategy}
-                      onChange={setNodeStrategy}
-                    />
-
-                    {/* Secondary affordance — HIP-423 scheduled
-                        transactions. Collapsed by default; off by
-                        default. The real-time path is what most users
-                        want, and adding this here next to FreezeStrategy
-                        keeps it close to the other "advanced
-                        bookkeeping" affordances rather than competing
-                        with the primary inject button. */}
-                    <ScheduleOptions
-                      value={scheduleOptions}
-                      onChange={setScheduleOptions}
-                    />
+                    {/* Power-user options: FreezeStrategy + ScheduleOptions.
+                        Both already render as collapsed-by-default
+                        single-line summaries internally, but they
+                        still take vertical real-estate that most
+                        treasury operators don't need. So:
+                          - Treasury → wrap in an "Advanced" details
+                            disclosure (one click to reveal the two
+                            summary rows underneath).
+                          - Console → render inline, always visible
+                            (the dev audience wants the levers up
+                            front; one less click).
+                        FeePayerCallout above stays always-visible in
+                        both modes — it's a status surface (warns
+                        about coverage problems), not an option panel. */}
+                    {isConsole ? (
+                      <div className="mt-5 space-y-4">
+                        <FreezeStrategy
+                          txType={txType}
+                          signerCount={connection.sessionCredentials?.threshold ?? 1}
+                          value={nodeStrategy}
+                          onChange={setNodeStrategy}
+                        />
+                        <ScheduleOptions
+                          value={scheduleOptions}
+                          onChange={setScheduleOptions}
+                        />
+                      </div>
+                    ) : (
+                      <details className="mt-5 group">
+                        <summary className="cursor-pointer inline-flex items-center gap-1.5 text-sm font-medium text-foreground-muted hover:text-foreground transition-colors">
+                          <span>Advanced — node freeze, scheduling</span>
+                          <span className="opacity-60 group-open:rotate-180 inline-block transition-transform" aria-hidden="true">▾</span>
+                        </summary>
+                        <div className="mt-4 space-y-4">
+                          <FreezeStrategy
+                            txType={txType}
+                            signerCount={connection.sessionCredentials?.threshold ?? 1}
+                            value={nodeStrategy}
+                            onChange={setNodeStrategy}
+                          />
+                          <ScheduleOptions
+                            value={scheduleOptions}
+                            onChange={setScheduleOptions}
+                          />
+                        </div>
+                      </details>
+                    )}
 
                     {injection.injectError && (
                       <div role="alert" className="mt-4 border-l-2 border-destructive bg-destructive-soft pl-4 py-3 text-sm text-destructive-soft-fg">
@@ -639,7 +682,7 @@ export default function CreatePage() {
                       )}
                       {getInjectButtonLabel(injection.isInjecting, scheduleOptions.enabled)}
                       {!injection.isInjecting && (
-                        <span className="treasury-label ml-1 opacity-70">→</span>
+                        <span className="treasury-label opacity-70">→</span>
                       )}
                     </button>
                   </div>
@@ -733,7 +776,7 @@ export default function CreatePage() {
                       )}
                       {injection.isInjecting ? 'Injecting…' : 'Inject pre-frozen transaction'}
                       {!injection.isInjecting && (
-                        <span className="treasury-label ml-1 opacity-70">→</span>
+                        <span className="treasury-label opacity-70">→</span>
                       )}
                     </button>
                   </div>
@@ -810,6 +853,90 @@ function SessionStatusIndicator({ status }: { status: string }) {
     <span className="inline-flex items-center gap-1.5">
       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden="true" />
       <span className="font-mono text-xs text-foreground">{status}</span>
+    </span>
+  );
+}
+
+/**
+ * TxTypeTablist — chip-row tablist for transaction type. Five
+ * sentence-case pills with full WAI-ARIA tablist semantics: only the
+ * selected chip is tabIndex={0}, arrow keys cycle between, Home/End
+ * jump to first/last. Matches the keyboard convention used by the
+ * Build/Paste tablist directly above it.
+ */
+function TxTypeTablist({
+  value,
+  onChange,
+}: {
+  value: TransactionType;
+  onChange: (t: TransactionType) => void;
+}) {
+  // Each chip needs a focusable element so arrow-key navigation
+  // can move focus, not just selection. Tracking refs by index.
+  const refs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    let next = idx;
+    if (e.key === 'ArrowRight') next = (idx + 1) % TX_TYPES.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + TX_TYPES.length) % TX_TYPES.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = TX_TYPES.length - 1;
+    else return;
+    e.preventDefault();
+    onChange(TX_TYPES[next].value);
+    refs.current[next]?.focus();
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-labelledby="tx-type-label"
+      className="flex flex-wrap gap-2"
+    >
+      {TX_TYPES.map((t, i) => {
+        const isSelected = value === t.value;
+        return (
+          <button
+            key={t.value}
+            ref={(el) => { refs.current[i] = el; }}
+            type="button"
+            role="tab"
+            aria-selected={isSelected}
+            tabIndex={isSelected ? 0 : -1}
+            onClick={() => onChange(t.value)}
+            onKeyDown={(e) => onKeyDown(e, i)}
+            className={
+              isSelected
+                ? 'px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-accent-fg transition-colors'
+                : 'px-3 py-1.5 rounded-md text-sm font-medium text-foreground-muted border border-border hover:text-foreground hover:bg-surface-recessed transition-colors'
+            }
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * ExpiresValue — renders the session expiry as a relative duration
+ * (e.g. "in ~30m") with the absolute timestamp as a tooltip. Replaces
+ * the previous raw ISO timestamp display ("2026-05-10T14:32:00.000Z"),
+ * which a coordinator had to mentally convert to "is that 5 minutes
+ * or 5 hours from now?" before reading.
+ */
+function ExpiresValue({ expiresAt }: { expiresAt: string | null | undefined }) {
+  if (!expiresAt) return <span className="text-foreground-subtle">—</span>;
+  const ms = new Date(expiresAt).getTime();
+  if (!Number.isFinite(ms)) {
+    return <span className="font-mono text-xs">{expiresAt}</span>;
+  }
+  const isPast = ms < Date.now();
+  const relative = isPast ? 'expired' : formatRelativeFuture(ms);
+  return (
+    <span title={expiresAt} className="font-mono text-xs">
+      {relative}
     </span>
   );
 }
