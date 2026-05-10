@@ -48,16 +48,18 @@ jobs:
         with:
           node-version: '20.x'
           cache: 'npm'
-        # No registry-url here. With OIDC trusted publishing we MUST
-        # not let setup-node write `_authToken=${NODE_AUTH_TOKEN}` into
-        # .npmrc — when NODE_AUTH_TOKEN is unset (as it now must be for
-        # OIDC) that line becomes an empty Bearer header, which npm
-        # rejects with 404 on PUT, bypassing OIDC fallback. The
-        # registry is instead set via `publishConfig.registry` in
-        # package.json, which doesn't touch authentication. Provenance
-        # signing happens upstream of the PUT (different code path
-        # that reads the OIDC token directly), which is why it
-        # succeeded even when the PUT didn't.
+        # We don't set registry-url here. setup-node with registry-url
+        # writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`
+        # to .npmrc, which (with NODE_AUTH_TOKEN unset for OIDC) becomes
+        # an empty Bearer header — registry returns 404 instead of
+        # falling back to OIDC. publishConfig.registry in package.json
+        # tells npm where to publish without touching auth.
+
+      # OIDC trusted publishing needs npm >= 11.5.1; Node 20 ships with
+      # npm 10. Without this upgrade, the publish-time OIDC exchange
+      # fails (ENEEDAUTH — no auth token, no fallback to OIDC mint).
+      - name: Update npm to latest (for OIDC trusted publishing)
+        run: npm install -g npm@latest
 
       - name: Verify signed tag (Phase C2)
         if: startsWith(github.ref, 'refs/tags/')
