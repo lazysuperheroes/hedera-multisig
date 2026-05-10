@@ -86,7 +86,7 @@ function Toast({ toast, onClose }: ToastProps) {
   return (
     <div
       role="alert"
-      className={`${colors[toast.type]} border-l-4 rounded-lg shadow-lg p-4 mb-3 transition-all duration-300 ${
+      className={`${colors[toast.type]} border-l-4 rounded-md shadow-lg p-4 mb-3 transition-[opacity,transform] duration-300 ${
         isExiting ? 'opacity-0 translate-x-full' : 'opacity-100 translate-x-0'
       }`}
     >

@@ -217,9 +217,12 @@ export function PostSigningStatus({
 
   return (
     <div className="space-y-4">
-      {/* Status Header */}
+      {/* Status Header — left-border callout matching the rest of the
+          dApp's post-redesign discipline. Drops the heavy `border-2`
+          card chrome; the soft bg + accent left-border carries the
+          severity. */}
       <div
-        className={`border-2 rounded-lg p-6 ${
+        className={`border-l-2 rounded-r-md pl-4 py-3 ${
           status === 'success'
             ? 'bg-success-soft border-success'
             : status === 'error'
@@ -357,29 +360,31 @@ export function PostSigningStatus({
             href={hashScanUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
               status === 'success'
-                ? 'bg-success text-white hover:bg-success'
+                ? 'bg-success text-success-fg hover:opacity-90'
                 : status === 'error'
-                ? 'bg-destructive text-white hover:bg-destructive'
-                : 'bg-accent text-white hover:bg-accent-hover'
+                ? 'bg-destructive text-destructive-fg hover:opacity-90'
+                : 'bg-accent text-accent-fg hover:bg-accent-hover'
             }`}
           >
             View on HashScan
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
+            <Icon name="open_in_new" size={14} />
           </a>
         </div>
       </div>
 
-      {/* Transaction Details (Expandable) */}
-      <div className="bg-surface border-2 border-border-strong rounded-lg">
+      {/* Transaction Details (expandable) — flat section, no card
+          chrome. The previous bg-surface border-2 border-border-strong
+          rounded-lg wrapper added card weight that didn't earn its
+          place. */}
+      <div className="border-t border-border pt-4">
         <details>
-          <summary className="cursor-pointer p-4 text-sm font-semibold text-foreground-muted hover:bg-surface-recessed dark:hover:bg-surface">
-            Transaction Details
+          <summary className="cursor-pointer text-xs uppercase tracking-wider font-medium text-foreground-muted hover:text-foreground transition-colors">
+            <span className="treasury-label">Transaction details</span>
+            <span className="console-label">tx.details</span>
           </summary>
-          <div className="p-4 border-t border-border space-y-3 text-sm">
+          <div className="mt-4 space-y-3 text-sm">
             {/* Transaction ID */}
             <div className="flex gap-2 items-start">
               <span className="text-foreground-subtle w-32 flex-shrink-0">Transaction ID:</span>
@@ -481,11 +486,13 @@ export function PostSigningStatus({
         </details>
       </div>
 
-      {/* Clear Button */}
+      {/* Clear Button — ghost treatment, not a primary action. The
+          user already saw the success/error state above; this is the
+          "I'm done looking, ready for the next thing" affordance. */}
       <div className="text-center">
         <button
           onClick={onClear}
-          className="px-6 py-3 bg-foreground-subtle text-white font-semibold rounded-lg hover:bg-surface transition-colors"
+          className="cmd inline-flex items-center justify-center px-6 py-3 rounded-md text-base font-semibold text-foreground border border-border-strong hover:bg-surface-recessed transition-colors"
         >
           Ready for Next Transaction
         </button>
@@ -578,15 +585,15 @@ function IntentVsActualDiff({
   const anyDiscrepancy = rows.some((r) => r.status === 'missing' || r.status === 'diff');
 
   return (
-    <div className="mt-4 rounded-md border border-success/30 bg-surface p-4 text-left">
+    <div className="mt-4 border-l-2 border-success bg-surface-recessed/50 pl-4 py-3 text-left">
       <div className="flex items-center gap-2 mb-3">
         <h3 className="text-sm font-semibold text-foreground-muted">Verified on Mirror Node</h3>
         {anyDiscrepancy ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-warning-soft text-warning-soft-fg border border-warning/40">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-warning-soft text-warning-soft-fg">
             Discrepancy
           </span>
         ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-success-soft text-success-soft-fg border border-success/40">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-success-soft text-success-soft-fg">
             Matches signed intent
           </span>
         )}

@@ -120,7 +120,7 @@ export function CopyableText({
   return (
     <div className={`inline-flex items-center gap-2 ${className}`}>
       <span
-        className="font-mono text-sm bg-surface-recessed px-2 py-1 rounded cursor-pointer hover:bg-border transition-colors"
+        className="font-mono text-sm bg-surface-recessed px-2 py-1.5 rounded cursor-pointer hover:bg-border transition-colors"
         onClick={handleCopy}
         title={text}
       >

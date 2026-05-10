@@ -77,7 +77,12 @@ export function SessionCountdown({ expiresAt, onExpired }: SessionCountdownProps
       time: 'text-warning-soft-fg',
     },
     critical: {
-      container: 'bg-destructive-soft text-destructive-soft-fg animate-pulse',
+      // Drops the previous animate-pulse on the entire container
+      // (decorative motion the brand calibrates against). The
+      // urgency now comes from the destructive-soft bg + bolder
+      // weight on the time, and the user already noticed the
+      // amber→red tier transition that brought them here.
+      container: 'bg-destructive-soft text-destructive-soft-fg font-semibold',
       icon: 'text-destructive',
       time: 'text-destructive-soft-fg',
     },

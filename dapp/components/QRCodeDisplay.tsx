@@ -96,7 +96,7 @@ export function QRCodeDisplay({
       {/* QR Code Container */}
       <div
         ref={qrRef}
-        className="bg-background p-4 rounded-lg shadow-sm border border-border"
+        className="bg-background p-4 rounded-md border border-border"
         style={{ backgroundColor: bgColor }}
       >
         <QRCodeSVG

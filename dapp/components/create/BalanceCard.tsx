@@ -22,7 +22,7 @@ export function BalanceCard({ balance, isLoading, error }: BalanceCardProps) {
 
   if (error) {
     return (
-      <div className="mt-2 p-3 bg-destructive-soft border border-destructive/40 rounded-lg text-sm text-destructive">
+      <div className="mt-2 border-l-2 border-destructive bg-destructive-soft pl-3 py-2 text-sm text-destructive-soft-fg rounded-r-md">
         {error}
       </div>
     );
@@ -31,7 +31,7 @@ export function BalanceCard({ balance, isLoading, error }: BalanceCardProps) {
   if (!balance) return null;
 
   return (
-    <div className="mt-2 p-3 bg-success-soft border border-success/40 rounded-lg space-y-1">
+    <div className="mt-2 border-l-2 border-success bg-success-soft pl-3 py-2 rounded-r-md space-y-1">
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-foreground-muted">
           Balance:

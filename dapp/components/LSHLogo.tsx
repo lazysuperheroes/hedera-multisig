@@ -53,8 +53,7 @@ export function LSHLogo({ variant, className = '' }: LSHLogoProps) {
               className="
                 inline-flex items-center font-mono text-[10px] font-bold
                 px-1.5 py-0.5 rounded-sm
-                border border-accent/60 text-accent
-                bg-accent-soft tracking-[0.1em]
+                text-accent bg-accent-soft tracking-[0.1em]
               "
               aria-label="Developer register"
             >

@@ -12,6 +12,7 @@ import {
   AccountSuggestionsDatalist,
   AccountSuggestionsChips,
 } from './AccountSuggestions';
+import { Icon } from '../Icon';
 
 interface FeePayerCalloutProps {
   txType: TransactionType;
@@ -173,15 +174,16 @@ export function FeePayerCallout({
         <p className="mt-1.5 text-xs italic opacity-80">Verifying coverage…</p>
       );
     }
-    const prefix =
+    const iconName =
       coverage.status === 'covered'
-        ? '✓'
+        ? 'check_circle'
         : coverage.status === 'uncovered'
-          ? '⚠'
-          : 'ⓘ';
+          ? 'warning'
+          : 'info';
     return (
-      <p className="mt-1.5 text-xs">
-        <span aria-hidden="true">{prefix}</span> {coverage.message}
+      <p className="mt-1.5 text-xs inline-flex items-center gap-1.5">
+        <Icon name={iconName} size={14} fill={coverage.status === 'covered' ? 1 : 0} aria-hidden />
+        {coverage.message}
       </p>
     );
   };

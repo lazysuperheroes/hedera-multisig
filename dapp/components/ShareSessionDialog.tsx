@@ -101,7 +101,7 @@ export function ShareSessionDialog({
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'qr'
                 ? 'text-accent border-b-2 border-accent bg-info-soft'
-                : 'text-foreground-subtle hover:text-foreground-muted hover:text-foreground hover:bg-surface-recessed dark:hover:bg-surface'
+                : 'text-foreground-subtle hover:text-foreground hover:bg-surface-recessed'
             }`}
           >
             <span className="flex items-center justify-center gap-2">
@@ -116,7 +116,7 @@ export function ShareSessionDialog({
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'text'
                 ? 'text-accent border-b-2 border-accent bg-info-soft'
-                : 'text-foreground-subtle hover:text-foreground-muted hover:text-foreground hover:bg-surface-recessed dark:hover:bg-surface'
+                : 'text-foreground-subtle hover:text-foreground hover:bg-surface-recessed'
             }`}
           >
             <span className="flex items-center justify-center gap-2">
@@ -155,12 +155,12 @@ export function ShareSessionDialog({
           ) : (
             <div className="space-y-4">
               {/* Connection String */}
-              <div className="bg-info-soft rounded-lg p-4 border border-info/40">
+              <div className="border-l-2 border-info bg-info-soft/40 pl-4 py-3 rounded-r-md">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-info-soft-fg">Connection String (Recommended)</span>
+                  <span className="text-sm font-semibold text-info-soft-fg">Connection string (recommended)</span>
                   <CopyButton text={connectionString} label="connection string" variant="button" size="sm" />
                 </div>
-                <div className="font-mono text-xs text-info-soft-fg break-all bg-surface p-2 rounded border border-info/40">
+                <div className="font-mono text-xs text-info-soft-fg break-all bg-surface p-2 rounded">
                   {connectionString}
                 </div>
                 <p className="text-xs text-accent mt-2">

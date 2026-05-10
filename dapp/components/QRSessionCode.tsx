@@ -18,6 +18,7 @@
 
 import { QRCodeSVG } from 'qrcode.react';
 import { useState } from 'react';
+import { Icon } from './Icon';
 
 export interface QRSessionCodeProps {
   serverUrl: string;
@@ -62,8 +63,10 @@ export function QRSessionCode({
         <p className="text-sm text-foreground-muted">Scan with mobile device or enter credentials manually</p>
       </div>
 
-      {/* QR Code */}
-      <div className="p-4 bg-background rounded-lg border-2 border-border-strong shadow-sm">
+      {/* QR Code — keep the surrounding white background as a tight
+          frame for scanability (QR scanners expect high-contrast on
+          #fff). Drop the heavy border-2 + drop-shadow card chrome. */}
+      <div className="p-4 bg-white rounded-md border border-border">
         <QRCodeSVG
           value={qrData}
           size={size}
@@ -101,23 +104,10 @@ export function QRSessionCode({
           {/* Copy Button */}
           <button
             onClick={copyCredentials}
-            className="w-full px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors text-sm font-medium flex items-center justify-center gap-2"
+            className="cmd w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
           >
-            {copied ? (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Copied!
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                Copy Credentials
-              </>
-            )}
+            <Icon name={copied ? 'check' : 'content_copy'} size={16} />
+            {copied ? 'Copied!' : 'Copy credentials'}
           </button>
         </div>
       )}
@@ -153,11 +143,9 @@ export function QRScanButton({ onScan }: { onScan: (result: QRScanResult) => voi
 
   return (
     <div className="text-center">
-      <label className="inline-flex items-center gap-2 px-4 py-2 bg-success text-white rounded-lg hover:bg-success transition-colors cursor-pointer text-sm font-medium">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-        </svg>
-        Scan QR Code
+      <label className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-accent text-accent-fg hover:bg-accent-hover transition-colors cursor-pointer">
+        <Icon name="qr_code_scanner" size={18} />
+        Scan QR code
         <input
           type="file"
           accept="image/*"

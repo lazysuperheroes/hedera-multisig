@@ -58,26 +58,28 @@ export function ConnectingBanner({ accountId }: ConnectingBannerProps) {
     return () => clearInterval(id);
   }, [messages.length]);
 
+  // Left-border callout matching /join's trust panels and /history's
+  // storage-locality callout. Drops the previous bordered-card chrome
+  // (border-2 border-info/40 rounded-lg p-6) — the soft-bg + accent
+  // left-border carries the "active feedback" signal without adding
+  // card weight.
   return (
     <div
-      className="bg-info-soft border-2 border-info/40 rounded-lg p-6"
+      className="border-l-2 border-info bg-info-soft/30 pl-4 py-3 rounded-r-md"
       role="status"
       aria-live="polite"
     >
-      <div className="flex items-start gap-4">
-        <div className="flex-shrink-0">
-          {/* Spinner */}
-          <div
-            className="w-8 h-8 border-2 border-info/30 border-t-info rounded-full animate-spin"
-            aria-hidden="true"
-          />
-        </div>
+      <div className="flex items-start gap-3">
+        <span
+          className="inline-block w-4 h-4 mt-0.5 rounded-full border-2 border-info border-r-transparent animate-spin flex-shrink-0"
+          aria-hidden="true"
+        />
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-info-soft-fg mb-1">
+          <p className="text-sm font-semibold text-info-soft-fg">
             Connecting to coordinator
-          </h3>
+          </p>
           {/* aria-live above announces the rotating message to screen readers */}
-          <p className="text-sm text-info-soft-fg/90">
+          <p className="text-xs text-info-soft-fg/90 mt-0.5">
             {messages[messageIndex]}
           </p>
         </div>

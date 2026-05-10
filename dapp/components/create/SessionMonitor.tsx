@@ -733,7 +733,7 @@ export function SessionMonitor({
           `metadata.customFields`; for CLI-injected ones we infer from
           `txDetails.nodeAccountIds`. */}
       {(state.freezeStrategy || state.freezeNodeCount || state.frozenTxBytes) && (
-        <div className="text-xs text-foreground-subtle border-l-2 border-info/40 pl-3 py-1">
+        <div className="text-xs text-foreground-subtle border-l-2 border-info pl-3 py-1">
           <span className="text-foreground-muted">Frozen against</span>{' '}
           {state.freezeNodeCount != null && (
             <span className="font-mono tabular-nums text-foreground">

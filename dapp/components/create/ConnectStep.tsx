@@ -1,21 +1,28 @@
 'use client';
 
 const inputClass =
-  'w-full px-4 py-3 border border-border-strong rounded-lg ' +
-  'focus:border-accent ' +
-  'bg-surface text-foreground ' +
-  'placeholder:text-foreground-subtle';
+  'w-full px-4 py-3 rounded-md border border-border bg-surface text-foreground ' +
+  'placeholder:text-foreground-subtle focus:border-accent focus:outline-none ' +
+  'focus:ring-2 focus:ring-accent transition-colors';
 
 const labelClass =
   'block text-sm font-medium text-foreground-muted mb-2';
 
-const cardClass =
-  'console-pane bg-surface rounded-lg shadow-sm border border-border p-6';
+// Connect form is a flat section. Treasury sees no card chrome (matches
+// /join's centerpiece pattern); console keeps the .console-pane class
+// so the terminal-window header strip ("~/connect.session") still
+// renders via globals.css. shadow-sm dropped — drop-shadows on
+// non-modal surfaces are the brand's anti-pattern.
+const cardClass = 'console-pane';
 
+// Primary CTA — matches /join's Connect button: cmd hero-cta-primary,
+// semantic text-accent-fg (was text-white literal), no drop-shadow
+// (was shadow-lg). The treasury → arrow is rendered inline by the
+// caller via <span className="treasury-label opacity-70">.
 const primaryBtnClass =
-  'cmd w-full px-6 py-4 bg-accent text-white font-semibold rounded-lg shadow-lg ' +
-  'hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed ' +
-  'flex items-center justify-center gap-2';
+  'cmd hero-cta-primary w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 ' +
+  'rounded-md text-base font-semibold bg-accent text-accent-fg ' +
+  'hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 
 interface ConnectStepProps {
   serverUrl: string;
@@ -203,7 +210,7 @@ export function ConnectStep({
         {connectError && (
           <div
             role="alert"
-            className="p-3 bg-destructive-soft border border-destructive/40 rounded-lg text-sm text-destructive-soft-fg"
+            className="border-l-2 border-destructive bg-destructive-soft pl-4 py-3 text-sm text-destructive-soft-fg rounded-r-md"
           >
             {connectError}
           </div>
@@ -216,9 +223,10 @@ export function ConnectStep({
           className={primaryBtnClass}
         >
           {isConnecting && (
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+            <span className="inline-block w-4 h-4 rounded-full border-2 border-current border-r-transparent animate-spin" />
           )}
-          {isConnecting ? 'Connecting...' : 'Connect as Coordinator'}
+          {isConnecting ? 'Connecting…' : 'Connect as coordinator'}
+          {!isConnecting && <span className="treasury-label opacity-70">→</span>}
         </button>
       </div>
     </section>
