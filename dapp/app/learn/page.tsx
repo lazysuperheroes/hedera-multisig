@@ -99,37 +99,37 @@ export default function LearnPage() {
               n="01"
               title="Precheck"
               desc="Verify operator credentials, balance, and dependencies."
-              ref="00-precheck.js"
+              cite="00-precheck.js"
             />
             <Step
               n="02"
               title="Generate keys"
               desc="Three Ed25519 keys, encrypted with a passphrase. Each signer holds one."
-              ref="01-generate-keys.js"
+              cite="01-generate-keys.js"
             />
             <Step
               n="03"
               title="Create the threshold account"
               desc="KeyList(2-of-3) wraps the three public keys. The account is the multi-sig treasury."
-              ref="02-create-threshold-account.js"
+              cite="02-create-threshold-account.js"
             />
             <Step
               n="04"
               title="Start the coordinator"
               desc="WebSocket server holds session state, broadcasts the frozen tx, collects signatures."
-              ref="npx hedera-multisig server"
+              cite="npx hedera-multisig server"
             />
             <Step
               n="05"
               title="Sign the ceremony"
               desc="Coordinator builds + freezes + injects an HBAR transfer. CLI participants review and approve within 120s."
-              ref="npx hedera-multisig participant"
+              cite="npx hedera-multisig participant"
             />
             <Step
               n="06"
               title="Verify"
               desc="Mirror node confirms the transfer landed. Receipt success isn't enough — the network must externalize."
-              ref="06-verify-on-mirror.js"
+              cite="06-verify-on-mirror.js"
             />
           </ol>
 
@@ -296,10 +296,14 @@ export default function LearnPage() {
  * Step row in the embedded HBAR walkthrough skim. Mono prefix (`01`,
  * `02`, …) only appears in treasury — console mode swaps the prefix
  * for a [ ] checklist marker via the .console-checklist > li::before
- * rule. The script/command reference is rendered subtle so treasury
+ * rule. The script/command citation is rendered subtle so treasury
  * operators can ignore it; engineers find it.
+ *
+ * Prop name `cite` rather than `ref` — `ref` is a reserved React
+ * prop that Next.js 16 / React 19 forwards specially in Server
+ * Components, which would crash the page at render.
  */
-function Step({ n, title, desc, ref }: { n: string; title: string; desc: string; ref: string }) {
+function Step({ n, title, desc, cite }: { n: string; title: string; desc: string; cite: string }) {
   return (
     <li className="flex gap-3">
       <span className="treasury-label font-mono text-xs text-foreground-subtle pt-1 select-none tabular-nums">
@@ -309,7 +313,7 @@ function Step({ n, title, desc, ref }: { n: string; title: string; desc: string;
         <span className="font-semibold text-foreground">{title}.</span>{' '}
         <span className="text-foreground-muted">{desc}</span>{' '}
         <code className="text-xs font-mono text-foreground-subtle whitespace-nowrap">
-          ({ref})
+          ({cite})
         </code>
       </div>
     </li>
