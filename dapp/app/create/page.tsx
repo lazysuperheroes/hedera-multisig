@@ -54,10 +54,26 @@ const inputClass =
 
 const labelClass = 'block text-sm font-medium text-foreground mb-2';
 
+// Primary CTA — matches /join's Connect button: .cmd for $⏎ console
+// decoration, hero-cta-primary for register-aware ghost-in-console
+// flatten, plus the treasury → arrow rendered inline by callers via
+// <span className="treasury-label">.
 const primaryBtnClass =
-  'w-full px-6 py-3.5 bg-accent text-accent-fg font-semibold rounded-md ' +
-  'hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed ' +
-  'flex items-center justify-center gap-2';
+  'cmd hero-cta-primary w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 ' +
+  'rounded-md text-base font-semibold bg-accent text-accent-fg hover:bg-accent-hover ' +
+  'transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
+// Transaction type tabs. Five types as a chip-row instead of a
+// <select> — surfaces the supported types confidently, matches the
+// Stripe/Mercury aesthetic better than a dropdown, and reads as a
+// real choice rather than a hidden selector.
+const TX_TYPES: Array<{ value: TransactionType; label: string }> = [
+  { value: 'hbar-transfer', label: 'HBAR transfer' },
+  { value: 'token-transfer', label: 'Token transfer' },
+  { value: 'nft-transfer', label: 'NFT transfer' },
+  { value: 'token-association', label: 'Token association' },
+  { value: 'contract-call', label: 'Contract call' },
+];
 
 export default function CreatePage() {
   const wallet = useWallet();
@@ -320,15 +336,22 @@ export default function CreatePage() {
   const currentStepIndex = stepOrder.indexOf(step);
 
   return (
-    <main className="min-h-screen p-4 sm:p-8 bg-background">
+    <main className="min-h-screen bg-background">
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
 
-      <div className="max-w-2xl mx-auto">
-        {/* Header — H1 only. The StepProgress below carries the
-            "what comes next" signal; subtitle would just restate it. */}
-        <h1 className="page-hero font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-8">
-          Create Session
-        </h1>
+      <section className="max-w-2xl mx-auto px-6 py-8 sm:py-12">
+        {/* Header — matches /join post-redesign: bigger H1, sentence
+            case, treasury-only sub-line. Console mode hides the
+            sub-line; the page-hero $ prefix carries the orientation. */}
+        <header className="mb-8">
+          <h1 className="page-hero font-heading text-4xl sm:text-5xl font-bold tracking-tight text-foreground leading-[1.05]">
+            Create a signing session
+          </h1>
+          <p className="console-hide mt-3 text-foreground-muted leading-relaxed max-w-md">
+            Spin up a coordinator session, build the transaction, and share
+            the connection string with your signers.
+          </p>
+        </header>
 
         <div className="space-y-8">
           <StepProgress steps={createSteps} currentIndex={currentStepIndex} />
@@ -355,20 +378,22 @@ export default function CreatePage() {
             />
           )}
 
-          {/* Live session monitor — visible from the build step onward so
-              the coordinator sees who's already connected before deciding
-              to inject. The condition (build-tx || share) keeps the
-              component mounted across the transition, preserving
-              participant + state updates received between steps. */}
+          {/* Live session monitor — flat section, no card chrome. The
+              monitor is informational ("who's connected, what's the
+              state"); a bordered container around it added visual
+              weight without aiding focus. Eyebrow heading instead of
+              card title; border-t separator marks the section
+              transition. */}
           {(step === 'build-tx' || step === 'share') &&
             connection.sessionCredentials &&
             connection.ws && (
               <section
                 aria-label="Live session"
-                className="bg-surface border border-border rounded-md p-5"
+                className="border-t border-border pt-6"
               >
-                <h2 className="font-heading text-base font-semibold text-foreground mb-3">
-                  Live session
+                <h2 className="text-xs uppercase tracking-wider font-medium text-foreground-muted mb-3">
+                  <span className="treasury-label">Live session</span>
+                  <span className="console-label">live</span>
                 </h2>
                 <SessionMonitor
                   ws={connection.ws}
@@ -391,42 +416,58 @@ export default function CreatePage() {
           {/* Step 2 — Transaction Builder */}
           {step === 'build-tx' && connection.sessionCredentials && (
             <section aria-label="Build transaction" className="space-y-8">
-              {/* Session info — flat inline dl. Hairline divider above
-                  marks the section transition without needing chrome.
-                  (Critique #3 minor obs.) */}
-              <div className="pt-2 border-t border-border">
-                <dl className="mt-4 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 text-sm">
-                  <dt className="text-foreground-subtle">ID</dt>
+              {/* Session info — flat inline dl. Hairline divider marks
+                  the section break without card chrome. Status now
+                  uses a semantic dot + text instead of a hardcoded
+                  warning-yellow pill (status carries varied meaning;
+                  the previous always-yellow pill was decorative). */}
+              <div className="border-t border-border pt-6">
+                <h2 className="text-xs uppercase tracking-wider font-medium text-foreground-muted mb-3">
+                  <span className="treasury-label">Session</span>
+                  <span className="console-label">session</span>
+                </h2>
+                <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 text-sm">
+                  <dt className="text-foreground-subtle">
+                    <span className="treasury-label">ID</span>
+                    <span className="console-label">session_id</span>
+                  </dt>
                   <dd className="font-mono text-foreground truncate">
                     {connection.sessionCredentials.sessionId}
                   </dd>
-                  <dt className="text-foreground-subtle">Status</dt>
+                  <dt className="text-foreground-subtle">
+                    <span className="treasury-label">Status</span>
+                    <span className="console-label">status</span>
+                  </dt>
                   <dd>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-warning-soft text-warning-soft-fg">
-                      {connection.sessionCredentials.status}
-                    </span>
+                    <SessionStatusIndicator status={connection.sessionCredentials.status} />
                   </dd>
-                  <dt className="text-foreground-subtle">Threshold</dt>
+                  <dt className="text-foreground-subtle">
+                    <span className="treasury-label">Threshold</span>
+                    <span className="console-label">threshold</span>
+                  </dt>
                   <dd className="text-foreground tabular-nums">
                     {connection.sessionCredentials.threshold} of{' '}
                     {connection.sessionCredentials.eligibleKeys.length}
                   </dd>
-                  <dt className="text-foreground-subtle">Expires</dt>
-                  <dd className="text-foreground">
-                    {connection.sessionCredentials.expiresAt || 'N/A'}
+                  <dt className="text-foreground-subtle">
+                    <span className="treasury-label">Expires</span>
+                    <span className="console-label">expires_at</span>
+                  </dt>
+                  <dd className="text-foreground font-mono text-xs">
+                    {connection.sessionCredentials.expiresAt || '—'}
                   </dd>
                 </dl>
               </div>
 
-              {/* Wallet status — informational, not a hard block. The fee
-                  payer is whatever account ends up in From / Account; the
-                  wallet is just a fallback when those are blank. For a
-                  multi-sig treasury, the threshold account pays its own
-                  fee from its own balance — no wallet required. */}
+              {/* Wallet status — informational, not a hard block. The
+                  fee payer is whatever account ends up in From /
+                  Account; the wallet is just a fallback. The detailed
+                  prose is treasury-only (console operators know multi-
+                  sig fee mechanics); console hides it via console-hide. */}
               {!wallet.isConnected && (
                 <div
                   role="status"
-                  className="border-l-2 border-info bg-info-soft pl-4 py-3 text-sm text-info-soft-fg"
+                  className="console-hide border-l-2 border-info bg-info-soft/30 pl-4 py-3 text-sm text-info-soft-fg rounded-r-md"
                 >
                   <p className="font-semibold">No wallet connected — that&apos;s fine for multi-sig treasury</p>
                   <p className="mt-1">
@@ -445,8 +486,9 @@ export default function CreatePage() {
                 className="console-pane bg-surface border border-border rounded-md p-6"
                 data-pane-label="~/inject.tx"
               >
-                <h2 className="font-heading text-lg font-semibold text-foreground mb-4">
-                  Inject transaction
+                <h2 className="text-xs uppercase tracking-wider font-medium text-foreground-muted mb-4">
+                  <span className="treasury-label">Inject transaction</span>
+                  <span className="console-label">inject_tx</span>
                 </h2>
 
                 {/* Phase D13a + F4: tabs with WAI-ARIA tablist semantics */}
@@ -488,24 +530,37 @@ export default function CreatePage() {
                 {txMode === 'build' && (
                   <div role="tabpanel" id="build-panel" aria-labelledby="build-tab">
                     <div className="mb-6">
-                      <label htmlFor="txType" className={labelClass}>
+                      <div className="block text-sm font-medium text-foreground mb-3">
                         Transaction type
-                      </label>
-                      <select
-                        id="txType"
-                        className={inputClass}
-                        value={txType}
-                        onChange={(e) => {
-                          setTxType(e.target.value as TransactionType);
-                          setTxFields({});
-                        }}
+                      </div>
+                      <div
+                        role="tablist"
+                        aria-label="Transaction type"
+                        className="flex flex-wrap gap-2"
                       >
-                        <option value="hbar-transfer">HBAR Transfer</option>
-                        <option value="token-transfer">Token Transfer</option>
-                        <option value="nft-transfer">NFT Transfer</option>
-                        <option value="token-association">Token Association</option>
-                        <option value="contract-call">Contract Call</option>
-                      </select>
+                        {TX_TYPES.map((t) => {
+                          const isSelected = txType === t.value;
+                          return (
+                            <button
+                              key={t.value}
+                              type="button"
+                              role="tab"
+                              aria-selected={isSelected}
+                              onClick={() => {
+                                setTxType(t.value);
+                                setTxFields({});
+                              }}
+                              className={
+                                isSelected
+                                  ? 'px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-accent-fg transition-colors'
+                                  : 'px-3 py-1.5 rounded-md text-sm font-medium text-foreground-muted border border-border hover:text-foreground hover:bg-surface-recessed transition-colors'
+                              }
+                            >
+                              {t.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="space-y-5">
@@ -582,9 +637,10 @@ export default function CreatePage() {
                       {injection.isInjecting && (
                         <span className="inline-block w-4 h-4 rounded-full border-2 border-current border-r-transparent animate-spin" />
                       )}
-                      {injection.isInjecting
-                        ? (scheduleOptions.enabled ? 'Submitting schedule to network…' : 'Building & injecting…')
-                        : (scheduleOptions.enabled ? 'Build & schedule transaction' : 'Build & inject transaction')}
+                      {getInjectButtonLabel(injection.isInjecting, scheduleOptions.enabled)}
+                      {!injection.isInjecting && (
+                        <span className="treasury-label ml-1 opacity-70">→</span>
+                      )}
                     </button>
                   </div>
                 )}
@@ -676,6 +732,9 @@ export default function CreatePage() {
                         <span className="inline-block w-4 h-4 rounded-full border-2 border-current border-r-transparent animate-spin" />
                       )}
                       {injection.isInjecting ? 'Injecting…' : 'Inject pre-frozen transaction'}
+                      {!injection.isInjecting && (
+                        <span className="treasury-label ml-1 opacity-70">→</span>
+                      )}
                     </button>
                   </div>
                 )}
@@ -721,11 +780,54 @@ export default function CreatePage() {
             />
           )}
         </div>
-      </div>
+      </section>
 
       <Footer variant="compact" />
     </main>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Local sub-components and helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * SessionStatusIndicator — small dot + status text. Replaces the
+ * always-warning-yellow pill that previously colored every session
+ * status the same regardless of meaning. Color now carries semantic
+ * weight: pending/idle states are neutral; in-flight is info; failure
+ * states are destructive.
+ */
+function SessionStatusIndicator({ status }: { status: string }) {
+  const s = status.toLowerCase();
+  const dot =
+    s === 'completed' || s === 'executed' ? 'bg-success' :
+    s === 'failed' || s === 'expired' || s === 'rejected' ? 'bg-destructive' :
+    s === 'signing' || s === 'executing' || s === 'reviewing' ? 'bg-warning' :
+    s === 'waiting' || s === 'ready' ? 'bg-info' :
+    'bg-foreground-subtle';
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden="true" />
+      <span className="font-mono text-xs text-foreground">{status}</span>
+    </span>
+  );
+}
+
+/**
+ * Inject-button copy. Four-way matrix: (loading × scheduled). Lifted
+ * out of the JSX so the four labels are visible at a glance instead
+ * of buried in nested ternaries.
+ */
+function getInjectButtonLabel(isInjecting: boolean, scheduledEnabled: boolean): string {
+  if (isInjecting) {
+    return scheduledEnabled
+      ? 'Submitting schedule to network…'
+      : 'Building & injecting…';
+  }
+  return scheduledEnabled
+    ? 'Build & schedule transaction'
+    : 'Build & inject transaction';
 }
 
 interface TabButtonProps {

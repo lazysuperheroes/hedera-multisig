@@ -738,56 +738,11 @@ html {
   opacity: 0.8;
 }
 
-/* L2 — Compact StepProgress in console: flat single-line breadcrumb.
-   Squares shrink to ~20px, layout flips horizontal so number + label
-   sit side-by-side, rails become arrows via ::before pseudo. */
-[data-register="console"] .step-progress {
-  margin-bottom: 1rem !important;
-}
-[data-register="console"] .step-progress-marker-wrap {
-  flex-direction: row !important;
-  align-items: center !important;
-  gap: 0.4rem !important;
-  min-width: 0 !important;
-}
-[data-register="console"] .step-progress-marker {
-  width: 1.25rem !important;
-  height: 1.25rem !important;
-  font-size: 0.625rem !important;
-  box-shadow: none !important;
-  border-radius: 0 !important; /* squares already, but ensure */
-}
-[data-register="console"] .step-progress-marker svg {
-  width: 0.75rem !important;
-  height: 0.75rem !important;
-}
-[data-register="console"] .step-progress-label {
-  margin-top: 0 !important;
-  font-size: 0.75rem !important;
-  text-transform: lowercase;
-  letter-spacing: 0.02em;
-}
-/* Replace the rail bar with a simple arrow glyph in console */
-[data-register="console"] .step-progress-rail {
-  background: transparent !important;
-  height: auto !important;
-  margin-top: 0 !important;
-  align-self: center !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem !important;
-  padding: 0 0.25rem;
-}
-[data-register="console"] .step-progress-rail-fill {
-  display: none !important;
-}
-[data-register="console"] .step-progress-rail::before {
-  content: "→";
-  color: var(--foreground-subtle);
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-}
+/* StepProgress is now a flat breadcrumb component (StepProgress.tsx) —
+   the previous register-conditional overrides for circle markers,
+   connector rails, and label-position swaps are obsolete. The
+   component's own treasury-label/console-label swap on the separator
+   handles the per-register idiom (`·` vs `→`). */
 
 /* K6 — Console pane chrome. Cards marked with .console-pane + a
    data-pane-label="~/foo.tx" attribute get a terminal-window-style
