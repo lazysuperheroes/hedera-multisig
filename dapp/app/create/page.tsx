@@ -927,12 +927,24 @@ function TxTypeTablist({
  * or 5 hours from now?" before reading.
  */
 function ExpiresValue({ expiresAt }: { expiresAt: string | null | undefined }) {
+  // Re-derive "now" once per minute so the display stays fresh as
+  // time passes (a session listed as "in 2m" shouldn't still say so
+  // ten minutes later). useState + an interval keeps this reactive
+  // and satisfies React Compiler's purity rule — Date.now() during
+  // render would mark the component as impure (CI lint error
+  // "Cannot call impure function during render").
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   if (!expiresAt) return <span className="text-foreground-subtle">—</span>;
   const ms = new Date(expiresAt).getTime();
   if (!Number.isFinite(ms)) {
     return <span className="font-mono text-xs">{expiresAt}</span>;
   }
-  const isPast = ms < Date.now();
+  const isPast = ms < nowMs;
   const relative = isPast ? 'expired' : formatRelativeFuture(ms);
   return (
     <span title={expiresAt} className="font-mono text-xs">
