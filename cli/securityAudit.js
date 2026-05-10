@@ -69,15 +69,21 @@ const SECURITY_RULES = [
       /sanitize/i,
       /\.publicKey/,           // Accessing publicKey property is safe
       /publicKey\./,           // publicKey variable is safe
-      /\('[^)]*privateKey/i,   // privateKey inside single-quoted string
-      /\("[^)]*privateKey/i,   // privateKey inside double-quoted string
-      /\(`[^)]*privateKey/i,   // privateKey inside template literal
-      /\('[^)]*OPERATOR_KEY/i, // OPERATOR_KEY inside single-quoted string
-      /\("[^)]*OPERATOR_KEY/i, // OPERATOR_KEY inside double-quoted string
-      /\(`[^)]*OPERATOR_KEY/i, // OPERATOR_KEY inside template literal
-      /\('[^)]*PRIVATE_KEY/i,  // PRIVATE_KEY inside single-quoted string
-      /\("[^)]*PRIVATE_KEY/i,  // PRIVATE_KEY inside double-quoted string
-      /\(`[^)]*PRIVATE_KEY/i,  // PRIVATE_KEY inside template literal
+      // The next three handle the common case: the key-name token is
+      // INSIDE a string literal somewhere in the matched text. The
+      // earlier `/\('[^)]*OPERATOR_KEY/` style only caught the case
+      // where the string was the immediate first arg to console.log —
+      // it missed nested calls like `console.log(chalk.red('… OPERATOR_KEY …'))`
+      // where the literal is wrapped in a helper. These broader
+      // patterns say "find an opening quote, then any non-quote chars
+      // up to the keyword" — only matches if the keyword sits inside
+      // an unbroken string. A reference OUTSIDE strings (e.g.,
+      // `console.log('msg:', OPERATOR_KEY)`) has a closing quote
+      // between, so `[^'"`]*` breaks before reaching the keyword and
+      // the exclusion correctly DOESN'T apply.
+      /['"`][^'"`]*privateKey/i,
+      /['"`][^'"`]*OPERATOR_KEY/,
+      /['"`][^'"`]*PRIVATE_KEY/,
       /keyFile/i,              // keyFile references are safe
       /keyProvider/i,          // keyProvider references are safe
       /keyPath/i,              // keyPath references are safe

@@ -29,8 +29,12 @@ test.describe('dApp Basic Tests', () => {
   test('shows error for invalid session connection', async ({ page }) => {
     await page.goto('/join');
 
-    // Try to fill an invalid connection string — error shows inline as user types
-    const connectionInput = page.getByPlaceholder(/connection/i).first();
+    // Try to fill an invalid connection string — error shows inline as user types.
+    // The placeholder is the literal example "hmsc:eyJ…" not the word
+    // "connection" (the field is intentionally minimal post-redesign;
+    // its label carries the semantic meaning). Match either form so this
+    // test stays robust if the placeholder copy changes again.
+    const connectionInput = page.getByPlaceholder(/hmsc:|connection/i).first();
     await connectionInput.fill('invalid-connection-string');
 
     // Error message appears inline (no button click needed)
