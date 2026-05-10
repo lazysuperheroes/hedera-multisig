@@ -56,10 +56,12 @@ export function QRSessionCode({
   };
 
   return (
-    <div className="flex flex-col items-center gap-6 p-6 bg-background rounded-lg border-2 border-border">
-      {/* Title */}
+    <div className="flex flex-col items-center gap-6 p-6 bg-background">
+      {/* Title — flat, no card chrome around the QR component itself.
+          The component is typically rendered inside a parent surface
+          (modal or page section) that already provides the boundary. */}
       <div className="text-center">
-        <h3 className="text-lg font-semibold text-foreground mb-1">Join Session</h3>
+        <h3 className="font-heading text-lg font-bold text-foreground mb-1">Join session</h3>
         <p className="text-sm text-foreground-muted">Scan with mobile device or enter credentials manually</p>
       </div>
 

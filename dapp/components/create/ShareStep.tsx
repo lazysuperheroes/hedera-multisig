@@ -149,7 +149,7 @@ function ScheduledLaunched({
 
   return (
     <section aria-label="Schedule launched" className="space-y-6">
-      <div className="rounded-lg border-2 border-info bg-info-soft p-5">
+      <div className="border-l-2 border-info bg-info-soft/40 pl-4 py-3 rounded-r-md">
         <h2 className="text-base font-bold text-info-soft-fg">
           Schedule launched (HIP-423)
         </h2>
