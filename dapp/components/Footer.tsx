@@ -66,7 +66,7 @@ export function Footer({ variant = 'full' }: FooterProps) {
             </a>
             <span className="hidden sm:inline w-px h-4 bg-border" aria-hidden="true" />
             <span
-              className="text-xs font-mono opacity-70 cursor-help"
+              className="text-xs font-mono text-foreground-subtle cursor-help"
               title={versionTooltip}
             >
               v{VERSION}

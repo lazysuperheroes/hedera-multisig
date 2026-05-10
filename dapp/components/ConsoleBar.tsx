@@ -42,7 +42,7 @@ export function ConsoleBar({ showWalletPanel }: { showWalletPanel: boolean }) {
   return (
     <nav
       className="
-        sticky top-0 left-0 z-40 bg-background border-b-2 border-accent/40
+        sticky top-0 left-0 z-40 bg-background border-b-2 border-accent
         font-mono text-[13px]
       "
       aria-label="Console navigation"
@@ -89,9 +89,12 @@ export function ConsoleBar({ showWalletPanel }: { showWalletPanel: boolean }) {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Network */}
+        {/* Network — mainnet stays success-green (real-money signal),
+            testnet is a true neutral. Network is metadata, not status;
+            warning-yellow misappropriates the severity palette. Matches
+            the NetworkBadge / NetworkChip treatment elsewhere. */}
         <span className="hidden lg:inline text-foreground-subtle flex-shrink-0">
-          net:<span className={network === 'mainnet' ? 'text-success' : 'text-warning'}>
+          net:<span className={network === 'mainnet' ? 'text-success' : 'text-foreground-muted'}>
             {network}
           </span>
         </span>
@@ -142,7 +145,7 @@ export function ConsoleBar({ showWalletPanel }: { showWalletPanel: boolean }) {
 function Sep({ className = '' }: { className?: string }) {
   return (
     <span
-      className={`text-foreground-subtle/60 select-none ${className}`}
+      className={`text-foreground-subtle select-none ${className}`}
       aria-hidden="true"
     >
       |
@@ -175,10 +178,7 @@ function ConsoleWalletPill() {
       <>
         <button
           onClick={() => setShowDialog(true)}
-          className="
-            text-foreground-muted hover:text-accent transition-colors
-            cmd-inline
-          "
+          className="text-foreground-muted hover:text-accent transition-colors"
           title="Connect wallet"
         >
           wallet:<span className="text-foreground-subtle">none</span>
