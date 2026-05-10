@@ -39,6 +39,7 @@ import { ConnectingBanner } from '../../../components/ConnectingBanner';
 import { Icon } from '../../../components/Icon';
 import { DEFAULT_NETWORK } from '../../../lib/walletconnect-config';
 import { diagnoseBodyMismatch } from '../../../lib/diagnose-body-mismatch';
+import { probeVerifyPaths } from '../../../lib/probe-verify-paths';
 
 interface SessionInfo {
   serverUrl: string;
@@ -539,12 +540,12 @@ export default function SessionPage({ params }: PageProps) {
 
       const signedTxList: Array<{
         bodyBytes?: Uint8Array;
-        sigMap?: { sigPair?: Array<{ ed25519?: Uint8Array; ECDSASecp256k1?: Uint8Array }> };
+        sigMap?: { sigPair?: Array<{ pubKeyPrefix?: Uint8Array; ed25519?: Uint8Array; ECDSASecp256k1?: Uint8Array }> };
       }> = (signedTx as unknown as {
         _signedTransactions: {
           list: Array<{
             bodyBytes?: Uint8Array;
-            sigMap?: { sigPair?: Array<{ ed25519?: Uint8Array; ECDSASecp256k1?: Uint8Array }> };
+            sigMap?: { sigPair?: Array<{ pubKeyPrefix?: Uint8Array; ed25519?: Uint8Array; ECDSASecp256k1?: Uint8Array }> };
           }>;
         };
       })._signedTransactions.list;
@@ -651,7 +652,7 @@ export default function SessionPage({ params }: PageProps) {
 
       if (placed === 0) {
         // Wallet's signatures don't verify against the coordinator's
-        // stored bodyBytes. Two distinct causes:
+        // stored bodyBytes. Three distinct causes:
         //   - Problem A (node-selection): wallet only signs body[0]
         //     of a multi-node freeze. subsetSize=1 sidesteps this.
         //   - Problem B (parameter adjustment): wallet adjusts gas /
@@ -659,9 +660,13 @@ export default function SessionPage({ params }: PageProps) {
         //     for ContractExecuteTransaction with HashPack and
         //     Kabila. subsetSize=1 does NOT help; the only reliable
         //     multi-sig path for contract execution via wallet is
-        //     HIP-423 scheduled transactions (each signer submits an
-        //     independent ScheduleSignTransaction; no shared-bytes
-        //     aggregation needed).
+        //     HIP-423 scheduled transactions.
+        //   - Problem C (key mismatch): wallet signed with a different
+        //     key than `wallet.publicKey` reports. Most commonly the
+        //     paired account key has rotated, or the wallet is signing
+        //     with a key that isn't the one in our threshold keylist.
+        //     Diagnostic below cross-checks pubKeyPrefix against
+        //     walletPubKey to confirm.
         //
         // Run the dev-only diagnostic so localhost devs can see the
         // exact field-level diff and triage which problem is biting.
@@ -669,6 +674,81 @@ export default function SessionPage({ params }: PageProps) {
           coordBodies: originalSignedList,
           walletBodies: signedTxList,
         });
+
+        // Sig-pair-level key + format diagnostic. When the body bytes
+        // are identical but the signature still doesn't verify, this
+        // is the only thing that distinguishes Problem C ("wrong key")
+        // from a sig-encoding bug. Localhost-gated.
+        if (typeof window !== 'undefined') {
+          const h = window.location.hostname;
+          const onLocalhost = h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' || h.endsWith('.local');
+          if (onLocalhost || process.env.NEXT_PUBLIC_DEBUG_TX === '1') {
+            const walletKeyHex = wallet.publicKey
+              ? Buffer.from(walletPubKey.toBytesRaw()).toString('hex')
+              : '<unset>';
+            for (let i = 0; i < signedTxList.length; i++) {
+              const sigPair = signedTxList[i].sigMap?.sigPair?.[0];
+              const prefix = sigPair?.pubKeyPrefix
+                ? Buffer.from(sigPair.pubKeyPrefix).toString('hex')
+                : '<missing>';
+              const ed25519Sig = sigPair?.ed25519;
+              const ecdsaSig = sigPair?.ECDSASecp256k1;
+              const sigField = ed25519Sig ? 'ed25519' : ecdsaSig ? 'ECDSASecp256k1' : '<none>';
+              const sigBytes = ed25519Sig || ecdsaSig;
+              const sigLen = sigBytes ? sigBytes.length : 0;
+              const sigHex = sigBytes
+                ? Buffer.from(sigBytes).toString('hex').slice(0, 32) + '…'
+                : '<empty>';
+              console.log(
+                `[diag] body[${i}] sigPair: field=${sigField} sigLen=${sigLen}B sigHex=${sigHex}`,
+              );
+              console.log(
+                `[diag] body[${i}] pubKeyPrefix (signed-with) = ${prefix}`,
+              );
+              console.log(
+                `[diag] body[${i}] wallet.publicKey         = ${walletKeyHex}`,
+              );
+              if (prefix !== '<missing>' && walletKeyHex !== '<unset>') {
+                const matches = walletKeyHex.startsWith(prefix) || prefix.startsWith(walletKeyHex);
+                console.log(
+                  `[diag] body[${i}] key match = ${matches ? 'YES (pubKeyPrefix is prefix of wallet key)' : 'NO — Problem C: wallet signed with a different key'}`,
+                );
+              }
+            }
+
+            // Alternate-verify probe: try a battery of message
+            // transformations to figure out what the wallet actually
+            // signed, given that bodyBytes match + key matches but
+            // direct verify fails. Even a positive match doesn't give
+            // us a usable signature (the network only accepts direct
+            // sign-bodyBytes), but it tells us whether to file a
+            // wallet bug or to look elsewhere.
+            const firstSigPair = signedTxList[0]?.sigMap?.sigPair?.[0];
+            const probeSig = firstSigPair?.ed25519 || firstSigPair?.ECDSASecp256k1;
+            const probeBody = originalSignedList[0]?.bodyBytes;
+            if (probeSig && probeBody) {
+              const probe = await probeVerifyPaths(probeBody, probeSig, walletPubKey);
+              if (probe.found) {
+                console.log(
+                  `%c[probe] CONCLUSION: wallet signs "${probe.variantName}" instead of bodyBytes directly. ` +
+                    'The Hedera network only accepts signatures over bodyBytes — so even though we now know the ' +
+                    'convention, the wallet\'s signatures cannot be aggregated into a multi-sig transaction. ' +
+                    'This is a wallet-side compliance bug. Recommend redirecting users to HashPack (single-node freeze) ' +
+                    'or CLI participants for ContractExecute live ceremonies; file an issue with the wallet vendor.',
+                  'color: #f59e0b;',
+                );
+              } else {
+                console.log(
+                  '%c[probe] CONCLUSION: no recognizable signing-message convention. The wallet signs an internal ' +
+                    'representation we cannot reproduce from the wire data. Most likely it re-serializes the ' +
+                    'TransactionBody (with gas/fee/timestamp adjustments) and signs the modified version, then ' +
+                    'discards the modified bytes before returning. No recoverable workaround exists from the dApp side.',
+                  'color: #dc2626;',
+                );
+              }
+            }
+          }
+        }
 
         throw new Error(
           `Wallet returned ${signedTxList.length} signatures but none verified against the original transaction bodies.\n\n` +
