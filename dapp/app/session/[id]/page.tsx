@@ -38,6 +38,7 @@ import { StepProgress } from '../../../components/StepProgress';
 import { ConnectingBanner } from '../../../components/ConnectingBanner';
 import { Icon } from '../../../components/Icon';
 import { DEFAULT_NETWORK } from '../../../lib/walletconnect-config';
+import { diagnoseBodyMismatch } from '../../../lib/diagnose-body-mismatch';
 
 interface SessionInfo {
   serverUrl: string;
@@ -630,24 +631,49 @@ export default function SessionPage({ params }: PageProps) {
         verificationLog,
       );
 
+      // Even on the success path, run the diagnostic on localhost so
+      // we can study what the wallet did (or didn't do) when the
+      // ceremony works. Compares wallet bodyBytes with coord bodyBytes
+      // field-by-field; if they're identical the diag stays quiet.
+      // Useful for distinguishing "wallet signed verbatim" from
+      // "wallet re-froze but happened to produce identical bytes."
+      await diagnoseBodyMismatch({
+        coordBodies: originalSignedList,
+        walletBodies: signedTxList,
+      });
+
       if (placed === 0) {
-        // Most common cause: HashPack appears to re-freeze
-        // ContractExecuteTransaction internally before signing —
-        // applying its own gas/fee/timestamp adjustments — so its
-        // signatures are valid against ITS frozen bytes but not
-        // against the coordinator's stored bytes. HBAR transfers
-        // don't hit this because the wallet signs them verbatim.
-        // The actionable fix is single-node freeze: with only one
-        // body in the multi-node array, the wallet's "improvement"
-        // either matches exactly or stays compatible with the
-        // server's existing single-node-downgrade fallback.
+        // Wallet's signatures don't verify against the coordinator's
+        // stored bodyBytes. Two distinct causes:
+        //   - Problem A (node-selection): wallet only signs body[0]
+        //     of a multi-node freeze. subsetSize=1 sidesteps this.
+        //   - Problem B (parameter adjustment): wallet adjusts gas /
+        //     fee / timestamp / transactionId before signing — common
+        //     for ContractExecuteTransaction with HashPack and
+        //     Kabila. subsetSize=1 does NOT help; the only reliable
+        //     multi-sig path for contract execution via wallet is
+        //     HIP-423 scheduled transactions (each signer submits an
+        //     independent ScheduleSignTransaction; no shared-bytes
+        //     aggregation needed).
+        //
+        // Run the dev-only diagnostic so localhost devs can see the
+        // exact field-level diff and triage which problem is biting.
+        await diagnoseBodyMismatch({
+          coordBodies: originalSignedList,
+          walletBodies: signedTxList,
+        });
+
         throw new Error(
           `Wallet returned ${signedTxList.length} signatures but none verified against the original transaction bodies.\n\n` +
-          `This typically happens with contract calls when the wallet (e.g. HashPack) re-freezes the ` +
-          `transaction internally with its own gas/fee/timestamp adjustments before signing.\n\n` +
-          `Ask the coordinator to re-inject with single-node freeze (set "Subset size" to 1, or use ` +
-          `"Specific" with one node id). For ContractExecuteTransaction the dApp's /create page now ` +
-          `defaults to subsetSize=1, so refreshing the coordinator and re-injecting should resolve this.`,
+          `For HBAR transfers and most simple transactions this works because wallets sign verbatim. ` +
+          `For ContractExecuteTransaction, HashPack and Kabila re-freeze the transaction internally ` +
+          `with their own gas/fee/timestamp adjustments before signing — so the signatures are valid ` +
+          `against the wallet's re-frozen bytes, not the coordinator's stored bytes.\n\n` +
+          `The reliable fix for multi-sig contract execution via wallet is HIP-423 scheduled transactions ` +
+          `(/create's "Schedule this transaction" toggle). Each signer's ScheduleSignTransaction goes ` +
+          `to the network independently — no shared-bytes aggregation, no wallet-rewrite mismatch.\n\n` +
+          `Running on localhost? Open the browser console for a [diag] field-level diff showing exactly ` +
+          `which fields the wallet changed.`,
         );
       }
 
