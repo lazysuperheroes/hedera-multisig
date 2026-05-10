@@ -47,8 +47,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
+        # No registry-url here. With OIDC trusted publishing we MUST
+        # not let setup-node write `_authToken=${NODE_AUTH_TOKEN}` into
+        # .npmrc — when NODE_AUTH_TOKEN is unset (as it now must be for
+        # OIDC) that line becomes an empty Bearer header, which npm
+        # rejects with 404 on PUT, bypassing OIDC fallback. The
+        # registry is instead set via `publishConfig.registry` in
+        # package.json, which doesn't touch authentication. Provenance
+        # signing happens upstream of the PUT (different code path
+        # that reads the OIDC token directly), which is why it
+        # succeeded even when the PUT didn't.
 
       - name: Verify signed tag (Phase C2)
         if: startsWith(github.ref, 'refs/tags/')
