@@ -23,6 +23,12 @@ import { ThemeToggle } from './ThemeToggle';
 import { LSHLogo } from './LSHLogo';
 import { ConsoleBar } from './ConsoleBar';
 
+// Build identity — same env vars the Footer reads, surfaced inside the
+// wallet popover so operators chasing "am I on the latest?" don't need
+// to scroll to the footer.
+const DAPP_VERSION = process.env.NEXT_PUBLIC_DAPP_VERSION || 'dev';
+const DAPP_BUILD_TIME = process.env.NEXT_PUBLIC_DAPP_BUILD_TIME || '';
+
 /**
  * NavBar — register-aware shell.
  * - treasury register: standard NavShell (logo + nav links + wallet panel + toggles)
@@ -159,15 +165,15 @@ function NetworkBadge({ network }: { network: string }) {
         font-semibold uppercase tracking-wider
         ${isMainnet
           ? 'bg-success-soft text-success-soft-fg'
-          : 'bg-warning-soft text-warning-soft-fg'}
+          : 'bg-surface-recessed text-foreground-muted'}
       `}
     >
-      {/* Presence dot — 6px filled circle. Drops the previous 1px hairline
-          (which was effectively invisible) and the /40 border. Color carries
-          the network semantic; soft bg + dot is enough definition without a
-          colored border. */}
+      {/* Presence dot — 6px filled circle. Mainnet stays success-green
+          (real-money signal); testnet now uses a true neutral instead
+          of warning-yellow. Network is metadata (which chain), not
+          status (good/bad), so the warning palette was misappropriated. */}
       <span
-        className={`w-1.5 h-1.5 rounded-full ${isMainnet ? 'bg-success' : 'bg-warning'}`}
+        className={`w-1.5 h-1.5 rounded-full ${isMainnet ? 'bg-success' : 'bg-foreground-subtle'}`}
         aria-hidden="true"
       />
       {network}
@@ -304,6 +310,19 @@ function WalletPanel() {
                   </dd>
                 </div>
               )}
+              {/* dApp version + build time — surfaces the build identity
+                  here in addition to the footer. Treasury operators
+                  chasing "am I on the latest?" reach for the wallet
+                  popover faster than they scroll to the footer. */}
+              <div>
+                <dt className="text-foreground-subtle uppercase tracking-wider mb-1">dApp build</dt>
+                <dd className="font-mono text-foreground" title={DAPP_BUILD_TIME ? `built ${DAPP_BUILD_TIME}` : undefined}>
+                  v{DAPP_VERSION}
+                  {DAPP_BUILD_TIME && (
+                    <span className="text-foreground-subtle"> · {new Date(DAPP_BUILD_TIME).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                  )}
+                </dd>
+              </div>
             </dl>
             <button
               onClick={handleConnectClick}

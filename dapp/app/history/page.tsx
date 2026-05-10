@@ -9,6 +9,7 @@ import {
 } from '../../hooks/useTxHistory';
 import { CopyButton } from '../../components/CopyButton';
 import { Footer } from '../../components/Footer';
+import { Icon } from '../../components/Icon';
 import {
   getHashScanTransactionUrl,
   fetchTransactionStatus,
@@ -22,11 +23,26 @@ type StatusFilter = 'ALL' | 'SUCCESS' | 'FAILURE' | 'PENDING';
 type DateRange = 'all' | '24h' | '7d' | '30d';
 
 const DATE_RANGE_LABELS: Record<DateRange, string> = {
-  all: 'All Time',
-  '24h': 'Last 24 Hours',
-  '7d': 'Last 7 Days',
-  '30d': 'Last 30 Days',
+  all: 'All time',
+  '24h': 'Last 24 hours',
+  '7d': 'Last 7 days',
+  '30d': 'Last 30 days',
 };
+
+const STATUS_LABELS: Record<TxHistoryEntry['status'], string> = {
+  SUCCESS: 'Success',
+  FAILURE: 'Failure',
+  PENDING: 'Pending',
+};
+
+// Threshold below which the filter UI is hidden — short lists are
+// scannable without filtering. Above this, the filters earn their
+// real-estate.
+const FILTERS_VISIBLE_THRESHOLD = 5;
+
+// Mirror-node lag (~3-5s). Treat anything older than this as "should have
+// landed by now" — if it's still missing on mirror, mark expired.
+const STALE_PENDING_MS = 130 * 1000; // 120s validity + 10s buffer
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -34,7 +50,7 @@ const DATE_RANGE_LABELS: Record<DateRange, string> = {
 
 function truncateTxId(txId: string): string {
   if (txId.length <= 24) return txId;
-  return `${txId.slice(0, 14)}...${txId.slice(-8)}`;
+  return `${txId.slice(0, 14)}…${txId.slice(-8)}`;
 }
 
 function formatDate(iso: string): string {
@@ -72,35 +88,28 @@ function txTypeLabel(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Status badge component
+// Status badge — flat soft-bg pill, no /40 border hedge.
 // ---------------------------------------------------------------------------
 
 function StatusBadge({ status }: { status: TxHistoryEntry['status'] }) {
   const classes: Record<TxHistoryEntry['status'], string> = {
-    SUCCESS:
-      'bg-success-soft text-success-soft-fg border border-success/40',
-    FAILURE:
-      'bg-destructive-soft text-destructive-soft-fg border border-destructive/40',
-    PENDING:
-      'bg-warning-soft text-warning-soft-fg border border-warning/40',
+    SUCCESS: 'bg-success-soft text-success-soft-fg',
+    FAILURE: 'bg-destructive-soft text-destructive-soft-fg',
+    PENDING: 'bg-warning-soft text-warning-soft-fg',
   };
 
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${classes[status]}`}
     >
-      {status}
+      {STATUS_LABELS[status]}
     </span>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Page component
+// Page
 // ---------------------------------------------------------------------------
-
-// Mirror-node lag (~3-5s). Treat anything older than this as "should have
-// landed by now" — if it's still missing on mirror, mark expired.
-const STALE_PENDING_MS = 130 * 1000; // 120s validity + 10s buffer
 
 export default function HistoryPage() {
   const { entries, clearHistory, exportCsv, refresh } = useTxHistory();
@@ -108,6 +117,7 @@ export default function HistoryPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [dateRange, setDateRange] = useState<DateRange>('all');
   const [confirmClear, setConfirmClear] = useState(false);
+  const [refreshingPending, setRefreshingPending] = useState<number>(0);
 
   // Backfill PENDING entries by polling the mirror node. Without this, a tx
   // that injected, signed, and executed on a previous visit would stay
@@ -115,6 +125,10 @@ export default function HistoryPage() {
   // who looks at history days later. Local sessions have a 120s validity;
   // if mirror still doesn't know about a tx that's older than that, it
   // expired (signers didn't meet threshold in time).
+  //
+  // Surfaces an inline "Refreshing N pending…" status while the polling
+  // is in flight — without this, the UI looked frozen during the 1-3s
+  // mirror round-trip.
   useEffect(() => {
     const pending = entries.filter(
       (e) =>
@@ -122,8 +136,12 @@ export default function HistoryPage() {
         e.transactionId &&
         e.transactionId !== 'unknown'
     );
-    if (pending.length === 0) return;
+    if (pending.length === 0) {
+      setRefreshingPending(0);
+      return;
+    }
 
+    setRefreshingPending(pending.length);
     let cancelled = false;
     (async () => {
       let touched = false;
@@ -154,9 +172,6 @@ export default function HistoryPage() {
             }
             touched = true;
           } else if (ageMs > STALE_PENDING_MS) {
-            // Older than the Hedera validity window AND mirror has no record
-            // — the tx was never submitted (signers didn't meet threshold
-            // before the 120s window closed).
             updateTxHistoryEntryStatus(e.transactionId, 'FAILURE', {
               failureReason:
                 'Not found on mirror node after the 120-second window — likely expired before threshold was met.',
@@ -168,13 +183,15 @@ export default function HistoryPage() {
           // Mirror down / transient — leave PENDING; we'll retry next mount.
         }
       }
-      if (touched && !cancelled) refresh();
+      if (!cancelled) {
+        setRefreshingPending(0);
+        if (touched) refresh();
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-    // Re-run when the entry count changes (new injection while page is open).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries.length]);
 
@@ -192,109 +209,93 @@ export default function HistoryPage() {
       );
   }, [entries, statusFilter, dateRange]);
 
-  // ---- Shared Tailwind tokens ----
-  const selectClass =
-    'px-3 py-2 border border-border-strong rounded-lg ' +
-    'bg-surface text-foreground text-sm ' +
-    'focus:border-transparent';
+  const showFilters = entries.length > FILTERS_VISIBLE_THRESHOLD;
 
-  // ------------------------------------------------------------------
-  // Render
-  // ------------------------------------------------------------------
+  // Shared select treatment matching /join's input pattern — keeps the
+  // visible focus ring (a11y regression in the previous version was
+  // `focus:border-transparent` with no replacement).
+  const selectClass =
+    'px-3 py-2 rounded-md text-sm border border-border bg-surface text-foreground ' +
+    'focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent transition-colors';
 
   return (
-    <main className="min-h-screen p-4 sm:p-8 bg-background">
-      <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="page-hero font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+    <main className="min-h-screen bg-background">
+      <section className="max-w-5xl mx-auto px-6 py-8 sm:py-12">
+
+        {/* Header — flat, asymmetric, matching /join post-redesign */}
+        <header className="mb-8 max-w-2xl">
+          <h1 className="page-hero font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-[1.05]">
             Transaction history
           </h1>
-          <p className="console-hide mt-2 text-foreground-muted">
+          <p className="console-hide mt-3 text-foreground-muted leading-relaxed">
             Transactions this browser participated in.
           </p>
-          {/* Treasury keeps the explicit "stored in browser only" warning;
-              console operators know browser storage is browser storage. */}
-          <div className="console-hide mt-4 border-l-2 border-info/60 bg-info-soft/60 pl-4 py-2 text-xs text-info-soft-fg max-w-2xl">
-            <strong>Stored in this browser only.</strong> Switching devices, clearing site data, or using private browsing will reset this list. Use the CSV export below to keep a record.
+          {/* Storage-locality callout — info-soft tint at /20 instead of
+              the previous /60 hedge. Hidden in console (engineers know
+              localStorage). */}
+          <div className="console-hide mt-5 border-l-2 border-info bg-info-soft/30 pl-4 py-2.5 text-xs text-info-soft-fg rounded-r-md">
+            <strong>Stored in this browser only.</strong> Switching devices,
+            clearing site data, or using private browsing will reset this list.
+            Use the CSV export below to keep a record.
           </div>
-        </div>
+        </header>
 
-        <div className="space-y-6">
-
-        {/* Controls row — gets ~/filters pane chrome in console */}
-        <h2 className="sr-only">Filters</h2>
-        <div
-          className="console-pane bg-surface rounded-lg shadow-sm border border-border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3"
-          data-pane-label="~/filters"
-        >
-          {/* Status filter */}
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="status-filter"
-              className="text-sm font-medium text-foreground-muted whitespace-nowrap"
-            >
-              Status:
-            </label>
-            <select
-              id="status-filter"
-              className={selectClass}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            >
-              <option value="ALL">All</option>
-              <option value="SUCCESS">Success</option>
-              <option value="FAILURE">Failure</option>
-              <option value="PENDING">Pending</option>
-            </select>
+        {/* Pending-mirror-poll status line. Only renders while polling
+            is in flight so the user doesn't think the UI is frozen
+            during the mirror round-trip. */}
+        {refreshingPending > 0 && (
+          <div className="mb-4 flex items-center gap-2 text-xs text-foreground-muted" role="status" aria-live="polite">
+            <Spinner />
+            Refreshing {refreshingPending} pending {refreshingPending === 1 ? 'transaction' : 'transactions'}…
           </div>
+        )}
 
-          {/* Date range filter */}
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="date-range"
-              className="text-sm font-medium text-foreground-muted whitespace-nowrap"
-            >
-              Period:
-            </label>
-            <select
-              id="date-range"
-              className={selectClass}
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value as DateRange)}
-            >
-              {(Object.keys(DATE_RANGE_LABELS) as DateRange[]).map((k) => (
-                <option key={k} value={k}>
-                  {DATE_RANGE_LABELS[k]}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Controls row — flat, no card chrome. Filters only render
+            once there are enough entries to filter meaningfully
+            (FILTERS_VISIBLE_THRESHOLD); export/clear are always
+            available when there's any history at all. */}
+        {entries.length > 0 && (
+          <div className="mb-6 flex items-center gap-3 flex-wrap">
+            {showFilters && (
+              <>
+                <label htmlFor="status-filter" className="sr-only">Status</label>
+                <select
+                  id="status-filter"
+                  className={selectClass}
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                  aria-label="Filter by status"
+                >
+                  <option value="ALL">All statuses</option>
+                  <option value="SUCCESS">Success</option>
+                  <option value="FAILURE">Failure</option>
+                  <option value="PENDING">Pending</option>
+                </select>
 
-          {/* Spacer */}
-          <div className="flex-1" />
+                <label htmlFor="date-range" className="sr-only">Period</label>
+                <select
+                  id="date-range"
+                  className={selectClass}
+                  value={dateRange}
+                  onChange={(e) => setDateRange(e.target.value as DateRange)}
+                  aria-label="Filter by period"
+                >
+                  {(Object.keys(DATE_RANGE_LABELS) as DateRange[]).map((k) => (
+                    <option key={k} value={k}>{DATE_RANGE_LABELS[k]}</option>
+                  ))}
+                </select>
+              </>
+            )}
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
+            <div className="flex-1" />
+
             <button
               type="button"
               onClick={exportCsv}
               disabled={filtered.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-surface-recessed text-foreground-muted hover:bg-border dark:hover:bg-foreground-subtle transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-recessed border border-border disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
+              <Icon name="download" size={16} />
               Export CSV
             </button>
 
@@ -303,136 +304,87 @@ export default function HistoryPage() {
                 type="button"
                 onClick={() => setConfirmClear(true)}
                 disabled={entries.length === 0}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-destructive-soft text-destructive-soft-fg hover:bg-destructive-soft dark:hover:bg-destructive-soft transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md text-destructive border border-destructive/30 hover:bg-destructive-soft disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-                Clear History
+                <Icon name="delete_outline" size={16} />
+                Clear history
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-destructive">
-                  Are you sure?
-                </span>
+                <span className="text-sm text-destructive">Are you sure?</span>
                 <button
                   type="button"
                   onClick={() => {
                     clearHistory();
                     setConfirmClear(false);
                   }}
-                  className="cmd px-3 py-1.5 text-sm font-medium rounded-lg bg-destructive text-white hover:bg-destructive transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium rounded-md bg-destructive text-destructive-fg hover:opacity-90 transition-opacity"
                 >
                   Yes, delete all
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmClear(false)}
-                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-border text-foreground-muted hover:bg-border-strong transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-recessed border border-border transition-colors"
                 >
                   Cancel
                 </button>
               </div>
             )}
           </div>
-        </div>
+        )}
 
-        {/* Table / empty state */}
+        {/* Table or empty state */}
         {filtered.length === 0 ? (
-          <div className="bg-surface rounded-lg shadow-sm border border-border p-12 text-center">
-            <svg
-              className="w-16 h-16 mx-auto text-foreground-subtle mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <h2 className="text-xl font-semibold text-foreground-muted mb-2">
-              No transactions yet
-            </h2>
-            <p className="text-foreground-subtle max-w-md mx-auto">
-              Transactions you create or participate in will appear here.
-              History is stored locally in your browser and never leaves your
-              device.
-            </p>
-            <Link
-              href="/create"
-              className="cmd inline-block mt-6 px-6 py-3 bg-accent text-white font-semibold rounded-lg hover:bg-accent-hover transition-colors"
-            >
-              Create a Transaction
-            </Link>
-          </div>
+          entries.length === 0 ? <EmptyState /> : <NoMatchesState />
         ) : (
           <>
-          <h2 className="sr-only">Transactions</h2>
-          <div
-            className="console-pane bg-surface rounded-lg shadow-sm border border-border overflow-hidden"
-            data-pane-label="~/log"
-          >
-            {/* Scrollable table wrapper */}
-            <div className="overflow-x-auto">
+            <h2 className="sr-only">Transactions</h2>
+            <div
+              className="console-pane overflow-x-auto"
+              data-pane-label="~/log"
+            >
               <table className="w-full text-sm text-left">
                 <caption className="sr-only">Transaction history</caption>
                 <thead>
-                  <tr className="border-b border-border bg-surface-recessed">
-                    <th className="px-4 py-3 font-medium text-foreground-muted">
+                  <tr className="border-b border-border">
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wider text-foreground-muted">
                       <span className="treasury-label">Date</span>
                       <span className="console-label">ts</span>
                     </th>
-                    <th className="px-4 py-3 font-medium text-foreground-muted">
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wider text-foreground-muted">
                       Type
                     </th>
-                    <th className="px-4 py-3 font-medium text-foreground-muted">
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wider text-foreground-muted">
                       <span className="treasury-label">Transaction ID</span>
                       <span className="console-label">tx_id</span>
                     </th>
-                    <th className="px-4 py-3 font-medium text-foreground-muted">
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wider text-foreground-muted">
                       Status
                     </th>
-                    <th className="px-4 py-3 font-medium text-foreground-muted">
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wider text-foreground-muted">
                       <span className="treasury-label">Network</span>
                       <span className="console-label">net</span>
                     </th>
-                    <th className="px-4 py-3 font-medium text-foreground-muted">
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wider text-foreground-muted">
                       <span className="treasury-label">HashScan</span>
                       <span className="console-label">scan</span>
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                <tbody className="divide-y divide-border">
                   {filtered.map((entry) => (
                     <tr
                       key={entry.id}
-                      className="hover:bg-surface-recessed dark:hover:bg-surface-recessed transition-colors"
+                      className="hover:bg-surface-recessed/50 transition-colors"
                     >
-                      {/* Date */}
-                      <td className="px-4 py-3 whitespace-nowrap text-foreground-muted">
+                      <td className="px-3 py-3 whitespace-nowrap text-foreground-muted">
                         {formatDate(entry.timestamp)}
                       </td>
-
-                      {/* Type */}
-                      <td className="px-4 py-3 whitespace-nowrap text-foreground font-medium">
+                      <td className="px-3 py-3 whitespace-nowrap text-foreground font-medium">
                         {txTypeLabel(entry.transactionType)}
                       </td>
-
-                      {/* Transaction ID */}
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1">
                           <span
                             className="font-mono text-xs text-foreground-muted"
@@ -447,27 +399,13 @@ export default function HistoryPage() {
                           />
                         </div>
                       </td>
-
-                      {/* Status */}
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <StatusBadge status={entry.status} />
                       </td>
-
-                      {/* Network */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
-                            entry.network === 'mainnet'
-                              ? 'bg-success-soft text-success-soft-fg'
-                              : 'bg-warning-soft text-warning-soft-fg'
-                          }`}
-                        >
-                          {entry.network}
-                        </span>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <NetworkChip network={entry.network} />
                       </td>
-
-                      {/* HashScan link */}
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <a
                           href={getHashScanTransactionUrl(
                             entry.transactionId,
@@ -478,19 +416,7 @@ export default function HistoryPage() {
                           className="inline-flex items-center gap-1 text-accent hover:underline text-xs font-medium"
                         >
                           View
-                          <svg
-                            className="w-3.5 h-3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                            />
-                          </svg>
+                          <Icon name="open_in_new" size={14} />
                         </a>
                       </td>
                     </tr>
@@ -499,24 +425,21 @@ export default function HistoryPage() {
               </table>
             </div>
 
-            {/* Summary footer */}
-            <div className="px-4 py-3 border-t border-border bg-surface-recessed text-xs text-foreground-subtle">
+            {/* Summary footer — flat row, not a card. */}
+            <p className="mt-3 text-xs text-foreground-subtle">
               Showing {filtered.length} of {entries.length} transaction
               {entries.length !== 1 ? 's' : ''}.
-              {entries.length > 0 && (
-                <> Data stored locally in this browser only.</>
-              )}
-            </div>
-          </div>
+              {entries.length > 0 && <> Stored locally in this browser only.</>}
+            </p>
           </>
         )}
 
-        {/* Info — lighter treatment, separated from main content. Hidden in
+        {/* About details — quiet disclosure at the bottom. Hidden in
             console (engineers know what localStorage is). */}
-        <div className="console-hide mt-6 border-t border-border pt-6">
+        <div className="console-hide mt-12 pt-6 border-t border-border">
           <details className="text-sm text-foreground-muted">
-            <summary className="cursor-pointer font-medium text-foreground-muted">
-              About Transaction History
+            <summary className="cursor-pointer font-medium text-foreground-muted hover:text-foreground transition-colors">
+              About transaction history
             </summary>
             <ul className="list-disc list-inside space-y-1 mt-3">
               <li>
@@ -535,9 +458,100 @@ export default function HistoryPage() {
             </ul>
           </details>
         </div>
-        </div>
-      </div>
+      </section>
       <Footer variant="compact" />
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Local sub-components
+// ---------------------------------------------------------------------------
+
+/**
+ * Empty state for the "no transactions ever" case. Dual CTAs match the
+ * landing page's two-audience framing — Join is the primary path (most
+ * arrivals are joiners), Create is the secondary ghost. Replaces the
+ * previous bordered-card centered-clock-icon layout.
+ */
+function EmptyState() {
+  return (
+    <div className="py-16 sm:py-20 max-w-md">
+      <Icon name="receipt_long" size={48} className="text-foreground-subtle mb-4" />
+      <h2 className="font-heading text-xl font-bold text-foreground mb-2">
+        No transactions yet
+      </h2>
+      <p className="text-foreground-muted leading-relaxed mb-6">
+        Transactions you create or participate in will appear here. History
+        is stored locally in your browser and never leaves your device.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Link
+          href="/join"
+          className="cmd hero-cta-primary inline-flex items-center justify-center px-5 py-2.5 rounded-md text-sm font-semibold bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
+        >
+          Join session
+          <span className="treasury-label ml-2 opacity-70">→</span>
+        </Link>
+        <Link
+          href="/create"
+          className="cmd inline-flex items-center justify-center px-5 py-2.5 rounded-md text-sm font-semibold text-foreground border border-border-strong hover:bg-surface-recessed transition-colors"
+        >
+          Create session
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * "No matches" state — entries exist but the active filters
+ * exclude them all. Distinct from the no-history-ever empty
+ * state; the action here is "broaden your filters", not
+ * "go start something".
+ */
+function NoMatchesState() {
+  return (
+    <div className="py-12 max-w-md">
+      <Icon name="filter_alt_off" size={36} className="text-foreground-subtle mb-3" />
+      <h2 className="font-heading text-lg font-bold text-foreground mb-1">
+        No matches
+      </h2>
+      <p className="text-foreground-muted text-sm leading-relaxed">
+        No transactions match the current filters. Try widening the date range
+        or selecting a different status.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Network chip in the table column. Mainnet keeps the success-soft
+ * tint (real-money signal); testnet now uses a true neutral
+ * (surface-recessed + foreground-muted) instead of warning-yellow,
+ * which previously misappropriated the warning palette to
+ * communicate "non-mainnet" — a metadata distinction, not a status.
+ */
+function NetworkChip({ network }: { network: string }) {
+  const isMainnet = network === 'mainnet';
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono ${
+        isMainnet
+          ? 'bg-success-soft text-success-soft-fg'
+          : 'bg-surface-recessed text-foreground-muted'
+      }`}
+    >
+      {network}
+    </span>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      className="inline-block w-3 h-3 rounded-full border-2 border-current border-r-transparent animate-spin"
+      aria-hidden="true"
+    />
   );
 }
