@@ -58,7 +58,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 2. **Visit the dApp**: Go to the hosted dApp URL or run locally
 
-3. **Join Session**: Click "Join Signing Session" and enter your credentials
+3. **Join Session**: Click "Join session" and enter your credentials
 
 4. **Connect Wallet**: Connect your Hedera wallet via WalletConnect
 

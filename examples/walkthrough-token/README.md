@@ -168,7 +168,7 @@ TokenAssociate transaction. Verify the on-screen verified data:
 - **Account**: your `thresholdAccountId`
 - **Tokens**: the two token IDs from step 4
 
-Click **Approve & Sign**. HashPack will prompt — approve.
+Click **Approve**. HashPack will prompt — approve.
 
 ### A.3. Sign as bob (CLI)
 

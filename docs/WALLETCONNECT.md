@@ -126,7 +126,7 @@ WalletConnect enables:
 5. **Review Transaction**: dApp displays transaction details
    - **VERIFIED DATA** (green) - Cryptographically verified from transaction bytes
    - **UNVERIFIED METADATA** (yellow) - Advisory info from coordinator
-6. **Approve & Sign**: Click "Approve & Sign" in dApp
+6. **Approve**: Click "Approve" in dApp
 7. **Sign in Wallet**: Wallet prompts for signature approval
    - Desktop: Approve in browser extension
    - Mobile: Approve in mobile app
@@ -215,7 +215,7 @@ Your coordinator needs your **public key** to add you to the signing session.
 2. **Open dApp**: Navigate to the deployed dApp URL
 
 3. **Join Session**:
-   - Click "Join Signing Session"
+   - Click "Join session"
    - Enter Server URL, Session ID, PIN
    - Click "Next"
 
@@ -233,7 +233,7 @@ Your coordinator needs your **public key** to add you to the signing session.
 7. **Review & Sign**:
    - Carefully review VERIFIED transaction data
    - Check for any validation warnings
-   - Click "Approve & Sign"
+   - Click "Approve"
    - Approve in wallet popup
 
 8. **Wait for Completion**: Other participants must also sign
@@ -420,7 +420,7 @@ The beauty of this architecture: **CLI and Web participants can work together se
 5. All participants review transaction (CLI shows in terminal, Web shows in browser)
 6. Participants approve and sign:
    - CLI: Type "approve" and press Enter
-   - Web: Click "Approve & Sign" and approve in wallet
+   - Web: Click "Approve" and approve in wallet
 7. First 3 signatures trigger execution (can be any combination of CLI/Web)
 
 **Server Perspective**: All signatures are identical in format. Server validates signature cryptographically, regardless of source.
@@ -531,7 +531,7 @@ The dApp uses Hedera's official WalletConnect library, which supports **any wall
 
 The dApp **requires** explicit approval:
 1. Transaction displays in review UI
-2. You must click "Approve & Sign"
+2. You must click "Approve"
 3. You can also click "Reject" to refuse signing
 
 **Never sign without reviewing**:
@@ -589,7 +589,7 @@ The dApp **requires** explicit approval:
 **Solutions**:
 1. **Unlock wallet**: Ensure wallet is unlocked
 2. **Check balance**: Ensure account has HBAR for transaction fees (usually tiny)
-3. **Retry**: Click "Approve & Sign" again
+3. **Retry**: Click "Approve" again
 4. **Check network**: Verify wallet is on correct network (testnet/mainnet)
 5. **Contact coordinator**: May need to re-inject transaction
 

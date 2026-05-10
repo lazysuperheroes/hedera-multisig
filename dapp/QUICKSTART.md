@@ -104,7 +104,7 @@ Open your browser to **http://localhost:3000**
 ### In the Browser:
 
 1. **Join Session:**
-   - Click "Join Signing Session"
+   - Click "Join session"
    - Enter Server URL, Session ID, PIN from Step 3
    - Click "Next"
 
@@ -132,7 +132,7 @@ Open your browser to **http://localhost:3000**
    - Review carefully
 
 6. **Sign:**
-   - Click "Approve & Sign"
+   - Click "Approve"
    - Approve in wallet popup
    - Wait for success message
 

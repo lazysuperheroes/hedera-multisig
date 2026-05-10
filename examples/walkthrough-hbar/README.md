@@ -195,7 +195,7 @@ The fastest path: paste the **Connection String** from the CLI output
 into the *Connection string* field at the top of `/create`. It
 auto-fills Server URL, Session ID, and PIN. Then enter the
 **Coordinator Token** (the one field that isn't in the HMSC) and click
-**Connect as Coordinator**.
+**Connect as coordinator**.
 
 If you'd rather fill the fields manually, use these mappings from the
 CLI server output (terminal 1):

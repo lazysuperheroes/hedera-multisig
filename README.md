@@ -185,7 +185,7 @@ console.log('Transaction executed:', result.transactionId);
 
 3. **Join Session**:
    ```
-   1. Click "Join Signing Session"
+   1. Click "Join session"
    2. Enter Server URL, Session ID, PIN
    3. Connect your wallet (HashPack or Blade)
    4. Review transaction details

@@ -245,7 +245,7 @@ After deployment, verify the following:
 
 3. **Join from Production dApp**:
    - Go to your deployed URL
-   - Click "Join Signing Session"
+   - Click "Join session"
    - Enter tunnel WebSocket URL, Session ID, PIN
    - Connect wallet and complete signing flow
 

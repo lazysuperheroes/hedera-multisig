@@ -310,7 +310,7 @@ npx hedera-multisig offline freeze -t token-burn --token 0.0.T --amount 500
 
 - [ ] Three use case cards visible (Treasury, Agent, Scheduled)
 - [ ] Security features row visible
-- [ ] "Join Signing Session" button → /join
+- [ ] "Join session" button → /join
 - [ ] "Coordinator Panel" button → /create
 - [ ] GitHub and npm links work
 

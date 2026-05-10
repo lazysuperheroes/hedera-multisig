@@ -79,7 +79,7 @@ Click "Environment Variables" and add:
 
 1. Open: `https://hedera-multisig-testnet.vercel.app`
 2. Verify landing page loads
-3. Click "Join Signing Session"
+3. Click "Join session"
 4. Try connecting wallet (ensure wallet is on **testnet**)
 5. Verify no console errors
 
@@ -138,7 +138,7 @@ Click "Environment Variables" and add:
 
 1. Open: `https://hedera-multisig.vercel.app`
 2. Verify landing page loads
-3. Click "Join Signing Session"
+3. Click "Join session"
 4. Try connecting wallet (ensure wallet is on **mainnet**)
 5. Verify no console errors
 

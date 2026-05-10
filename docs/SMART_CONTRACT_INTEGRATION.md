@@ -538,7 +538,7 @@ View on HashScan: https://hashscan.io/testnet/transaction/0.0.123456@1234567890.
 - Description: "Transfer 1000 tokens from treasury..."
 - Notes: [recipient, amount, purpose]
 
-4. **Click "Approve & Sign"** - WalletConnect modal opens
+4. **Click "Approve"** - WalletConnect modal opens
 5. **Sign in Wallet** - Approve signature in HashPack/Blade
 6. **Signature Submitted** - Shows progress (1/3, 2/3, 3/3)
 7. **Transaction Executed** - Success message with HashScan link

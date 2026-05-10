@@ -129,7 +129,7 @@ node -e "console.log(require('@hashgraph/sdk').PrivateKey.fromString('YOUR_PRIVA
 5. **Open browser to http://localhost:3000**
 
 6. **Join the session:**
-   - Click "Join Signing Session"
+   - Click "Join session"
    - Enter Server URL, Session ID, PIN
    - Click "Next"
 
@@ -156,7 +156,7 @@ node -e "console.log(require('@hashgraph/sdk').PrivateKey.fromString('YOUR_PRIVA
       - Description
 
 11. **Sign the transaction:**
-    - Click "Approve & Sign"
+    - Click "Approve"
     - Wallet popup opens
     - Approve signature in wallet
     - Verify success toast notification
@@ -220,7 +220,7 @@ node -e "console.log(require('@hashgraph/sdk').PrivateKey.fromString('YOUR_PRIVA
 
 10. **In dApp browser:**
     - Review transaction
-    - Click "Approve & Sign"
+    - Click "Approve"
     - Sign in wallet
 
 11. **Verify both signatures collected:**
@@ -288,7 +288,7 @@ node -e "console.log(require('@hashgraph/sdk').PrivateKey.fromString('YOUR_PRIVA
 **Test 4.5: User Rejects Signature**
 
 1. Review transaction
-2. Click "Approve & Sign"
+2. Click "Approve"
 3. Reject signature in wallet popup
 4. **Expected**: Error toast, can retry signing
 

@@ -843,7 +843,7 @@ node cli/server.js -t 2 -k "key1,key2,key3"
 
 # Web Participants
 # 1. Open deployed dApp in browser
-# 2. Click "Join Signing Session"
+# 2. Click "Join session"
 # 3. Enter session URL, ID, PIN
 # 4. Connect wallet (HashPack/Blade)
 # 5. Review and sign in wallet
@@ -887,7 +887,7 @@ node cli/participant.js --url wss://... --session abc123 --pin 123456 --key cli-
 
 # Web participants join via browser:
 # - Open dApp URL
-# - Click "Join Signing Session"
+# - Click "Join session"
 # - Connect wallet and complete flow
 
 # All 4 can participate, need 2 signatures (threshold)

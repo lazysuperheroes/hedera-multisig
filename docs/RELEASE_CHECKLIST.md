@@ -47,7 +47,7 @@ npm run precheck
 
 - **Path A** — dApp `/create` "Build from form" tab (paste ABI from
   `Counter.json`, pick function, click Inject)
-- **Path B** — dApp `/create` "Paste frozen TX" tab (paste base64 from
+- **Path B** — dApp `/create` "Paste frozen transaction" tab (paste base64 from
   `07-prepare-multisig-increment.js`)
 - **Path C** — `npx hedera-multisig inject --connect "..." --base64-file
   multisig-increment-tx.json --coordinator-token "..."`
