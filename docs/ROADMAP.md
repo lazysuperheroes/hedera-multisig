@@ -248,6 +248,7 @@ parsed `Transaction` object before sending to the wallet, breaking
 verify against the original bodyBytes. v2.2.0 fixed this by bypassing
 `DAppSigner.signTransaction` and sending the original bodyBytes
 directly via the `SignTransaction` RPC method (`dapp/lib/walletconnect.ts`).
+Upstream issue: [hashgraph/hedera-wallet-connect#694](https://github.com/hashgraph/hedera-wallet-connect/issues/694).
 
 The remaining reason single-node stays default: the WalletConnect
 `SignTransaction` RPC method signs **one body per popup**. Multi-node

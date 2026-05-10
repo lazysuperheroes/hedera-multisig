@@ -1,5 +1,6 @@
 # `DAppSigner.signTransaction` rebuilds `TransactionBody`, breaking multi-sig signature aggregation
 
+**Filed at:** [hashgraph/hedera-wallet-connect#694](https://github.com/hashgraph/hedera-wallet-connect/issues/694)
 **Repository:** [hashgraph/hedera-wallet-connect](https://github.com/hashgraph/hedera-wallet-connect)
 **Affected file:** `src/lib/dapp/DAppSigner.ts` (compiled: `dist/lib/dapp/DAppSigner.js`)
 **Affected method:** `DAppSigner.signTransaction(transaction)`

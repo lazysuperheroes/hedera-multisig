@@ -386,6 +386,11 @@ export const fetchConnectedAccountData = async (): Promise<void> => {
  * SignedTransaction wrapping the SAME original bodyBytes. Verify
  * works. Aggregation works.
  *
+ * Upstream tracking: https://github.com/hashgraph/hedera-wallet-connect/issues/694
+ * When that lands and we bump the dep, the bypass below can collapse
+ * back to `signer.signTransaction(transaction)`. Until then we keep
+ * our verbatim-bodyBytes path.
+ *
  * Multi-node freeze caveat: we make ONE wallet call (matching the
  * spec's expectation of one signature prompt per signing operation)
  * and apply the resulting sig only to body[0]. Bodies 1..N stay

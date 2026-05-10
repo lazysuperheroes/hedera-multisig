@@ -416,7 +416,8 @@ sidesteps the multi-popup problem and keeps the ceremony tight.
 > `DAppSigner.signTransaction` entirely (`dapp/lib/walletconnect.ts`)
 > and sends the original bodyBytes directly via the RPC method. Both
 > HashPack and Kabila now sign contract calls successfully in
-> multi-sig ceremonies.
+> multi-sig ceremonies. Upstream issue:
+> [hashgraph/hedera-wallet-connect#694](https://github.com/hashgraph/hedera-wallet-connect/issues/694).
 
 ### When to opt up
 
