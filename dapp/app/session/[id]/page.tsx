@@ -218,9 +218,16 @@ export default function SessionPage({ params }: PageProps) {
         pin: parsed.pin,
       });
 
-      // PIN has been consumed — purge the per-tab handoff immediately.
-      // After this point the session uses reconnectionToken only.
-      try { sessionStorage.removeItem('hedera-multisig-pending-join'); } catch {}
+      // Don't purge the sessionStorage handoff here. React 18 StrictMode
+      // dev double-mounts this component: mount #1 consumes, then
+      // unmounts before AUTH_SUCCESS lands a reconnectionToken in
+      // localStorage; mount #2 sees no sessionStorage AND a
+      // reconnectionToken-less saved session (which `useSessionRecovery`
+      // discards) — net result, "No session information found." Leaving
+      // the key alone makes the read idempotent across remounts and
+      // retry-on-auth-failure. sessionStorage auto-clears on tab close,
+      // and re-running /join overwrites it, so leaving it in place for
+      // the tab's lifetime is benign.
 
       setCurrentStep('wallet-connect');
     } catch (error) {
