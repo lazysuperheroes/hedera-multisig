@@ -42,7 +42,7 @@
 		"@hashgraph/sdk": "^2.49.0",
 		"chalk": "^4.1.2",
 		"commander": "^14.0.2",
-		"dotenv": "^16.0.0",
+		"dotenv": "^17.4.2",
 		"ethers": "^6.16.0",
 		"@ngrok/ngrok": "^1.7.0",
 		"localtunnel": "^2.0.2",
