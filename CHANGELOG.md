@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(no library changes since 2.2.0)
+
+## [2.2.0] - 2026-05-10
+
+A feature release built on top of the v2.1.0 supply-chain stabilization.
+Headline additions for library consumers:
+
+1. **Scheduled-transaction Coordinator UI (HIP-423) end-to-end** — the dApp
+   `/create` page can now build + announce a `ScheduleCreateTransaction`,
+   the WebSocket protocol gains `SCHEDULE_ANNOUNCE` / `SCHEDULE_CREATED`
+   messages, and the CLI participant handles scheduled sessions natively
+   (no more "join via dApp → drop to CLI to call `schedule sign`" hand-off).
+2. **Multi-node freeze restored as the canonical Hedera multi-sig pattern**
+   — wire protocol now sends `signatures: string[]` (one base64 sig per
+   `SignedTransaction` body); `selectNodeAccountIds()` helper, tx-size
+   estimator that warns green/amber/red before injecting.
+3. **Two new walkthroughs** — `walkthrough-scheduled` (24h-window async
+   HBAR) and `walkthrough-ecdsa` (2-of-3 ceremony with secp256k1 keys
+   instead of Ed25519, validating the stack is curve-agnostic).
+4. **Richer `ScheduledWorkflow.signSchedule` return shape** — distinguishes
+   "your sig met threshold" (`executed: true`, `innerTxId: '0.0.X@…'`) from
+   "schedule already executed by another signer" (`alreadyExecuted: true`)
+   from "sig accepted, more needed" (`executed: false`).
+
+The hosted dApp at `testnet-multisig.lazysuperheroes.com` and
+`multisig.lazysuperheroes.com` also went through a comprehensive UX
+overhaul during this release cycle (every page + 25+ components flattened
+to a consistent post-redesign discipline; zero AI-slop fingerprints in
+audit verification). That work doesn't ship via the npm package — the
+dApp lives in `dapp/` and deploys to Vercel — but library consumers
+joining the hosted dApp will see it.
+
 ### Added
 
 - **Scheduled-transaction Coordinator UI (HIP-423) — full dApp parity.** The dApp's `/create` page now ships a "Schedule this transaction" disclosure (collapsed by default — secondary affordance, not overwhelming) below the freeze-strategy panel, with an expiration picker (defaults to `24h`, validates up to ~62d), optional schedule memo, and an "Advanced" sub-disclosure for payer override / admin key. When the toggle is on, `useTransactionInjection.ts` builds the inner tx unfrozen, wraps it in `ScheduleCreateTransaction`, signs via the wallet, executes against the network directly, then sends a new `SCHEDULE_ANNOUNCE` message to the WS server with the resulting `scheduleId` + inner-tx context. Closes the largest dApp/CLI parity gap from the v2.1.0 release. (`dapp/components/create/ScheduleOptions.tsx`, `dapp/lib/timeParser.ts`)
@@ -28,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`/create` "Build another" reset now clears `scheduleOptions` to defaults.** Previously the toggle persisted between transactions, which was confusing if the second tx was meant to be realtime. Explicit beats sticky for an affordance with cost implications.
 - **`examples/walkthrough-contract/` is now self-contained** — adds `setup-keys.js` and `verify-on-mirror.js` locally so it no longer reads from `../walkthrough-hbar/`. The "copy from walkthrough-hbar" path is documented as an optional shortcut for users who already have the keys.
 - **dApp Share tab credential surfaces removed sacred-color decoration** — PIN no longer warning-yellow, Coordinator Token no longer destructive-red. Status colors stay reserved for actual semantic meaning per `.impeccable.md`. Coordinator Token gets a show/hide toggle (default hidden) to prevent screenshare/recording footguns.
-- **dApp version 2.1.4 → 2.1.26; root version 2.1.14 → 2.1.15.** Most increments are dApp-side scheduled-UI work; root bump captures the CLI participant + `ScheduledWorkflow` changes.
+- **dApp version 2.1.4 → 2.1.37; root version 2.1.14 → 2.2.0.** dApp increments cover the full scheduled-tx UI work *and* the post-redesign UX overhaul (every page + 25+ components flattened, audit-verified zero AI-slop fingerprints). Root bump captures the new library functionality: CLI participant native scheduled handling, `ScheduledWorkflow` richer return shape, `SCHEDULE_ANNOUNCE` / `SCHEDULE_CREATED` protocol messages, multi-node freeze restored, two new walkthroughs.
 
 ### Fixed
 - Misleading "Transaction injected successfully — participants have 120 seconds from now to sign" banner that persisted into the post-execution state — removed entirely; the new completed-receipt view replaces it.
