@@ -92,8 +92,14 @@ jobs:
       - name: Publish to npm with provenance
         if: github.event.inputs.dry_run != 'true'
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # No NODE_AUTH_TOKEN — npmjs.com is configured for OIDC trusted
+        # publishing from this exact workflow (org=lazysuperheroes,
+        # repo=hedera-multisig, workflow=release.yml). The id-token:write
+        # permission above lets the runner mint an OIDC token, which the
+        # npm CLI auto-detects and exchanges for a publish credential.
+        # Passing an (empty) NODE_AUTH_TOKEN here would override that and
+        # produce ENEEDAUTH, which is exactly what blocked every prior
+        # tag-push during the v2.2.0 release cycle.
 
       - name: Output release link
         if: github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/')
