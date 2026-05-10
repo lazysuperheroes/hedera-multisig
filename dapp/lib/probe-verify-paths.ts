@@ -4,21 +4,23 @@
  * `verify(bodyBytes, signature)` fails despite identical bodyBytes
  * and a matching public key.
  *
- * Goal: tell us WHAT the wallet actually signed so we can decide
- * whether the ceremony can recover.
+ * Originally built during the v2.2.0 ContractExecute investigation to
+ * test the hypothesis that wallets were signing some non-standard
+ * message form (sha384, prefixed, etc.). 19 candidates ruled out, all
+ * failed — which redirected the investigation to the wallet-side
+ * adapter, where we found `@hashgraph/hedera-wallet-connect`'s
+ * `DAppSigner.signTransaction` rebuilding the TransactionBody before
+ * sending to the wallet. Fixed by bypass in `dapp/lib/walletconnect.ts`.
  *
- * Important caveat: the Hedera network itself enforces "sign(bodyBytes)
- * directly". So even if this probe finds that a wallet signs e.g.
- * sha384(bodyBytes), the resulting signature is still unusable for
- * on-chain submission — the chain would reject it. A positive probe
- * result confirms the wallet is non-compliant; it does NOT give us a
- * recoverable signature.
+ * Kept as a regression-detection tool: any future signature-mismatch
+ * (new SDK bug, new wallet quirk, our own bypass regressing) will
+ * surface a definitive negative here, telling investigators "stop
+ * looking at the wallet, look at the adapter / our code path."
  *
- * What it can deliver:
- *   - Definitive answer to "is this a wallet bug or our bug?"
- *   - File-able evidence for a Kabila / wallet-vendor issue.
- *   - Confidence to redirect users to HashPack or CLI participants
- *     for ContractExecute live ceremonies.
+ * Caveat: a positive match (wallet signs e.g. sha384(bodyBytes))
+ * confirms what the wallet did but does NOT give us a recoverable
+ * signature, because the Hedera network only accepts sigs over
+ * bodyBytes directly. Diagnostic, not a workaround.
  *
  * Localhost-gated; harmless to leave in.
  */

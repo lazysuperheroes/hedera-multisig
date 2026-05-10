@@ -1,36 +1,37 @@
 /**
  * Node selection for multi-sig transaction freezes.
  *
- * Default: single-node freeze (subsetSize=1). Counter-intuitive choice
- * for a multi-sig library — the canonical Hedera pattern is to freeze
- * against multiple nodes so execute() can rotate to any healthy one if
- * the first is busy. Why we default to 1 anyway:
+ * Default: single-node freeze (subsetSize=1). The canonical Hedera
+ * pattern is to freeze against multiple nodes so execute() can rotate
+ * to any healthy one if the first is busy. Why we default to 1 anyway:
  *
- *   - HashPack via WalletConnect (the dominant browser wallet for
- *     Hedera) re-freezes `ContractExecuteTransaction` internally —
- *     it applies its own gas / fee / timestamp adjustments before
- *     signing. The signatures it returns are valid against ITS frozen
- *     bytes but not against the coordinator's stored bytes, so a
- *     multi-node freeze + wallet signer = "0 signatures verified" and
- *     the ceremony hard-fails with no recovery path.
- *   - HBAR transfers happen to work (HashPack signs them verbatim) so
- *     the bug doesn't surface in transfer-only walkthroughs.
- *   - Single-node freeze sidesteps the issue entirely: there's only
- *     one body, the wallet either signs it verbatim or its re-freeze
- *     happens to match. Either way the ceremony completes.
+ *   - The WalletConnect `SignTransaction` RPC method signs ONE body
+ *     per popup. Multi-node freeze with N bodies would either need N
+ *     popups (poor UX — user clicks "Approve" N times for what feels
+ *     like one transaction) or fall back to body[0]-only signing,
+ *     which the server already supports via its trim-to-body[0]
+ *     fallback at execute time. Single-node sidesteps the multi-popup
+ *     question entirely.
  *
- * Trade-off: lose multi-node submission resilience. If the chosen
- * node is busy, the SDK's submit retry doesn't have siblings to fan
- * out to. Acceptable: per-node Hedera consensus uptime is high; a
- * one-shot ceremony is short-lived; the alternative is "works for
- * CLI but breaks for browser wallets" which is a worse default.
+ * Historical note (resolved in v2.2.0): earlier versions of this
+ * comment described a wallet "re-freeze" bug where HashPack/Kabila
+ * signatures didn't verify against the coordinator's stored bytes for
+ * `ContractExecuteTransaction`. The actual root cause was upstream
+ * in `@hashgraph/hedera-wallet-connect`'s `DAppSigner.signTransaction`,
+ * which rebuilt the TransactionBody from the parsed Transaction before
+ * sending to the wallet. Fixed in v2.2.0 by bypass in
+ * `dapp/lib/walletconnect.ts`. Wallet signers now work for any tx type.
+ *
+ * Trade-off of single-node default: lose multi-node submission
+ * resilience. If the chosen node is busy, the SDK's submit retry
+ * doesn't have siblings to fan out to. Mitigated by `orderByHealth`.
  *
  * Bump `subsetSize` for CLI-only ceremonies that don't involve any
  * wallet signers — those benefit from full multi-node resilience and
- * never trigger the wallet re-freeze quirk.
+ * sign every body verbatim through the Hedera SDK's PrivateKey.sign.
  *
- * If/when wallets fix the re-freeze behavior, revisit this default —
- * see docs/ROADMAP.md.
+ * Future enhancement tracked in docs/ROADMAP.md: iterate the wallet
+ * popup N times for multi-node ceremonies.
  *
  * Strategies:
  *   - 'subset' (default): random N from client.network. Default N=1.

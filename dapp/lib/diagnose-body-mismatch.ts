@@ -1,14 +1,20 @@
 /**
- * Diagnostic helper for the wallet-re-freeze problem.
+ * Diagnostic helper for body-bytes mismatch between coordinator and
+ * wallet-returned SignedTransaction.
  *
- * When a wallet (HashPack, Kabila, etc.) returns signatures that don't
- * verify against the coordinator's stored bodyBytes, we want to know
- * EXACTLY what changed. Running this against the (coordBodies,
- * walletBodies) pair walks the protobuf TransactionBody and emits a
- * field-level diff to console.
+ * Originally written to debug what we believed was a wallet "re-freeze"
+ * bug for `ContractExecuteTransaction`. The actual root cause turned
+ * out to be in `@hashgraph/hedera-wallet-connect`'s
+ * `DAppSigner.signTransaction`, which rebuilt the TransactionBody from
+ * the parsed Transaction before sending to the wallet (see
+ * `dapp/lib/walletconnect.ts` for the bypass + fix).
  *
- * Currently dev-only — hostname check below restricts to localhost /
- * 127.0.0.1 / *.local so production users don't pay the @hashgraph/proto
+ * Kept around because it remains useful: any future signature-mismatch
+ * regression (new SDK bug, new wallet quirk, our own freeze logic
+ * changing) will surface here as a field-level proto diff. Cheap to
+ * leave, hard to recreate from scratch when needed.
+ *
+ * Localhost-gated — production users don't pay the @hashgraph/proto
  * decode cost on every signing failure. Bypass with
  * NEXT_PUBLIC_DEBUG_TX=1 if you want it active in a deployed test.
  *
@@ -17,13 +23,6 @@
  *   [diag] body[0] mismatch (coord 245B / wallet 245B)
  *   [diag]   transactionFee:    coord=200000000 wallet=300000000   ← CHANGED
  *   [diag]   contractCall.gas:  coord=0         wallet=80000       ← CHANGED
- *   [diag]   transactionID:     identical
- *   [diag]   nodeAccountID:     identical
- *   [diag]   memo:              identical
- *
- * Useful for: figuring out whether to pre-set fields on the prep-script
- * side, or whether the wallet's adjustments are unrecoverable for
- * cross-signer aggregation (in which case scheduled-tx is the answer).
  */
 
 const isDevHost = (): boolean => {

@@ -393,48 +393,49 @@ downtime, opt up to multi-node by passing `subsetSize: 6` to
 
 Multi-node freeze is the canonical Hedera multi-sig pattern: sign every
 node body up front so `execute()` can rotate to any healthy node if the
-first is busy. Beautiful in theory; broken with browser wallets in
-practice.
+first is busy.
 
-**HashPack via WalletConnect re-freezes `ContractExecuteTransaction`
-internally** before signing — it applies its own gas / fee / timestamp
-adjustments. The signatures it returns are valid against ITS frozen
-bytes, not against the coordinator's stored bytes. Result with a
-multi-node freeze:
+We default to single-node anyway because the WalletConnect
+`SignTransaction` RPC method signs **one body per wallet popup**.
+Multi-node freeze with N bodies would either need N popups (poor UX)
+or fall back to body[0]-only signing — which the server already
+supports via its trim-to-body[0] fallback at execute time. Single-node
+sidesteps the multi-popup problem and keeps the ceremony tight.
 
-```
-[multisig] wallet returned 6 sigMap entries, 0 verified against original bodies
-Error: Wallet returned 6 signatures but none verified against the original transaction bodies.
-```
-
-There's no recovery path — none of the wallet's signatures match any of
-the bodies the server has, so even the executor's "downgrade to
-single-node body[0]" fallback can't rescue the ceremony.
-
-HBAR transfers happen to work multi-node because HashPack signs them
-verbatim, which is why this only surfaces when you start signing
-contract calls.
-
-Single-node freeze sidesteps the whole mess: there's only one body, the
-wallet's re-freeze either matches verbatim or is close enough to land,
-and the ceremony completes.
+> **Historical note (resolved in v2.2.0).** Earlier versions described
+> a wallet bug where HashPack / Kabila "re-froze
+> `ContractExecuteTransaction` internally" and produced signatures that
+> didn't verify against the coordinator's stored bytes. The actual
+> root cause was upstream: `@hashgraph/hedera-wallet-connect`'s
+> `DAppSigner.signTransaction` rebuilds the `TransactionBody` from the
+> parsed `Transaction` object before sending to the wallet, then
+> reattaches the wallet's signature to the *original* preserved
+> bodyBytes. For HBAR / token transfers the rebuild is byte-identical
+> (verify works); for `ContractExecuteTransaction` it diverges
+> (default-value handling, proto field ordering). v2.2.0 bypasses
+> `DAppSigner.signTransaction` entirely (`dapp/lib/walletconnect.ts`)
+> and sends the original bodyBytes directly via the RPC method. Both
+> HashPack and Kabila now sign contract calls successfully in
+> multi-sig ceremonies.
 
 ### When to opt up
 
 ```js
 const { selectNodeAccountIds } = require('@lazysuperheroes/hedera-multisig');
 
-// Default — works everywhere, including with HashPack contract calls
+// Default — single body, single wallet popup, works for any tx type
 const nodes = selectNodeAccountIds(client);
 
-// CLI-only treasury workflow with no wallet signers? Opt up:
+// CLI-only treasury workflow with no wallet signers? Opt up for
+// multi-node resilience — CLI signers sign every body so execute()
+// can rotate to any healthy node:
 const nodes = selectNodeAccountIds(client, { subsetSize: 6 });
 ```
 
 CLI signers (`cli/`, `client/`) produce a full per-body signature array
-because they sign the SDK's bodyBytes directly — no re-freeze. They get
-the full multi-node resilience: if one node is busy, `execute()` retries
-against the others.
+because they sign the SDK's bodyBytes directly. They get the full
+multi-node resilience: if one node is busy, `execute()` retries against
+the others.
 
 ### Cost of the default
 
@@ -444,8 +445,9 @@ biasing the picker toward healthy / recently-active nodes (see
 `shared/node-selection.js#orderByHealth` and `MirrorNodeClient`),
 but it's a real downside vs the multi-node ideal.
 
-If/when wallets stop re-freezing, we'll revisit the default — tracked
-in [`docs/ROADMAP.md`](./docs/ROADMAP.md).
+A future enhancement could iterate the wallet popup N times to collect
+per-body signatures for multi-node ceremonies — tracked in
+[`docs/ROADMAP.md`](./docs/ROADMAP.md).
 
 ---
 

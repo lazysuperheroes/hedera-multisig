@@ -7,9 +7,9 @@
  * pattern for `@hashgraph/sdk`.
  *
  * Default subset size is 1 — see `shared/node-selection.js` for the
- * full rationale (TL;DR: HashPack re-freezes ContractExecuteTransaction
- * internally before signing, multi-node freezes break wallet-signed
- * ceremonies with no recovery path). Bump for CLI-only ceremonies.
+ * full rationale (TL;DR: WalletConnect's SignTransaction RPC signs one
+ * body per popup; multi-node freeze with N bodies would mean N popups).
+ * Bump for CLI-only ceremonies.
  */
 
 import type { AccountId, Client } from '@hashgraph/sdk';

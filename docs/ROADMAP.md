@@ -236,49 +236,46 @@ For now: keep the code, document it as "you almost certainly don't
 need this" (in README + this entry), and don't invest more in it
 without a real ask.
 
-### Revisit the single-node freeze default
+### Multi-popup wallet signing for multi-node freeze
 
-**Status**: Deferred | **Blocked By**: Wallet behavior change
+**Status**: Deferred | **Blocked By**: UX complexity of N wallet popups
 
-`DEFAULT_SUBSET_SIZE` was bumped from 6 down to 1 in 2.1.10 because
-HashPack via WalletConnect re-freezes `ContractExecuteTransaction`
-internally before signing — applying its own gas / fee / timestamp
-adjustments — and its signatures end up valid against ITS frozen bytes
-rather than the coordinator's stored bytes. Multi-node freeze + wallet
-signer = "0 signatures verified" with no recovery path.
+`DEFAULT_SUBSET_SIZE` is 1. The original justification (a wallet bug
+attributed to HashPack/Kabila re-freezing `ContractExecuteTransaction`)
+turned out to be an upstream bug in `@hashgraph/hedera-wallet-connect`'s
+`DAppSigner.signTransaction`: it rebuilt the `TransactionBody` from the
+parsed `Transaction` object before sending to the wallet, breaking
+verify against the original bodyBytes. v2.2.0 fixed this by bypassing
+`DAppSigner.signTransaction` and sending the original bodyBytes
+directly via the `SignTransaction` RPC method (`dapp/lib/walletconnect.ts`).
 
-The single-node default sidesteps this entirely (one body, no drift
-window) but loses multi-node submission resilience: if the picked node
-is busy or unhealthy at submit time, the SDK doesn't have siblings to
-retry against. We mitigate via `orderByHealth` (mirror-node-backed
-node ranking on freeze; see `shared/node-selection.js`), but it's a
-real downside compared to the multi-node ideal.
+The remaining reason single-node stays default: the WalletConnect
+`SignTransaction` RPC method signs **one body per popup**. Multi-node
+freeze with N bodies would either:
+- Require N popups (poor UX — the user clicks "Approve" N times for
+  what they perceive as one transaction), or
+- Fall back to body[0]-only signing — which the server already supports
+  via its trim-to-body[0] fallback at execute time.
 
-**Watch list**:
+Single-node sidesteps the multi-popup question entirely.
 
-- HashPack's WalletConnect adapter starts signing
-  `ContractExecuteTransaction` verbatim (preserving the coordinator's
-  bytes), or
-- A new browser wallet ships with verbatim signing across all tx types
-  and gains meaningful adoption, or
-- A WalletConnect spec change forces wallets to preserve signable
-  body bytes.
+The cost: if the chosen node is busy or unhealthy at submit time, the
+SDK can't rotate to siblings. We mitigate via `orderByHealth`
+(mirror-node-backed ranking on freeze; see `shared/node-selection.js`).
 
-When any of those land, revisit this default. The `selectNodeAccountIds`
-API already supports per-call `subsetSize` overrides so the change is
-contained to changing the constant + walkthrough script defaults +
-docs.
+**Possible future enhancement**: iterate the wallet popup N times
+inside our `signTransaction` to collect per-body signatures for
+multi-node ceremonies. Open question: do users tolerate N popups for
+the resilience win, or is body[0]-trim with a healthy node picker
+"good enough" in practice?
 
-**Files that would need touching** (audit at change time):
+**Files that would need touching if we change the default**:
 
 - `shared/node-selection.js` and `dapp/lib/node-selection.ts` — the
   `DEFAULT_SUBSET_SIZE` constant.
-- `examples/walkthrough-contract/07-prepare-multisig-increment.js`
-  and `08-prepare-multisig-withdraw.js` — currently call out "single-
-  node by default for wallet compat" in their comments.
-- `examples/walkthrough-contract/README.md` — Step 7a's call-out box.
-- Root `README.md` — the "Node freeze defaults" section.
-- `CLAUDE.md` — the "Node freeze selection" section.
+- `dapp/lib/walletconnect.ts` — extend `signTransaction` to iterate
+  per-body if multi-node.
+- Walkthrough docs and CLAUDE.md — adjust framing.
 
 ### Hybrid Air-Gap Bridge
 

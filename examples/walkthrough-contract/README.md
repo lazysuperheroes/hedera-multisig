@@ -205,17 +205,24 @@ verification.
 
 > **Why single-node freeze for contract calls?**
 > The script uses `subsetSize: 1` (the package default since `2.1.10`).
-> HashPack via WalletConnect re-freezes `ContractExecuteTransaction`
-> internally before signing — applying its own gas/fee/timestamp
-> adjustments — and its signatures end up valid against ITS bytes but
-> not against the coordinator's. Multi-node freeze + wallet signer =
-> 0 valid signatures with no recovery path. Single-node sidesteps it.
+> The WalletConnect `SignTransaction` RPC method signs **one body per
+> wallet popup**, so multi-node freeze with N bodies would either need
+> N popups (poor UX) or fall back to body[0]-only signing. Single-node
+> sidesteps the multi-popup question.
 >
 > If your ceremony is **CLI-only** (every signer using a key file or
-> the SDK directly, no HashPack/Blade/etc. in the mix), bump
+> the SDK directly, no HashPack/Kabila/etc. in the mix), bump
 > `subsetSize: 6` in step 7's script for multi-node submission
 > resilience. CLI signers produce full per-body signature arrays that
-> verify cleanly against the coordinator's stored bytes.
+> verify cleanly against every body.
+>
+> Historical note: earlier versions of this guide warned about a
+> wallet "re-freeze" bug for `ContractExecuteTransaction` that broke
+> multi-sig ceremonies with HashPack and Kabila. The actual root cause
+> was upstream in `@hashgraph/hedera-wallet-connect`'s
+> `DAppSigner.signTransaction`. Fixed in v2.2.0 by bypass in
+> `dapp/lib/walletconnect.ts`. Wallet signers now work correctly for
+> contract execution in multi-sig ceremonies via the dApp.
 >
 > See the project's root README for the full node-selection write-up.
 

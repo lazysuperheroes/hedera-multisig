@@ -55,13 +55,14 @@ async function main() {
   const calldata = iface.encodeFunctionData('withdraw', []);
   const txId = TransactionId.generate(state.demoAccountId);
 
-  // Single-node freeze (DEFAULT_SUBSET_SIZE = 1). Mandatory for
-  // wallet-signer compatibility on contract calls — HashPack
-  // re-freezes ContractExecuteTransaction internally and multi-node
-  // freezes leave its signatures stranded against bodies the
-  // coordinator never saw. See README + shared/node-selection.js
-  // for the full rationale. CLI-only ceremonies can bump
-  // `subsetSize: 6` for multi-node submission resilience.
+  // Single-node freeze (DEFAULT_SUBSET_SIZE = 1). The WalletConnect
+  // SignTransaction RPC signs one body per popup, so multi-node freeze
+  // with N bodies would mean N popups for the user. CLI-only
+  // ceremonies can bump `subsetSize: 6` for multi-node submission
+  // resilience. See README + shared/node-selection.js for full
+  // rationale. (The pre-v2.2.0 wallet re-freeze concern that drove this
+  // default was an upstream bug, fixed by bypass in
+  // dapp/lib/walletconnect.ts.)
   const nodeAccountIds = selectNodeAccountIds(client, {
     strategy: 'subset',
     subsetSize: DEFAULT_SUBSET_SIZE, // 1 — wallet-compatible default

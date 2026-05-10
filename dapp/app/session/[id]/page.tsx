@@ -752,15 +752,14 @@ export default function SessionPage({ params }: PageProps) {
 
         throw new Error(
           `Wallet returned ${signedTxList.length} signatures but none verified against the original transaction bodies.\n\n` +
-          `For HBAR transfers and most simple transactions this works because wallets sign verbatim. ` +
-          `For ContractExecuteTransaction, HashPack and Kabila re-freeze the transaction internally ` +
-          `with their own gas/fee/timestamp adjustments before signing — so the signatures are valid ` +
-          `against the wallet's re-frozen bytes, not the coordinator's stored bytes.\n\n` +
-          `The reliable fix for multi-sig contract execution via wallet is HIP-423 scheduled transactions ` +
-          `(/create's "Schedule this transaction" toggle). Each signer's ScheduleSignTransaction goes ` +
-          `to the network independently — no shared-bytes aggregation, no wallet-rewrite mismatch.\n\n` +
-          `Running on localhost? Open the browser console for a [diag] field-level diff showing exactly ` +
-          `which fields the wallet changed.`,
+          `Up to v2.1.x this was the documented "wallet re-freeze" failure mode for ContractExecuteTransaction. ` +
+          `v2.2.0 fixed it by bypassing @hashgraph/hedera-wallet-connect's DAppSigner.signTransaction (which ` +
+          `was rebuilding the TransactionBody before sending to the wallet) — see dapp/lib/walletconnect.ts. ` +
+          `If you're seeing this error on v2.2.0 or later, something has regressed: please file a bug with ` +
+          `the [diag] / [probe] console output (localhost-only diagnostics).\n\n` +
+          `As a fallback, HIP-423 scheduled transactions still work for any tx type — toggle ` +
+          `"Schedule this transaction" on /create. Each signer's ScheduleSignTransaction goes to the ` +
+          `network independently, no shared-bytes aggregation needed.`,
         );
       }
 

@@ -59,21 +59,19 @@ async function main() {
   // Build + freeze. We do NOT sign here — the multi-sig ceremony attaches
   // signatures after participants review.
   //
-  // Single-node freeze (DEFAULT_SUBSET_SIZE = 1). Counter-intuitive
-  // for a multi-sig contract call but mandatory for wallet
-  // compatibility:
-  //
-  //   - HashPack via WalletConnect re-freezes ContractExecuteTransaction
-  //     internally before signing (gas / fee / timestamp adjustments).
-  //     Its signatures are valid against ITS bytes but NOT against
-  //     ours, so a multi-node freeze + wallet signer = "0 signatures
-  //     verified" with no recovery path.
-  //   - Single-node sidesteps it: only one body to sign, wallet's
-  //     re-freeze either matches verbatim or its drift is contained.
+  // Single-node freeze (DEFAULT_SUBSET_SIZE = 1). The WalletConnect
+  // SignTransaction RPC signs one body per wallet popup, so multi-node
+  // freeze with N bodies would mean N popups for the user. Single-node
+  // sidesteps the multi-popup question.
   //
   // For CLI-only ceremonies (every signer using sign-via-key, no
   // wallets in the mix), bump `subsetSize: 6` for multi-node submission
   // resilience. See the project's root README for the full rationale.
+  //
+  // (Historical: prior to v2.2.0 this comment warned about a wallet
+  // re-freeze bug. That turned out to be an upstream issue in
+  // @hashgraph/hedera-wallet-connect's DAppSigner.signTransaction,
+  // fixed in v2.2.0 via dapp/lib/walletconnect.ts.)
   const nodeAccountIds = selectNodeAccountIds(client, {
     strategy: 'subset',
     subsetSize: DEFAULT_SUBSET_SIZE, // 1 — wallet-compatible default

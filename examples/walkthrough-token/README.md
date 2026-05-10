@@ -318,10 +318,12 @@ fields the dApp can verify against the frozen tx (type, transfers,
 accounts, nodeAccountIds) appear in the green VERIFIED section. The
 yellow box only contains supplementary fields.
 
-**Subset size auto-defaulted to 1, why?** That's the package default
-for wallet compatibility. For these CLI+wallet ceremonies, leave it.
-See the root [README's "Node freeze defaults"](../../README.md#-node-freeze-defaults--read-this-if-youre-integrating)
-section for the wallet re-freeze rationale.
+**Subset size auto-defaulted to 1, why?** That's the package default —
+the WalletConnect `SignTransaction` RPC signs one body per popup, so
+multi-node freezes would either need N popups or fall back to
+body[0]-only. Single-node sidesteps it. For these CLI+wallet
+ceremonies, leave it. See the root [README's "Why single-node by default"](../../README.md#why-single-node-by-default)
+section for the full rationale.
 
 **Other walkthrough-dapp troubleshooting** applies — see
 [that file](../walkthrough-dapp/README.md#troubleshooting).
