@@ -658,6 +658,39 @@ npx hedera-multisig server \
 For development only, `--unsafe-any-origin` opts out of the check. Do not
 use this in production.
 
+#### Origin format must match the browser exactly
+
+The allow-list does an **exact string match** against the browser's
+`Origin` header. Three rules:
+
+1. **No trailing slash.** Origins are `scheme://host[:port]` — never
+   `scheme://host/`. The browser will not send `http://localhost:3000/`,
+   so the allow-list shouldn't either.
+2. **Include the port unless it's the scheme default.** HTTP defaults to
+   port 80, HTTPS to 443. Anything else (Next.js dev on `:3000`, custom
+   ports, etc.) must appear in the origin. `http://localhost` is
+   different from `http://localhost:3000`.
+3. **Hostname matters.** `localhost` and `127.0.0.1` are different
+   origins. If you sometimes navigate to one and sometimes the other,
+   list both, comma-separated.
+
+**Local dev against your own dApp** (Next.js default port):
+
+```bash
+--allowed-origins "http://localhost:3000,http://127.0.0.1:3000"
+```
+
+**Local dev against the hosted dApp via tunnel:**
+
+```bash
+--allowed-origins "https://testnet-multisig.lazysuperheroes.com"
+```
+
+If a connection is rejected on origin grounds, the server now logs both
+the received origin and the configured allow-list — check the
+coordinator stdout for a `Rejected browser connection: origin not in
+allow-list` line that tells you exactly what mismatched.
+
 ---
 
 ## Long-window scheduled transactions: matching the ceremony window

@@ -34,7 +34,7 @@ module.exports = function(program) {
     .option('--redis-host <host>', 'Redis host', process.env.REDIS_HOST || 'localhost')
     .option('--redis-port <port>', 'Redis port', (v) => parseInt(v, 10), parseInt(process.env.REDIS_PORT, 10) || 6379)
     .option('--redis-password <pass>', 'Redis password')
-    .option('--allowed-origins <origins>', 'Comma-separated allow-list of WebSocket browser origins (e.g. "https://multisig.example.com")')
+    .option('--allowed-origins <origins>', 'Comma-separated allow-list of WebSocket browser origins. Must match the browser\'s Origin header verbatim — no trailing slash, include the port if non-default (e.g. "http://localhost:3000" for Next.js dev, "https://multisig.example.com" for prod)')
     .option('--unsafe-any-origin', 'Allow any browser origin (development only — required if you skip --allowed-origins for tunnel mode)')
     .option('--quiet-secrets', 'Do not print PIN, coordinator token, or agent API key to stdout. Write them to .multisig-session.json only — useful when stdout is captured by a log aggregator.')
     .addHelpText('after', `

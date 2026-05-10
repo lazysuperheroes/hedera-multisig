@@ -576,6 +576,17 @@ the server log — you forgot `--allowed-origins
 https://testnet-multisig.lazysuperheroes.com`. Restart the server with
 the flag.
 
+**`Rejected browser connection: origin not in allow-list`** in the
+server log — your `--allowed-origins` value doesn't exactly match the
+browser's Origin header. The log line shows both `received` and
+`allowed` so you can see the mismatch. Three common causes:
+
+- Trailing slash (`http://localhost:3000/` ≠ `http://localhost:3000`)
+- Missing port for local dev (`http://localhost` ≠ `http://localhost:3000`
+  — Next.js dev binds to 3000)
+- `localhost` vs `127.0.0.1` mismatch (list both: `--allowed-origins
+  "http://localhost:3000,http://127.0.0.1:3000"`)
+
 **HashPack popup never appears** — make sure HashPack is unlocked and
 on testnet (top-right network toggle). Some wallets cache stale
 WalletConnect sessions; disconnect from any prior session in the

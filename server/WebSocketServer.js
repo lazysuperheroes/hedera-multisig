@@ -182,7 +182,24 @@ class MultiSigWebSocketServer {
           if (!origin) return true; // Non-browser clients (CLI, agents) — no Origin header
           if (this.unsafeAnyOrigin) return true; // Explicit dev opt-in
           if (Array.isArray(this.allowedOrigins) && this.allowedOrigins.length > 0) {
-            return this.allowedOrigins.includes(origin);
+            if (this.allowedOrigins.includes(origin)) return true;
+            // Match failed. The two most common causes are trailing
+            // slashes ('http://localhost:3000/' vs 'http://localhost:3000')
+            // and missing port ('http://localhost' when the browser sent
+            // 'http://localhost:3000' because Next.js dev server is on
+            // port 3000). Log both sides so the operator can see exactly
+            // what the browser sent vs what we accept — no more silent
+            // connection drops.
+            this.log.warn(
+              'Rejected browser connection: origin not in allow-list',
+              {
+                received: origin,
+                allowed: this.allowedOrigins,
+                hint:
+                  'Origin headers never have trailing slashes and always include the port (unless the scheme default — 80 for http, 443 for https). Browser sends scheme://host:port verbatim. For Next.js dev on port 3000: --allowed-origins "http://localhost:3000,http://127.0.0.1:3000".',
+              }
+            );
+            return false;
           }
           // Default deny for browser-origin connections without an explicit allowlist.
           this.log.warn('Rejected browser connection: no allowedOrigins configured', { origin });

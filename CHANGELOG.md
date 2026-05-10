@@ -67,6 +67,7 @@ joining the hosted dApp will see it.
 - Build-tab cause/effect: changing the node strategy used to update a size readout in a panel *above* it. The new combined `FreezeStrategy` panel keeps the lever and readout together.
 - CLI participant joining a scheduled session previously sat idle waiting for `transactionReceived` that would never arrive. Now triggers the scheduled-review flow on `SCHEDULE_CREATED` (live) or via `AUTH_SUCCESS.sessionInfo` (late-joiner).
 - Coordinator's `/create` previously stayed in 'signing' phase forever after announcing a schedule (no realtime "completed" event arrives over WS for scheduled mode). Now flips to the dedicated `ScheduledLaunched` view with a "Build another" CTA.
+- **`--allowed-origins` now self-diagnoses on mismatch.** When the configured allow-list is non-empty but a connecting browser's `Origin` doesn't match, the server logs both the received origin and the configured list (plus a hint about the three common causes — trailing slash, missing port, `localhost` vs `127.0.0.1`). Previously the connection was dropped silently. CLI flag help text and `docs/COORDINATOR_GUIDE.md` updated to call out the exact-match rule explicitly. (`server/WebSocketServer.js`, `cli/commands/server.js`, `docs/COORDINATOR_GUIDE.md`, `examples/walkthrough-dapp/README.md`)
 
 ## [2.1.0] - 2026-05-01
 
