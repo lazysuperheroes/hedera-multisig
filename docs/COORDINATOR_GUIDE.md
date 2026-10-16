@@ -831,7 +831,7 @@ your Redis sizing accordingly if you run a busy mainnet coordinator.
 - Set `NGROK_AUTH_TOKEN` in your environment for ngrok
 - Use `--no-tunnel` for local-only sessions
 - Check your internet connection
-- Try a different tunnel provider by using localtunnel as a fallback
+- Try a different tunnel provider: `--tunnel-provider localtunnel` (since v2.3.0 localtunnel is optional; install it first with `npm install localtunnel`)
 
 ---
 

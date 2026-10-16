@@ -298,6 +298,7 @@ class MultiSigWebSocketServer {
                   `        then pass its printed wss URL via --tunnel-url:\n` +
                   `          --tunnel-url wss://abc123.ngrok-free.app\n` +
                   `     2. Try the alternate provider: --tunnel-provider localtunnel\n` +
+                  `        (install it first: npm install localtunnel)\n` +
                   `     3. Skip tunnels entirely: --no-tunnel (only works when the\n` +
                   `        signers are on the same machine as the coordinator).`
                 );
@@ -1873,10 +1874,14 @@ class MultiSigWebSocketServer {
     const provider = this.options.tunnel.provider || 'auto';
 
     if (provider === 'auto') {
-      // Try ngrok first, fallback to localtunnel
+      // Try ngrok first, fall back to localtunnel only if it is installed
+      // (it is an optional peer dependency, see _loadLocaltunnel).
       try {
         return await this._startNgrokTunnel(port);
       } catch (error) {
+        if (!this._loadLocaltunnel({ optional: true })) {
+          throw error;
+        }
         if (this.options.verbose) {
           console.log(chalk.yellow('  ngrok unavailable, trying localtunnel...'));
         }
@@ -1924,7 +1929,7 @@ class MultiSigWebSocketServer {
         'an auth token (free at https://dashboard.ngrok.com/get-started/your-authtoken). ' +
         'Either export NGROK_AUTH_TOKEN=<your-token> in your shell or put it in ' +
         '.env at the repo root, or pass --tunnel-provider localtunnel to skip ' +
-        'ngrok, or pass --no-tunnel for local-only access.'
+        'ngrok (after `npm install localtunnel`), or pass --no-tunnel for local-only access.'
       );
     }
 
@@ -2003,11 +2008,44 @@ class MultiSigWebSocketServer {
   }
 
   /**
+   * Load the `localtunnel` package.
+   *
+   * localtunnel is an optional peer dependency rather than a regular one:
+   * it has been unmaintained since 2.0.2 and pins axios 0.21.4, which
+   * carries a long list of advisories. npm `overrides` don't reach
+   * consumers, so shipping it as a dependency put that axios into every
+   * project that installed this library, including ones that never start
+   * a tunnel. Users who want it install it themselves.
+   *
+   * @param {Object} [opts]
+   * @param {boolean} [opts.optional=false] - Return null instead of throwing when it isn't installed
+   * @returns {Function|null} The localtunnel factory
+   * @private
+   */
+  _loadLocaltunnel({ optional = false } = {}) {
+    try {
+      return require('localtunnel');
+    } catch (error) {
+      if (error.code !== 'MODULE_NOT_FOUND' || !String(error.message).includes("'localtunnel'")) {
+        throw error;
+      }
+      if (optional) {
+        return null;
+      }
+      throw new Error(
+        'localtunnel is not installed. It is an optional add-on since v2.3.0: ' +
+        'run `npm install localtunnel` to use --tunnel-provider localtunnel, ' +
+        'or use ngrok (set NGROK_AUTH_TOKEN) or --tunnel-url instead.'
+      );
+    }
+  }
+
+  /**
    * Start localtunnel
    * @private
    */
   async _startLocaltunnel(port) {
-    const localtunnel = require('localtunnel');
+    const localtunnel = this._loadLocaltunnel();
 
     const subdomain = this.options.tunnel.subdomain;
 

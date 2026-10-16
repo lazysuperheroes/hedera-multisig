@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(no library changes since 2.2.0)
+## [2.3.0] - 2026-10-16
+
+Dependency hygiene for projects that install the library.
+
+### Changed
+- **`localtunnel` is now an optional peer dependency.** It has been
+  unmaintained since 2.0.2 and pins `axios` 0.21.4, which carries a dozen
+  high-severity advisories. This repo's `overrides` never reached
+  consumers, so every project installing the library inherited that
+  `axios`, even if it never starts a tunnel. ngrok (the default) and
+  `--tunnel-url` are unchanged. To keep using `--tunnel-provider
+  localtunnel`, run `npm install localtunnel`; without it, `auto` mode
+  reports the ngrok error instead of falling back, and an explicit
+  `localtunnel` provider explains how to install it.
+- Minimum versions raised to patched releases: `ethers` ^6.17.0 (which
+  pins `ws` 8.21.0) and `ws` ^8.21.0.
+
+### Repo only (not published)
+- `.npmrc` sets `legacy-peer-deps` so npm no longer installs React Native
+  as a peer of `@hashgraph/cryptography` here, and `overrides` pins
+  `@grpc/grpc-js` ^1.14.6; together with an in-range lockfile refresh,
+  `npm audit --omit=dev --audit-level=high` (the CI and release gate)
+  passes again.
 
 ## [2.2.0] - 2026-05-10
 

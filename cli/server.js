@@ -360,7 +360,7 @@ async function main() {
       verbose: true,
       tunnel: options.tunnel ? {
         enabled: true,
-        provider: 'auto' // ngrok → localtunnel fallback
+        provider: 'auto' // ngrok → localtunnel fallback (if installed)
       } : null,
       tls: tlsConfig
     });
