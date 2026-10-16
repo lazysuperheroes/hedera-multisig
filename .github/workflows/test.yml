@@ -12,8 +12,9 @@ jobs:
 
     strategy:
       matrix:
-        # Node 18 EOL'd 2025-04-30. Phase C3: drop 18, add 24 (active LTS).
-        node-version: [20.x, 22.x, 24.x]
+        # Node 18 EOL'd 2025-04-30 and Node 20 on 2026-04-30: test on 22
+        # (maintenance LTS) and 24 (active LTS). The ruleset requires both.
+        node-version: [22.x, 24.x]
 
     steps:
       - name: Checkout repository
@@ -57,7 +58,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
           cache: 'npm'
 
       - name: Install dependencies
@@ -82,7 +83,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
           cache: 'npm'
 
       - name: Install dependencies
@@ -118,7 +119,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
           cache: 'npm'
 
       - name: Install root dependencies
