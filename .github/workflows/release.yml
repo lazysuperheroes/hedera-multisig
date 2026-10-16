@@ -43,10 +43,10 @@ jobs:
         with:
           fetch-depth: 0   # full history so signed-tag verification works
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
           cache: 'npm'
         # We don't set registry-url here. setup-node with registry-url
         # writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`
@@ -55,11 +55,13 @@ jobs:
         # falling back to OIDC. publishConfig.registry in package.json
         # tells npm where to publish without touching auth.
 
-      # OIDC trusted publishing needs npm >= 11.5.1; Node 20 ships with
-      # npm 10. Without this upgrade, the publish-time OIDC exchange
-      # fails (ENEEDAUTH — no auth token, no fallback to OIDC mint).
-      - name: Update npm to latest (for OIDC trusted publishing)
-        run: npm install -g npm@latest
+      # OIDC trusted publishing needs npm >= 11.5.1, so make sure the
+      # runner has it (otherwise ENEEDAUTH: no auth token, no fallback to
+      # OIDC mint). Pinned to the npm 11 major rather than @latest: npm 12
+      # dropped Node 20 and broke the first v2.3.0 run, and pinning keeps
+      # the next engine bump from breaking a release the same way.
+      - name: Update npm to 11.x (for OIDC trusted publishing)
+        run: npm install -g npm@11
 
       - name: Verify signed tag (Phase C2)
         if: startsWith(github.ref, 'refs/tags/')
